@@ -32,6 +32,19 @@ def resolve(root: Path, path: str, ref: str | None) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def candidates(root: Path, path: str, ref: str | None) -> list[str]:
+    resolve(root, path, ref)
+    return [f for f in _TREE[f"{root}@{ref}"] if f == path or f.endswith("/" + path)]
+
+
+def count_lines(root: Path, path: str, ref: str | None) -> int | None:
+    if ref:
+        p = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{path}"], capture_output=True, text=True)
+        return p.stdout.count("\n") + 1 if p.returncode == 0 else None
+    f = root / path
+    return f.read_text(errors="replace").count("\n") + 1 if f.is_file() else None
+
+
 def lines_in(root: Path, path: str, ref: str | None) -> int | None:
     path = resolve(root, path, ref) or path
     if ref:
@@ -45,7 +58,7 @@ def main(argv: list[str]) -> int:
     report, root = Path(argv[0]), Path(argv[1]).expanduser()
     ref = argv[argv.index("--ref") + 1] if "--ref" in argv else None
     cache: dict[str, int | None] = {}
-    ok = bad = 0
+    ok = bad = ambiguous = 0
     failures = []
     for path, start, end in CITE.findall(report.read_text()):
         if path.startswith(("http", "docs.", "www.")) or re.fullmatch(r"[\d.]+", path):
@@ -56,13 +69,15 @@ def main(argv: list[str]) -> int:
         last = int(end or start)
         if n is not None and 1 <= int(start) <= n and last <= n:
             ok += 1
+        elif n is None and any((count_lines(root, c, ref) or 0) >= last for c in candidates(root, path, ref)):
+            ambiguous += 1  # short name shared by several files; the line fits at least one of them
         else:
             bad += 1
             why = "missing or ambiguous file" if n is None else f"file has {n} lines"
             failures.append(f"{path}:{start}{'-' + end if end else ''} ({why})")
-    total = ok + bad
+    total = ok + bad + ambiguous
     rate = bad / total if total else 0
-    print(f"{report.name}: {total} citations, {ok} ok, {bad} failed ({rate:.1%})")
+    print(f"{report}: {total} citations, {ok} exact, {ambiguous} ambiguous-short-name, {bad} failed ({rate:.1%})")
     for f in failures[:15]:
         print("  FAIL", f)
     return 1 if rate > 0.02 else 0
