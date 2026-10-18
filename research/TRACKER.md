@@ -39,6 +39,7 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 17 | [synthesis/capability-map.md](synthesis/capability-map.md): every capability across the 12 repos → one omni-agent module, with build/port/depend/service/skip | done |
 | 18 | [synthesis/architecture.md](synthesis/architecture.md): proposed architecture, contracts, build order, honest feasibility assessment | done |
 | 18b | [synthesis/agent-roles.md](synthesis/agent-roles.md): the work omni-agent does and the nine agents it needs | done |
+| 18c | [synthesis/competitive-landscape.md](synthesis/competitive-landscape.md): who already does "AI team that ships verified work" (Factory, Devin, Linear, Copilot, Rovo Dev, MetaGPT, ChatDev, CrewAI, OpenHands, Paperclip) and what is still open | done |
 | 19 | Rendered HTML report in the tutorial format (plain-words boxes + SVG diagrams) | pending |
 | 20 | `synthesis/tutorial-audit-hermes.md`: every Hermes claim in agent-harness-tutorial vs source (sa-0-0548e8ad) | done: ~150 claims, 0 broken anchors, 3 wrong / 1 outdated / 19 imprecise / 14 omissions; **applied to the tutorial** |
 
