@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>omni-agent plan</title>
+<style>
+:root{--fg:var(--foreground,#0F1F1F);--mut:var(--muted-foreground,#5B6B6B);--bd:var(--border,#DCE7E5);--teal:#105050;--coral:#C2410C;--panel:#EEF5F3}
+body{color:var(--fg);font:14px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;max-width:1100px;margin:0 auto;padding:24px}
+h1{font-size:26px;margin:0 0 4px;color:var(--teal)}h2{font-size:19px;margin:32px 0 10px;padding-bottom:5px;border-bottom:2px solid var(--bd)}
+.lead{color:var(--mut);margin:0 0 14px}
+.plain{background:var(--panel);border-left:4px solid var(--teal);padding:12px 16px;border-radius:6px;margin:12px 0}
+.plain b.t{display:block;color:var(--teal);margin-bottom:4px}
+table{border-collapse:collapse;width:100%;margin:8px 0 16px;font-size:12.6px}
+th,td{border:1px solid var(--bd);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:rgba(16,80,80,.08)}
+.done{color:#0f766e;font-weight:600}.next{color:#C2410C;font-weight:600}.later{color:var(--mut)}
+svg{max-width:100%;height:auto;display:block;margin:8px 0 14px}svg text{font-family:Inter,system-ui,sans-serif}
+code{font-size:12px;background:rgba(16,80,80,.07);padding:1px 4px;border-radius:3px}
+small{color:var(--mut)}ul{margin:4px 0 8px 18px;padding:0}
+</style></head><body>
+<h1>omni-agent: plan</h1>
+<p class="lead">From a working CLI to a product people rely on. Companion to <code>docs/design/omni-agent-design.html</code>. Durations assume part-time work (evenings and weekends) with AI coding agents doing most of the typing.</p>
+
+<div class="plain"><b class="t">In plain words</b>
+We already have the engine: <code>omni verify</code> catches an agent's false "done" (v0.1, 22 tests, verifies its own repo). The plan now has one rule: <b>prove people want it before building the big version.</b> So the first steps make omni effortless to try and put it in front of real users; the bigger pieces (app, signing, real-system checks) come only after users say yes.</div>
+
+<h2>1. Where we are (18 Oct 2026)</h2>
+<table>
+<tr><th>Piece</th><th>Status</th><th>Evidence</th></tr>
+<tr><td>Research (12 repos, 7 market themes, competitors)</td><td class="done">Done</td><td><code>research/</code>, <code>research/synthesis/open-space.md</code></td></tr>
+<tr><td>Stack decision</td><td class="done">Done</td><td><code>docs/decisions/0001-stack.md</code></td></tr>
+<tr><td><code>omni verify</code> v0.1 (Rust CLI)</td><td class="done">Done</td><td>22 tests; clippy clean; self-verify VERIFIED; caught a "skipped test" demo</td></tr>
+<tr><td>DataCrate360 Launcher</td><td class="done">On TEST</td><td>307 tests; CI green on Linux, Windows, web; macOS DMG builds</td></tr>
+<tr><td>Real users</td><td class="next">None yet</td><td>The biggest unknown</td></tr>
+</table>
+
+<h2>2. Timeline</h2>
+<svg viewBox="0 0 1060 330" role="img" aria-label="Timeline">
+<g font-size="11.5" fill="#5B6B6B">
+<text x="250" y="20">Wk 1</text><text x="330" y="20">Wk 2</text><text x="410" y="20">Wk 3</text><text x="490" y="20">Wk 4</text><text x="570" y="20">Wk 5</text><text x="650" y="20">Wk 6</text><text x="730" y="20">Wk 7–8</text><text x="850" y="20">Wk 9–12</text><text x="970" y="20">later</text></g>
+<g stroke="#DCE7E5"><line x1="240" y1="28" x2="240" y2="320"/><line x1="320" y1="28" x2="320" y2="320"/><line x1="400" y1="28" x2="400" y2="320"/><line x1="480" y1="28" x2="480" y2="320"/><line x1="560" y1="28" x2="560" y2="320"/><line x1="640" y1="28" x2="640" y2="320"/><line x1="720" y1="28" x2="720" y2="320"/><line x1="840" y1="28" x2="840" y2="320"/><line x1="960" y1="28" x2="960" y2="320"/></g>
+<g font-size="12.5">
+<text x="10" y="55" font-weight="700">P1 Effortless to use</text><rect x="240" y="40" width="160" height="22" rx="4" fill="#C2410C"/>
+<text x="10" y="90" font-weight="700">P2 Validate with users</text><rect x="320" y="75" width="240" height="22" rx="4" fill="#C2410C" opacity=".75"/>
+<text x="10" y="125" font-weight="700">P3 First release + launcher</text><rect x="480" y="110" width="160" height="22" rx="4" fill="#105050"/>
+<rect x="556" y="146" width="16" height="16" transform="rotate(45 564 154)" fill="#0F1F1F"/><text x="10" y="160" font-weight="700">Go / no-go decision</text><text x="580" y="160" fill="#0F1F1F">end of week 5</text>
+<text x="10" y="195" font-weight="700">P4 Trust + integrations</text><rect x="640" y="180" width="200" height="22" rx="4" fill="#105050" opacity=".8"/>
+<text x="10" y="230" font-weight="700">P5 Beyond code</text><rect x="840" y="215" width="120" height="22" rx="4" fill="#105050" opacity=".65"/>
+<text x="10" y="265" font-weight="700">P6 Receipts app + team</text><rect x="840" y="250" width="200" height="22" rx="4" fill="#105050" opacity=".5"/>
+<text x="10" y="300" font-weight="700">P7 Outcomes + benchmark</text><rect x="960" y="285" width="80" height="22" rx="4" fill="#5B6B6B" opacity=".5"/>
+</g></svg>
+
+<h2>3. Phases</h2>
+<table>
+<tr><th>Phase</th><th>What we build</th><th>Done when (checkable)</th><th>Weeks</th></tr>
+<tr><td class="next">P1 Effortless to use</td><td><ul>
+<li><code>omni hook install claude-code</code>: on the agent's "stop", run <code>omni verify</code> and show the receipt</li>
+<li>Same for Codex (hook if available, otherwise a wrapper command)</li>
+<li>Cost from agent session logs into the receipt</li>
+<li>Better checks setup: <code>omni init</code> detects pytest / npm / cargo / dbt and writes the commands</li></ul></td>
+<td>On a fresh repo: install, init, let Claude Code work; a false "done" is caught without typing any omni command. Tests cover each hook.</td><td>1–2</td></tr>
+<tr><td class="next">P2 Validate with users</td><td><ul>
+<li>60-second demo video: an agent skips a failing test, omni catches it</li>
+<li>Talk to 10–15 people who posted about this pain (links in <code>research/market/</code>)</li>
+<li>Show HN + one Reddit post with the demo</li></ul></td>
+<td>Notes from ≥10 conversations; at least 5 people install it; written list of what they asked for</td><td>2–4 (overlaps P1)</td></tr>
+<tr><td class="next">P3 First release</td><td><ul>
+<li>GitHub Actions release: Mac (Apple silicon + Intel) binaries + <code>SHA256SUMS.txt</code></li>
+<li>Install line (<code>curl | sh</code>) + Homebrew tap</li>
+<li>Launcher: install command-line tools (not only .app), so omni shows <b>Install</b></li>
+<li>Promote the launcher to PROD</li></ul></td>
+<td>A clean Mac installs omni via each path; launcher installs it and shows the version</td><td>4–5</td></tr>
+<tr><td><b>Go / no-go</b></td><td colspan="2">Continue to P4 if ≥3 of the 10–15 people use it on real work for a week, or the Show HN gets real discussion. Otherwise change the pitch using what they said (the research's other two pitches: <i>cost per verified task</i>, <i>review-queue shrinker</i>) and repeat P2.</td><td>end wk 5</td></tr>
+<tr><td class="later">P4 Trust + integrations</td><td><ul><li>Signed receipts (Ed25519) and a local receipt store</li><li>GitHub Action (merge gate)</li><li>MCP server so Hermes, OpenClaw, Cursor can call verify</li><li>Paperclip adapter: receipt attached to the issue</li><li>Apple Developer ID: signed + notarized downloads</li></ul></td><td>A PR in a public repo blocked by omni in CI; a Paperclip issue shows its receipt</td><td>6–8</td></tr>
+<tr><td class="later">P5 Beyond code</td><td><ul><li>Read-back checks: SQL query, HTTP page, JSON API (CRM as the first business connector)</li><li>Labels for unverifiable work (e.g. MiroFish runs: "qualitative, not validated")</li></ul></td><td>"CRM updated" claim checked against the CRM API in a demo</td><td>9–10</td></tr>
+<tr><td class="later">P6 Receipts app + team</td><td><ul><li>Tauri + React app: receipt inbox, diff view, one-click approve</li><li>Team server option (Postgres)</li></ul></td><td>A teammate approves work from the app in under 30 s</td><td>10–12</td></tr>
+<tr><td class="later">P7 Outcomes + benchmark</td><td><ul><li>Cost per verified task by agent and model</li><li>Your own regression watch before model upgrades</li><li>Prediction vs reality tracking (MiroFish, Peec)</li></ul></td><td>A monthly report: which agent/model gives the cheapest verified work on your repos</td><td>later</td></tr>
+</table>
+
+<h2>4. How we'll know it's working</h2>
+<table>
+<tr><th>Metric</th><th>Why</th><th>Target after P3</th></tr>
+<tr><td>False "done" caught per 100 agent tasks</td><td>Proves the core value</td><td>measured on our own and testers' repos</td></tr>
+<tr><td>False alarms (omni says failed, work was fine)</td><td>Noise kills checkers (research T7)</td><td>&lt; 1 in 20</td></tr>
+<tr><td>Weekly active installs</td><td>Real use, not stars</td><td>≥ 10</td></tr>
+<tr><td>Time from "done" to receipt</td><td>Must not slow people down</td><td>≈ the project's own test time + &lt; 5 s</td></tr>
+</table>
+
+<h2>5. Risks and answers</h2>
+<table>
+<tr><th>Risk</th><th>Answer</th></tr>
+<tr><td>People prefer their own small hook scripts</td><td>Make install + init take under a minute, and show what DIY hooks miss (locked checks, restored tests, sandbox, receipt)</td></tr>
+<tr><td>Vendors add the same check to their own agent</td><td>Stay cross-vendor and neutral; vendors check only themselves (research T7)</td></tr>
+<tr><td>Vendor rule changes break hooks</td><td>Depend on outputs (git, files, logs), keep a plain CLI path that always works</td></tr>
+<tr><td>Projects whose tests need network or services</td><td>Clear "unverified: needs network" reason now; opt-in network allowlist later</td></tr>
+<tr><td>Only macOS sandbox today</td><td>Linux (bubblewrap/containers) in P4; say so honestly in the README</td></tr>
+<tr><td>Your time (job, PhD from Sept 2026)</td><td>Small phases, each usable on its own; validation before big builds</td></tr>
+</table>
+
+<h2>6. Decisions only you can make</h2>
+<ul>
+<li><b>Apple Developer Program</b> (paid yearly): needed before public Mac downloads (P4).</li>
+<li><b>Who to contact for P2</b>: approve the outreach list and message before anything is sent.</li>
+<li><b>Promote the launcher to PROD</b>: after P3.</li>
+<li><b>Launcher translations</b>: review by native speakers, or ship English-only first.</li>
+</ul>
+<p><small>Sources: research/synthesis/open-space.md (ranked gaps, risks), research/market/T1–T7 (user evidence), docs/decisions/0001-stack.md.</small></p>
+</body></html>
