@@ -29,8 +29,6 @@ countercheck receipt 9073a384e88f9d37  FAILED
 
 ## Install
 
-> The first release (v0.1.0) is being prepared; these commands work once it is published.
-
 | You use | Install with |
 |---|---|
 | Python (pip, a `.venv`, uv) | `pip install countercheck` · `uv tool install countercheck` · or run without installing: `uvx countercheck verify` |
