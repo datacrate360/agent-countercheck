@@ -31,6 +31,8 @@ struct Cli {
 
 #[derive(Clone, Copy, ValueEnum)]
 enum SandboxArg {
+    /// The macOS sandbox when it can start here, otherwise none (the receipt says which).
+    Auto,
     /// No network, writes only inside the check folder (macOS).
     Seatbelt,
     /// Run checks as a normal process.
@@ -59,7 +61,7 @@ enum Cmd {
         /// Cost of the work in US dollars, if the caller knows it.
         #[arg(long)]
         cost_usd: Option<f64>,
-        #[arg(long, value_enum, default_value = "seatbelt")]
+        #[arg(long, value_enum, default_value = "auto")]
         sandbox: SandboxArg,
         /// Print the receipt as JSON instead of a summary.
         #[arg(long)]
@@ -112,6 +114,14 @@ fn run(cli: Cli) -> Result<u8, String> {
             out,
         } => {
             let sandbox = match sandbox {
+                SandboxArg::Auto if runner::seatbelt_works() => runner::Sandbox::Seatbelt,
+                SandboxArg::Auto => {
+                    eprintln!(
+                        "note: no check sandbox on this system; checks run as a normal process \
+                         (the receipt records this). Run inside a container with no network for isolation."
+                    );
+                    runner::Sandbox::None
+                }
                 SandboxArg::Seatbelt => runner::Sandbox::Seatbelt,
                 SandboxArg::None => runner::Sandbox::None,
             };

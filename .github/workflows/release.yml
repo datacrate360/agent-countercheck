@@ -1,0 +1,152 @@
+name: Release
+
+# Push a tag `vX.Y.Z` (matching the version in Cargo.toml) to build and publish a release:
+#   countercheck-X.Y.Z-macos-universal.tar.gz, -linux-x86_64, -linux-aarch64 (static musl builds),
+#   Python wheels (pip / uv / uvx), the Homebrew formula, and SHA256SUMS.txt.
+# Run it by hand (Actions → Release → Run workflow) to build everything without publishing.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Read and check the version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$version" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version $version"; exit 1
+          fi
+
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: cargo test --workspace --release
+      - name: Universal binary
+        run: |
+          cargo build --release --locked -p countercheck --target aarch64-apple-darwin
+          cargo build --release --locked -p countercheck --target x86_64-apple-darwin
+          mkdir stage
+          lipo -create -output stage/countercheck \
+            target/aarch64-apple-darwin/release/countercheck target/x86_64-apple-darwin/release/countercheck
+          cp LICENSE README.md stage/
+          ./stage/countercheck --version
+          tar -czf "countercheck-${{ needs.version.outputs.version }}-macos-universal.tar.gz" -C stage .
+      - uses: actions/upload-artifact@v4
+        with: { name: bin-macos, path: "*.tar.gz" }
+
+  linux:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl, platform: linux-x86_64 }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, platform: linux-aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo test --workspace --release
+      - name: Static binary
+        run: |
+          cargo build --release --locked -p countercheck --target ${{ matrix.target }}
+          mkdir stage
+          cp target/${{ matrix.target }}/release/countercheck LICENSE README.md stage/
+          ./stage/countercheck --version
+          tar -czf "countercheck-${{ needs.version.outputs.version }}-${{ matrix.platform }}.tar.gz" -C stage .
+      - uses: actions/upload-artifact@v4
+        with: { name: "bin-${{ matrix.platform }}", path: "*.tar.gz" }
+
+  wheels:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - { runner: macos-latest, target: universal2-apple-darwin, manylinux: "off" }
+          - { runner: ubuntu-latest, target: x86_64, manylinux: "2_17" }
+          - { runner: ubuntu-24.04-arm, target: aarch64, manylinux: "2_17" }
+          - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --locked --out dist
+      - uses: actions/upload-artifact@v4
+        with: { name: "wheel-${{ matrix.target }}", path: dist/*.whl }
+
+  sdist:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with: { command: sdist, args: --out dist }
+      - uses: actions/upload-artifact@v4
+        with: { name: sdist, path: dist/*.tar.gz }
+
+  release:
+    needs: [version, macos, linux, wheels, sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: "bin-*", path: out, merge-multiple: true }
+      - name: Checksums and Homebrew formula
+        run: |
+          cd out
+          sha256sum countercheck-*.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          ../packaging/homebrew/formula.sh "${{ needs.version.outputs.version }}" SHA256SUMS.txt \
+            "https://github.com/${{ github.repository }}/releases/download/v${{ needs.version.outputs.version }}" \
+            > countercheck.rb
+      - name: Install script works against these files
+        run: |
+          (cd out && python3 -m http.server 18765 --bind 127.0.0.1 &) && sleep 1
+          COUNTERCHECK_VERSION=${{ needs.version.outputs.version }} \
+          COUNTERCHECK_BASE_URL=http://127.0.0.1:18765 COUNTERCHECK_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: release-files, path: out/* }
+      - name: Publish the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" out/* install.sh \
+            --title "Countercheck ${GITHUB_REF_NAME}" --generate-notes --verify-tag
+
+  pypi:
+    # Needs a one-time "trusted publisher" on pypi.org (no token stored here) and the repository
+    # variable PUBLISH_PYPI=true. Until then this job is skipped.
+    needs: [release]
+    if: github.ref_type == 'tag' && vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: "{wheel-*,sdist}", path: dist, merge-multiple: true }
+      - uses: pypa/gh-action-pypi-publish@release/v1

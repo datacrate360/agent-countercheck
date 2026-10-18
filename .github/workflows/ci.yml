@@ -32,3 +32,13 @@ jobs:
         run: cargo test --workspace
       - name: Eval tasks are valid
         run: cargo build --release && python3 eval/validate.py
+
+  linux:
+    name: test (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: cargo test --workspace
+      - name: Install script syntax
+        run: sh -n install.sh && sh -n packaging/homebrew/formula.sh

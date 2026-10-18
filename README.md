@@ -27,6 +27,25 @@ countercheck receipt 9073a384e88f9d37  FAILED
 
 (The agent's own run said `OK (skipped=1)`: it had marked the failing test as skipped.)
 
+## Install
+
+> The first release (v0.1.0) is being prepared; these commands work once it is published.
+
+| You use | Install with |
+|---|---|
+| Python (pip, a `.venv`, uv) | `pip install countercheck` · `uv tool install countercheck` · or run without installing: `uvx countercheck verify` |
+| macOS or Linux, Homebrew | `brew install datacrate360/tap/countercheck` |
+| macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.sh \| sh` |
+| Rust | `cargo install --git https://github.com/datacrate360/countercheck countercheck` |
+| Direct download | [Releases](https://github.com/datacrate360/countercheck/releases): one file per platform + `SHA256SUMS.txt` |
+
+Builds: macOS (Apple silicon and Intel, one universal binary) and Linux (x86_64, arm64; static). The install
+script checks every download against `SHA256SUMS.txt` before installing. Windows is planned; use WSL for now.
+
+**Sandbox by platform.** On macOS, checks run in the system sandbox (no network, writes only in the check folder).
+On Linux there is no sandbox yet: checks run as a normal process and the receipt says so; run Countercheck inside
+a container with networking off when you need isolation.
+
 ## Quick start
 
 ```sh
