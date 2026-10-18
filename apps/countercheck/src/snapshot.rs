@@ -15,7 +15,7 @@ fn safe_rel(path: &str) -> Result<PathBuf, String> {
 /// Copy `files` from `root` into `dest`. Symlinks are recreated as links, never followed.
 pub fn copy_files(root: &Path, dest: &Path, files: &[String]) -> Result<(), String> {
     for f in files {
-        if omni_core::protect::is_junk(f) {
+        if countercheck_core::protect::is_junk(f) {
             continue;
         }
         let rel = safe_rel(f)?;
@@ -85,7 +85,7 @@ pub fn tree_hash(dest: &Path) -> Result<String, String> {
         joined.push_str(&hash);
         joined.push('\n');
     }
-    Ok(omni_core::sha256_hex(joined.as_bytes()))
+    Ok(countercheck_core::sha256_hex(joined.as_bytes()))
 }
 
 fn walk(base: &Path, dir: &Path, out: &mut Vec<(String, String)>) -> Result<(), String> {
@@ -106,7 +106,7 @@ fn walk(base: &Path, dir: &Path, out: &mut Vec<(String, String)>) -> Result<(), 
             out.push((rel, format!("link:{}", target.to_string_lossy())));
         } else {
             let bytes = fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
-            out.push((rel, omni_core::sha256_hex(&bytes)));
+            out.push((rel, countercheck_core::sha256_hex(&bytes)));
         }
     }
     Ok(())

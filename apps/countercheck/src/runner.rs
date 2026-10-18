@@ -1,7 +1,7 @@
 //! Run one check command in the snapshot, optionally inside the macOS sandbox.
 
-use omni_core::config::CheckSpec;
-use omni_core::receipt::CheckResult;
+use countercheck_core::config::CheckSpec;
+use countercheck_core::receipt::CheckResult;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -77,7 +77,7 @@ pub fn run_check(
     cmd.arg("-c")
         .arg(&spec.run)
         .current_dir(workdir)
-        .env("OMNI_VERIFY", "1")
+        .env("COUNTERCHECK", "1")
         .env("TMPDIR", tmp)
         .stdin(Stdio::null())
         .stdout(Stdio::from(out))

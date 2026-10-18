@@ -1,5 +1,5 @@
-# omni-agent verifies itself with the same tool it ships.
-protected = ["apps/omni/tests/**", "clippy.toml"]
+# countercheck verifies itself with the same tool it ships.
+protected = ["apps/countercheck/tests/**", "clippy.toml"]
 
 [[check]]
 name = "format"

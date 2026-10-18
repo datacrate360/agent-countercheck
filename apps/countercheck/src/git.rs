@@ -95,8 +95,8 @@ pub fn worktree_files(root: &Path) -> Result<Vec<String>, String> {
 pub fn changes_since(
     root: &Path,
     base: &str,
-) -> Result<Vec<(omni_core::protect::Change, String)>, String> {
-    use omni_core::protect::Change;
+) -> Result<Vec<(countercheck_core::protect::Change, String)>, String> {
+    use countercheck_core::protect::Change;
     let fields = split_z(&run(
         root,
         &["diff", "--no-renames", "--name-status", "-z", base],

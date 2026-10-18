@@ -1,4 +1,4 @@
-# ADR-0001: Stack for omni-agent and the DataCrate360 Launcher
+# ADR-0001: Stack for Countercheck and the DataCrate360 Launcher
 
 Status: proposed (2026-10-18). Reference studied: the Craft App Suite (`creative-studios/`), especially
 `craft-launcher-main` (ArtCraft Launcher v0.4.1, MIT OR Apache-2.0).
@@ -24,12 +24,12 @@ Status: proposed (2026-10-18). Reference studied: the Craft App Suite (`creative
 
 | Part | Choice | Why |
 |---|---|---|
-| **omni-agent core** (CLI `omni`, local daemon, verifier, receipts, adapters, MCP server) | **Rust** | One signed binary for Mac (and later Windows/Linux) with nothing else to install; fast start and low memory for an always-on daemon; a referee has to be trustworthy, and Rust removes whole classes of crash and memory bugs; strong compiler + clippy gate suits AI-written code |
+| **Countercheck core** (CLI `countercheck`, local daemon, verifier, receipts, adapters, MCP server) | **Rust** | One signed binary for Mac (and later Windows/Linux) with nothing else to install; fast start and low memory for an always-on daemon; a referee has to be trustworthy, and Rust removes whole classes of crash and memory bugs; strong compiler + clippy gate suits AI-written code |
 | Checks and plugins | **Any language, run in the sandbox** (Python first) | Verification runs the *project's own* commands (pytest, npm test, dbt test…), so the core never needs Python itself; Python tools like MarkItDown or Strix run as separate processes |
 | Storage | SQLite (`rusqlite`), receipts signed with Ed25519 | Local-first, one file, portable; Postgres only for a later team server |
 | HTTP / MCP | `axum` + `tokio`; official Rust MCP SDK (`rmcp`) | One stack for the daemon API and the MCP server agents call |
 | Sandbox on macOS | Phase 1: run checks in a clean copy of the repo with Seatbelt limits; Phase 2: containers (Docker/OrbStack, or Apple's `container`) | Needs a spike: confirm what works on a stock Mac without admin rights |
-| **omni-agent UI** (receipts, diffs, approve) | **Tauri 2 + React + TypeScript** | Rich diff/table/markdown views and OpenUI (React) reuse; the same React app can be served by the daemon in a browser for teams; Tauri has signing, notarization and an updater built in |
+| **Countercheck UI** (receipts, diffs, approve) | **Tauri 2 + React + TypeScript** | Rich diff/table/markdown views and OpenUI (React) reuse; the same React app can be served by the daemon in a browser for teams; Tauri has signing, notarization and an updater built in |
 | **DataCrate360 Launcher** | **Rust + egui**, modelled on craft-launcher | Small native tray app; installs/updates/opens every DataCrate360 tool from `github.com/datacrate360/*` Releases with SHA-256 checks. The code is MIT/Apache, so it can be adapted with attribution; ArtCraft's name, logo and "A" mark are trademarks and must not be reused |
 | Distribution | GitHub Releases + `SHA256SUMS.txt`; signed + notarized universal DMG; later a Homebrew tap and `curl \| sh` for the CLI | Same proven path as the reference |
 

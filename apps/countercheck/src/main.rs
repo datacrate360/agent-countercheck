@@ -1,4 +1,4 @@
-//! `omni`: checks whether an AI worker's "done" is really done, and writes a receipt.
+//! `countercheck`: checks whether an AI worker's "done" is really done, and writes a receipt.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -19,7 +19,7 @@ use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(
-    name = "omni",
+    name = "countercheck",
     version,
     about = "Proof that AI work really happened: re-runs your checks in a clean copy the worker can't edit, and writes a receipt."
 )]
@@ -63,11 +63,11 @@ enum Cmd {
         /// Print the receipt as JSON instead of a summary.
         #[arg(long)]
         json: bool,
-        /// Where to save receipts (default: <repo>/.omni/receipts).
+        /// Where to save receipts (default: <repo>/.countercheck/receipts).
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Write a starter .omni/checks.toml.
+    /// Write a starter .countercheck/checks.toml.
     Init {
         #[arg(long, default_value = ".")]
         repo: PathBuf,
@@ -80,7 +80,7 @@ fn main() -> ExitCode {
     match run(Cli::parse()) {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
-            eprintln!("omni: {e}");
+            eprintln!("countercheck: {e}");
             ExitCode::from(1)
         }
     }
@@ -111,7 +111,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             if sandbox == runner::Sandbox::Seatbelt && !runner::seatbelt_works() {
                 return Err(
                     "the macOS sandbox could not start (macOS doesn't allow a sandbox inside another \
-                     sandbox, e.g. when omni runs inside an omni check); use --sandbox none"
+                     sandbox, e.g. when countercheck runs inside an countercheck check); use --sandbox none"
                         .to_string(),
                 );
             }
@@ -119,7 +119,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                 repo,
                 base,
                 claim,
-                worker: omni_core::receipt::Worker {
+                worker: countercheck_core::receipt::Worker {
                     agent,
                     model,
                     cost_usd,
@@ -139,16 +139,17 @@ fn run(cli: Cli) -> Result<u8, String> {
         }
         Cmd::Init { repo } => {
             let root = git::toplevel(&repo)?;
-            let path = root.join(omni_core::config::CHECKS_PATH);
+            let path = root.join(countercheck_core::config::CHECKS_PATH);
             if path.exists() {
                 return Err(format!("{} already exists", path.display()));
             }
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             }
-            std::fs::write(&path, omni_core::config::TEMPLATE).map_err(|e| e.to_string())?;
+            std::fs::write(&path, countercheck_core::config::TEMPLATE)
+                .map_err(|e| e.to_string())?;
             println!(
-                "wrote {}\nedit the check commands, then commit it: omni only trusts checks that are in the base revision.",
+                "wrote {}\nedit the check commands, then commit it: countercheck only trusts checks that are in the base revision.",
                 path.display()
             );
             Ok(0)
@@ -156,7 +157,7 @@ fn run(cli: Cli) -> Result<u8, String> {
         Cmd::Show { receipt } => {
             let text = std::fs::read_to_string(&receipt)
                 .map_err(|e| format!("{}: {e}", receipt.display()))?;
-            let r: omni_core::receipt::Receipt =
+            let r: countercheck_core::receipt::Receipt =
                 serde_json::from_str(&text).map_err(|e| format!("not a receipt: {e}"))?;
             print!("{}", r.render_text());
             if r.seal_is_valid() {

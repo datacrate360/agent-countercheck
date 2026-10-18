@@ -1,6 +1,6 @@
 [package]
-name = "omni"
-description = "omni-agent CLI: checks whether an AI worker's \"done\" is really done, and writes a receipt"
+name = "countercheck"
+description = "countercheck CLI: checks whether an AI worker's \"done\" is really done, and writes a receipt"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,11 +11,11 @@ publish = false
 workspace = true
 
 [[bin]]
-name = "omni"
+name = "countercheck"
 path = "src/main.rs"
 
 [dependencies]
-omni-core = { workspace = true }
+countercheck-core = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 clap = { workspace = true }

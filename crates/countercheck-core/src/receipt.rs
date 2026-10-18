@@ -1,9 +1,9 @@
-//! A receipt: what a worker claimed, what omni checked itself, and the verdict.
+//! A receipt: what a worker claimed, what countercheck checked itself, and the verdict.
 
 use crate::protect::ProtectedChange;
 use serde::{Deserialize, Serialize};
 
-pub const SCHEMA: &str = "omni.receipt/v0";
+pub const SCHEMA: &str = "countercheck.receipt/v0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -12,7 +12,7 @@ pub enum Verdict {
     Verified,
     /// At least one check failed or timed out.
     Failed,
-    /// Nothing failed, but omni can't vouch for it (no locked checks, or none ran).
+    /// Nothing failed, but countercheck can't vouch for it (no locked checks, or none ran).
     Unverified,
 }
 
@@ -71,7 +71,7 @@ pub struct RepoInfo {
 pub struct Worker {
     pub agent: Option<String>,
     pub model: Option<String>,
-    /// Reported by the caller; omni doesn't measure spend yet.
+    /// Reported by the caller; countercheck doesn't measure spend yet.
     pub cost_usd: Option<f64>,
 }
 
@@ -82,7 +82,7 @@ pub struct Receipt {
     pub id: String,
     pub receipt_sha256: String,
     pub created_at: String,
-    pub omni_version: String,
+    pub countercheck_version: String,
     pub repo: RepoInfo,
     pub worker: Worker,
     pub claim: Option<String>,
@@ -115,7 +115,7 @@ pub fn decide(
         .count();
     if restored > 0 {
         reasons.push(format!(
-            "the worker changed {restored} protected file(s); omni ran the checks with the base version"
+            "the worker changed {restored} protected file(s); countercheck ran the checks with the base version"
         ));
     }
     let verdict = if results.is_empty() {
@@ -180,7 +180,7 @@ impl Receipt {
     pub fn render_text(&self) -> String {
         let mut s = String::new();
         s.push_str(&format!(
-            "omni receipt {}  {}\n",
+            "countercheck receipt {}  {}\n",
             self.id,
             self.verdict.label()
         ));
@@ -321,7 +321,7 @@ mod tests {
             id: String::new(),
             receipt_sha256: String::new(),
             created_at: "2026-10-18T00:00:00Z".into(),
-            omni_version: "0".into(),
+            countercheck_version: "0".into(),
             repo: RepoInfo {
                 base_rev: "HEAD".into(),
                 base_commit: "a".into(),

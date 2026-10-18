@@ -1,5 +1,7 @@
 # omni-agent research
 
+> **Naming:** the project was called **omni-agent** during this research; it was renamed **Countercheck** on 2026-10-18 once its job narrowed to proof of AI work. Research documents keep the old name as written.
+
 Source-level research behind omni-agent: one platform that runs an Agile workflow end to end
 (discover → plan → build → verify → release → operate → learn) by combining the best ideas from 12 open-source projects.
 

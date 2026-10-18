@@ -39,7 +39,7 @@ pub enum Change {
     Deleted,
 }
 
-/// What omni did about a change to a protected file.
+/// What countercheck did about a change to a protected file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProtectedChange {
     pub path: String,
@@ -68,10 +68,10 @@ mod tests {
 
     #[test]
     fn globs_match_nested_paths() {
-        let p = Protected::new(&["tests/**".into(), ".omni/**".into()]).unwrap();
+        let p = Protected::new(&["tests/**".into(), ".countercheck/**".into()]).unwrap();
         assert!(p.matches("tests/test_a.py"));
         assert!(p.matches("tests/unit/deep/x.rs"));
-        assert!(p.matches(".omni/checks.toml"));
+        assert!(p.matches(".countercheck/checks.toml"));
         assert!(!p.matches("src/tests_helper.py"));
     }
 

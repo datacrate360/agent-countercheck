@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>omni-agent design: one ecosystem out of many AI tools</title>
+<title>Countercheck design: one ecosystem out of many AI tools</title>
 <style>
 :root{--fg:var(--foreground,#0F1F1F);--mut:var(--muted-foreground,#5B6B6B);--bd:var(--border,#DCE7E5);--teal:#105050;--coral:#C2410C;--panel:#EEF5F3}
 body{color:var(--fg);font:14px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;max-width:1100px;margin:0 auto;padding:24px}
@@ -8,7 +8,7 @@ h1{font-size:26px;margin:0 0 4px;color:var(--teal)}h2{font-size:19px;margin:34px
 .lead{color:var(--mut);margin:0 0 14px}
 .plain{background:var(--panel);border-left:4px solid var(--teal);padding:12px 16px;border-radius:6px;margin:12px 0}
 .plain b.t{display:block;color:var(--teal);margin-bottom:4px}
-.omni{border-left-color:var(--coral)}
+.countercheck{border-left-color:var(--coral)}
 table{border-collapse:collapse;width:100%;margin:8px 0 16px;font-size:12.6px}
 th,td{border:1px solid var(--bd);padding:6px 8px;text-align:left;vertical-align:top}
 th{background:rgba(16,80,80,.08)}
@@ -24,10 +24,10 @@ small,.src{color:var(--mut);font-size:12px}
 ul{margin:4px 0 8px 18px;padding:0}
 </style></head><body>
 
-<h1>omni-agent: design</h1>
-<p class="lead">How many AI tools fit into one ecosystem, which ones you actually need, and where omni-agent sits. Companion document: <code>docs/plan/omni-agent-plan.html</code>.<br>
+<h1>Countercheck: design</h1>
+<p class="lead">How many AI tools fit into one ecosystem, which ones you actually need, and where Countercheck sits. Companion document: <code>docs/plan/countercheck-plan.html</code>.<br>
 <small>Facts about Hermes, OpenClaw, Odysseus, Paperclip and the 9 tools come from our source reads (<code>research/</code>, pinned commits). CodeRabbit, Peec, Claude Code and Codex facts come from their docs. "Not found" means not found in our reads, not proof of absence.</small></p>
-<p class="toc"><a href="#confusion">1. The confusion</a><a href="#jobs">2. Jobs, not tools</a><a href="#overlap">3. Who covers which job</a><a href="#rule">4. Do I still need it?</a><a href="#stacks">5. Recommended sets</a><a href="#flows">6. Flows</a><a href="#omni">7. omni-agent design</a></p>
+<p class="toc"><a href="#confusion">1. The confusion</a><a href="#jobs">2. Jobs, not tools</a><a href="#overlap">3. Who covers which job</a><a href="#rule">4. Do I still need it?</a><a href="#stacks">5. Recommended sets</a><a href="#flows">6. Flows</a><a href="#Countercheck">7. Countercheck design</a></p>
 
 <h2 id="confusion">1. The confusion, in plain words</h2>
 <div class="plain"><b class="t">In plain words</b>
@@ -49,7 +49,7 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 <text x="26" y="161" font-weight="700" fill="#105050">8. WORKER (agent harness): the loop that plans, calls tools, edits files</text>
 <text x="26" y="182" fill="#0F1F1F">Claude Code · Codex · Cursor · Hermes · OpenClaw · Odysseus · Devin</text>
 <rect x="790" y="138" width="260" height="138" rx="10" fill="rgba(194,65,12,.07)" stroke="#C2410C" stroke-width="2"/>
-<text x="806" y="162" font-weight="700" fill="#C2410C">7. PROOF (omni-agent)</text>
+<text x="806" y="162" font-weight="700" fill="#C2410C">7. PROOF (Countercheck)</text>
 <text x="806" y="184" fill="#0F1F1F">did the work really happen</text>
 <text x="806" y="202" fill="#0F1F1F">and really work? what did</text>
 <text x="806" y="220" fill="#0F1F1F">it cost? receipt + approve.</text>
@@ -84,7 +84,7 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 <tr><td><b>Security testing</b></td><td class="n">None</td><td class="n">None</td><td class="n">None</td><td class="n">None</td><td>Strix</td><td><b>Yes</b>, for anything you deploy: nothing else tests your running app.</td></tr>
 <tr><td><b>Code review</b></td><td class="n">None</td><td class="n">None</td><td class="n">None</td><td class="p">Review stage (human)</td><td>CodeRabbit, Greptile</td><td>Nice to have. Users complain about noise; it gives opinions, not proof.</td></tr>
 <tr><td><b>Simulation / AI-search tracking</b></td><td class="n">None</td><td class="n">None</td><td class="n">None</td><td class="n">None</td><td>MiroFish, Peec</td><td>Only for those specific jobs (market rehearsal, brand visibility in AI answers).</td></tr>
-<tr><td><b>Proof of done</b></td><td class="p">Partial: <code>/goal</code> asks a helper model "is it done?" (an opinion; fails open)</td><td class="n">None (loop breakers only)</td><td class="p">Partial: completion gate on its own effects journal (own agent only)</td><td class="p">Partial: review stage, human approvals</td><td><b>omni-agent</b></td><td><b>Yes</b>: nobody re-runs your locked checks for <i>any</i> agent, compares the claim with reality and keeps a receipt.</td></tr>
+<tr><td><b>Proof of done</b></td><td class="p">Partial: <code>/goal</code> asks a helper model "is it done?" (an opinion; fails open)</td><td class="n">None (loop breakers only)</td><td class="p">Partial: completion gate on its own effects journal (own agent only)</td><td class="p">Partial: review stage, human approvals</td><td><b>Countercheck</b></td><td><b>Yes</b>: nobody re-runs your locked checks for <i>any</i> agent, compares the claim with reality and keeps a receipt.</td></tr>
 </table>
 <p class="src">Sources: research/agents/hermes/REPORT.md (Kanban, memory, /goal), openclaw/C-memory-orchestration.md (Workboard, Swarm, dreaming), openclaw/B-tools-security.md + D-platform.md (pdf tool, Canvas/A2UI), odysseus/A-agent-core.md (completion gate), tools/paperclip/REPORT.md (adapters, budgets, <code>--yolo</code>/skip-permissions defaults).</p>
 
@@ -127,7 +127,7 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 <tr><td>Knowledge</td><td>graphify (big repo)</td><td>graphify + MarkItDown</td><td>MarkItDown if Office files</td><td>graphify + MarkItDown (both local)</td></tr>
 <tr><td>Specialists</td><td>—</td><td>Strix in CI</td><td>Peec (if marketing), MiroFish (experiments)</td><td>—</td></tr>
 <tr><td>Review</td><td>—</td><td>CodeRabbit (optional)</td><td>—</td><td>—</td></tr>
-<tr><td><b>Proof</b></td><td><b>omni-agent</b> (hook on every "done")</td><td><b>omni-agent</b> (CI + receipts per issue)</td><td><b>omni-agent</b> (read-back checks, later)</td><td><b>omni-agent</b> (fully local)</td></tr>
+<tr><td><b>Proof</b></td><td><b>Countercheck</b> (hook on every "done")</td><td><b>Countercheck</b> (CI + receipts per issue)</td><td><b>Countercheck</b> (read-back checks, later)</td><td><b>Countercheck</b> (fully local)</td></tr>
 <tr><td>Screens</td><td>terminal + editor</td><td>Paperclip board + Slack</td><td>Telegram / WhatsApp / Slack</td><td>Odysseus web app</td></tr>
 </table>
 <p><b>The minimal useful ecosystem is four tools:</b> one brain, one worker, one manager (even GitHub issues), and one proof layer. Everything else is added only when a job hurts.</p>
@@ -142,7 +142,7 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 <rect x="170" y="10" width="140" height="34" rx="6" fill="rgba(16,80,80,.08)" stroke="#105050"/><text x="240" y="32" font-weight="700">Paperclip</text>
 <rect x="340" y="10" width="160" height="34" rx="6" fill="rgba(16,80,80,.08)" stroke="#105050"/><text x="420" y="32" font-weight="700">Claude Code (worker)</text>
 <rect x="530" y="10" width="150" height="34" rx="6" fill="rgba(16,80,80,.08)" stroke="#105050"/><text x="605" y="32" font-weight="700">graphify + memory</text>
-<rect x="710" y="10" width="150" height="34" rx="6" fill="rgba(194,65,12,.1)" stroke="#C2410C"/><text x="785" y="32" font-weight="700" fill="#C2410C">omni-agent</text>
+<rect x="710" y="10" width="150" height="34" rx="6" fill="rgba(194,65,12,.1)" stroke="#C2410C"/><text x="785" y="32" font-weight="700" fill="#C2410C">Countercheck</text>
 <rect x="890" y="10" width="150" height="34" rx="6" fill="rgba(16,80,80,.08)" stroke="#105050"/><text x="965" y="32" font-weight="700">GitHub</text>
 </g>
 <g stroke="#c9d6d3" stroke-dasharray="3 3"><line x1="80" y1="44" x2="80" y2="390"/><line x1="240" y1="44" x2="240" y2="390"/><line x1="420" y1="44" x2="420" y2="390"/><line x1="605" y1="44" x2="605" y2="390"/><line x1="785" y1="44" x2="785" y2="390"/><line x1="965" y1="44" x2="965" y2="390"/></g>
@@ -151,24 +151,24 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 <line x1="240" y1="100" x2="418" y2="100" stroke="#5B6B6B" marker-end="url(#s)"/><text x="248" y="94">2. issue + budget (adapter: CLI)</text>
 <line x1="420" y1="130" x2="603" y2="130" stroke="#5B6B6B" marker-end="url(#s)"/><text x="428" y="124">3. which files? past decisions? (MCP)</text>
 <line x1="603" y1="155" x2="422" y2="155" stroke="#5B6B6B" marker-end="url(#s)"/><text x="440" y="170">map + notes</text>
-<line x1="420" y1="200" x2="783" y2="200" stroke="#C2410C" stroke-width="1.6" marker-end="url(#sc)"/><text x="428" y="194">4. "done, tests pass" → Stop hook runs omni verify</text>
+<line x1="420" y1="200" x2="783" y2="200" stroke="#C2410C" stroke-width="1.6" marker-end="url(#sc)"/><text x="428" y="194">4. "done, tests pass" → Stop hook runs countercheck verify</text>
 <text x="795" y="226" text-anchor="start" fill="#C2410C">5. locked checks, clean copy,</text><text x="795" y="241" text-anchor="start" fill="#C2410C">sandbox → receipt</text>
 <line x1="783" y1="265" x2="422" y2="265" stroke="#C2410C" stroke-width="1.6" marker-end="url(#sc)"/><text x="430" y="259">6a. FAILED → evidence back to the worker, it retries</text>
 <line x1="785" y1="300" x2="242" y2="300" stroke="#C2410C" stroke-width="1.6" marker-end="url(#sc)"/><text x="250" y="294">6b. VERIFIED + receipt + cost → issue moves to review</text>
 <line x1="240" y1="330" x2="82" y2="330" stroke="#5B6B6B" marker-end="url(#s)"/><text x="90" y="324">7. one-screen approve</text>
-<line x1="80" y1="360" x2="963" y2="360" stroke="#5B6B6B" marker-end="url(#s)"/><text x="300" y="354">8. merge (CI runs omni again as the gate)</text>
+<line x1="80" y1="360" x2="963" y2="360" stroke="#5B6B6B" marker-end="url(#s)"/><text x="300" y="354">8. merge (CI runs Countercheck again as the gate)</text>
 <line x1="785" y1="385" x2="607" y2="385" stroke="#5B6B6B" stroke-dasharray="4 3" marker-end="url(#s)"/><text x="620" y="380">9. learn only from verified work</text>
 </g></svg>
 
-<h3>6b. How omni-agent plugs into everything (no tool has to change)</h3>
-<svg viewBox="0 0 1060 300" role="img" aria-label="omni integration points">
+<h3>6b. How Countercheck plugs into everything (no tool has to change)</h3>
+<svg viewBox="0 0 1060 300" role="img" aria-label="Countercheck integration points">
 <defs><marker id="i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#C2410C"/></marker></defs>
 <rect x="400" y="100" width="260" height="100" rx="12" fill="rgba(194,65,12,.07)" stroke="#C2410C" stroke-width="2"/>
-<g font-size="12.5"><text x="530" y="130" text-anchor="middle" font-weight="700" fill="#C2410C">omni-agent core</text>
+<g font-size="12.5"><text x="530" y="130" text-anchor="middle" font-weight="700" fill="#C2410C">Countercheck core</text>
 <text x="530" y="152" text-anchor="middle">locked checks · clean copy · sandbox</text><text x="530" y="170" text-anchor="middle">receipts · verdicts · cost</text><text x="530" y="188" text-anchor="middle" fill="#5B6B6B">one Rust binary, local-first</text></g>
 <g font-size="12">
-<rect x="20" y="20" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="34" y="43" font-weight="700">Agent hooks</text><text x="34" y="62">Claude Code / Codex "stop" hooks call omni</text>
-<rect x="20" y="122" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="34" y="145" font-weight="700">CLI</text><text x="34" y="164">any agent, script or person: <tspan font-family="monospace">omni verify</tspan></text>
+<rect x="20" y="20" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="34" y="43" font-weight="700">Agent hooks</text><text x="34" y="62">Claude Code / Codex "stop" hooks call Countercheck</text>
+<rect x="20" y="122" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="34" y="145" font-weight="700">CLI</text><text x="34" y="164">any agent, script or person: <tspan font-family="monospace">countercheck verify</tspan></text>
 <rect x="20" y="224" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="34" y="247" font-weight="700">CI (GitHub Action)</text><text x="34" y="266">merge gate; exit codes 0 / 2 / 3</text>
 <rect x="740" y="20" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="754" y="43" font-weight="700">MCP server</text><text x="754" y="62">Hermes, OpenClaw, Cursor ask "verify this"</text>
 <rect x="740" y="122" width="300" height="56" rx="8" fill="none" stroke="#9aa9af"/><text x="754" y="145" font-weight="700">Manager adapters</text><text x="754" y="164">Paperclip / Linear: receipt on the issue</text>
@@ -182,24 +182,24 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 </svg>
 
 <h3>6c. Many brains, many workers, one proof</h3>
-<svg viewBox="0 0 1060 250" role="img" aria-label="LLMs to workers to omni">
+<svg viewBox="0 0 1060 250" role="img" aria-label="LLMs to workers to Countercheck">
 <defs><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#5B6B6B"/></marker></defs>
 <g font-size="12" text-anchor="middle">
 <g fill="none" stroke="#9aa9af"><rect x="20" y="180" width="150" height="40" rx="6"/><rect x="190" y="180" width="150" height="40" rx="6"/><rect x="360" y="180" width="150" height="40" rx="6"/><rect x="530" y="180" width="150" height="40" rx="6"/><rect x="700" y="180" width="150" height="40" rx="6"/><rect x="870" y="180" width="170" height="40" rx="6"/></g>
 <text x="95" y="205">Anthropic Claude</text><text x="265" y="205">OpenAI GPT</text><text x="435" y="205">Google Gemini</text><text x="605" y="205">xAI / Kimi / DeepSeek</text><text x="775" y="205">OpenRouter</text><text x="955" y="205">local (Ollama)</text>
 <g fill="rgba(16,80,80,.07)" stroke="#105050"><rect x="60" y="100" width="150" height="40" rx="6"/><rect x="240" y="100" width="150" height="40" rx="6"/><rect x="420" y="100" width="150" height="40" rx="6"/><rect x="600" y="100" width="150" height="40" rx="6"/><rect x="780" y="100" width="150" height="40" rx="6"/></g>
 <text x="135" y="125">Claude Code</text><text x="315" y="125">Codex</text><text x="495" y="125">Hermes</text><text x="675" y="125">OpenClaw</text><text x="855" y="125">Odysseus / others</text>
-<rect x="330" y="14" width="400" height="44" rx="10" fill="rgba(194,65,12,.08)" stroke="#C2410C" stroke-width="2"/><text x="530" y="41" font-weight="700" fill="#C2410C">omni-agent: same checks, same receipt, any worker, any brain</text>
+<rect x="330" y="14" width="400" height="44" rx="10" fill="rgba(194,65,12,.08)" stroke="#C2410C" stroke-width="2"/><text x="530" y="41" font-weight="700" fill="#C2410C">Countercheck: same checks, same receipt, any worker, any brain</text>
 </g>
 <g stroke="#5B6B6B"><line x1="95" y1="161" x2="955" y2="161" stroke-width="2"/><line x1="95" y1="180" x2="95" y2="161"/><line x1="265" y1="180" x2="265" y2="161"/><line x1="435" y1="180" x2="435" y2="161"/><line x1="605" y1="180" x2="605" y2="161"/><line x1="775" y1="180" x2="775" y2="161"/><line x1="955" y1="180" x2="955" y2="161"/></g>
 <text x="1000" y="157" font-size="10.5" fill="#5B6B6B" text-anchor="end">any provider</text>
 <g stroke="#5B6B6B" marker-end="url(#b)"><line x1="135" y1="161" x2="135" y2="142"/><line x1="315" y1="161" x2="315" y2="142"/><line x1="495" y1="161" x2="495" y2="142"/><line x1="675" y1="161" x2="675" y2="142"/><line x1="855" y1="161" x2="855" y2="142"/>
 <line x1="135" y1="100" x2="380" y2="60"/><line x1="315" y1="100" x2="450" y2="60"/><line x1="495" y1="100" x2="520" y2="60"/><line x1="675" y1="100" x2="600" y2="60"/><line x1="855" y1="100" x2="680" y2="60"/></g>
-<text x="20" y="245" font-size="11.5" fill="#5B6B6B">Any brain can power any worker (each worker supports several providers). omni doesn't care which brain or worker did the work; it only checks the result.</text>
+<text x="20" y="245" font-size="11.5" fill="#5B6B6B">Any brain can power any worker (each worker supports several providers). Countercheck doesn't care which brain or worker did the work; it only checks the result.</text>
 </svg>
 
-<h2 id="omni">7. omni-agent design</h2>
-<div class="plain omni"><b class="t" style="color:#C2410C">One sentence</b>omni-agent checks whether AI work really happened and really works, for any agent, and tells you what it cost. It doesn't plan, write code, or chat: it owns <b>job 7, proof</b>, and stays small so it can sit beside every other tool.</div>
+<h2 id="Countercheck">7. Countercheck design</h2>
+<div class="plain Countercheck"><b class="t" style="color:#C2410C">One sentence</b>Countercheck checks whether AI work really happened and really works, for any agent, and tells you what it cost. It doesn't plan, write code, or chat: it owns <b>job 7, proof</b>, and stays small so it can sit beside every other tool.</div>
 <div class="grid2">
 <div class="card"><h4>Principles</h4><ul>
 <li><b>The worker never grades itself:</b> checks come from the base revision; protected files are restored.</li>
@@ -208,9 +208,9 @@ Every tool says it does "everything", so their features overlap: Hermes has a wo
 <li><b>Plug in, don't take over:</b> hooks, CLI, CI, MCP, adapters.</li>
 <li><b>Local-first and safe by default:</b> sandboxed checks, no telemetry, one binary.</li></ul></div>
 <div class="card"><h4>Components</h4><ul>
-<li><code>omni-core</code> (Rust, pure): check file, protected paths, receipts, verdict rules, seal. <i>Built.</i></li>
-<li><code>omni</code> CLI: git snapshot, sandbox runner, <code>verify / init / show</code>. <i>Built (v0.1).</i></li>
-<li>Hooks installer: <code>omni hook install claude-code|codex</code>. <i>Next.</i></li>
+<li><code>countercheck-core</code> (Rust, pure): check file, protected paths, receipts, verdict rules, seal. <i>Built.</i></li>
+<li><code>countercheck</code> CLI: git snapshot, sandbox runner, <code>verify / init / show</code>. <i>Built (v0.1).</i></li>
+<li>Hooks installer: <code>countercheck hook install claude-code|codex</code>. <i>Next.</i></li>
 <li>Cost readers: agent session logs → dollars per receipt. <i>Next.</i></li>
 <li>Receipt signing (Ed25519) + receipt store (SQLite). <i>Planned.</i></li>
 <li>MCP server, GitHub Action, Paperclip/Linear adapters. <i>Planned.</i></li>

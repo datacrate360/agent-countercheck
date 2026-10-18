@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>omni-agent plan</title>
+<title>Countercheck plan</title>
 <style>
 :root{--fg:var(--foreground,#0F1F1F);--mut:var(--muted-foreground,#5B6B6B);--bd:var(--border,#DCE7E5);--teal:#105050;--coral:#C2410C;--panel:#EEF5F3}
 body{color:var(--fg);font:14px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;max-width:1100px;margin:0 auto;padding:24px}
@@ -16,18 +16,18 @@ svg{max-width:100%;height:auto;display:block;margin:8px 0 14px}svg text{font-fam
 code{font-size:12px;background:rgba(16,80,80,.07);padding:1px 4px;border-radius:3px}
 small{color:var(--mut)}ul{margin:4px 0 8px 18px;padding:0}
 </style></head><body>
-<h1>omni-agent: plan</h1>
-<p class="lead">From a working CLI to a product people rely on. Companion to <code>docs/design/omni-agent-design.html</code>. Durations assume part-time work (evenings and weekends) with AI coding agents doing most of the typing.</p>
+<h1>Countercheck: plan</h1>
+<p class="lead">From a working CLI to a product people rely on. Companion to <code>docs/design/countercheck-design.html</code>. Durations assume part-time work (evenings and weekends) with AI coding agents doing most of the typing.</p>
 
 <div class="plain"><b class="t">In plain words</b>
-We already have the engine: <code>omni verify</code> catches an agent's false "done" (v0.1, 22 tests, verifies its own repo). The plan now has one rule: <b>prove people want it before building the big version.</b> So the first steps make omni effortless to try and put it in front of real users; the bigger pieces (app, signing, real-system checks) come only after users say yes.</div>
+We already have the engine: <code>countercheck verify</code> catches an agent's false "done" (v0.1, 22 tests, verifies its own repo). The plan now has one rule: <b>prove people want it before building the big version.</b> So the first steps make Countercheck effortless to try and put it in front of real users; the bigger pieces (app, signing, real-system checks) come only after users say yes.</div>
 
 <h2>1. Where we are (18 Oct 2026)</h2>
 <table>
 <tr><th>Piece</th><th>Status</th><th>Evidence</th></tr>
 <tr><td>Research (12 repos, 7 market themes, competitors)</td><td class="done">Done</td><td><code>research/</code>, <code>research/synthesis/open-space.md</code></td></tr>
 <tr><td>Stack decision</td><td class="done">Done</td><td><code>docs/decisions/0001-stack.md</code></td></tr>
-<tr><td><code>omni verify</code> v0.1 (Rust CLI)</td><td class="done">Done</td><td>22 tests; clippy clean; self-verify VERIFIED; caught a "skipped test" demo</td></tr>
+<tr><td><code>countercheck verify</code> v0.1 (Rust CLI)</td><td class="done">Done</td><td>22 tests; clippy clean; self-verify VERIFIED; caught a "skipped test" demo</td></tr>
 <tr><td>DataCrate360 Launcher</td><td class="done">On TEST</td><td>307 tests; CI green on Linux, Windows, web; macOS DMG builds</td></tr>
 <tr><td>Real users</td><td class="next">None yet</td><td>The biggest unknown</td></tr>
 </table>
@@ -52,24 +52,24 @@ We already have the engine: <code>omni verify</code> catches an agent's false "d
 <table>
 <tr><th>Phase</th><th>What we build</th><th>Done when (checkable)</th><th>Weeks</th></tr>
 <tr><td class="next">P1 Effortless to use</td><td><ul>
-<li><code>omni hook install claude-code</code>: on the agent's "stop", run <code>omni verify</code> and show the receipt</li>
+<li><code>countercheck hook install claude-code</code>: on the agent's "stop", run <code>countercheck verify</code> and show the receipt</li>
 <li>Same for Codex (hook if available, otherwise a wrapper command)</li>
 <li>Cost from agent session logs into the receipt</li>
-<li>Better checks setup: <code>omni init</code> detects pytest / npm / cargo / dbt and writes the commands</li></ul></td>
-<td>On a fresh repo: install, init, let Claude Code work; a false "done" is caught without typing any omni command. Tests cover each hook.</td><td>1–2</td></tr>
+<li>Better checks setup: <code>countercheck init</code> detects pytest / npm / cargo / dbt and writes the commands</li></ul></td>
+<td>On a fresh repo: install, init, let Claude Code work; a false "done" is caught without typing any Countercheck command. Tests cover each hook.</td><td>1–2</td></tr>
 <tr><td class="next">P2 Validate with users</td><td><ul>
-<li>60-second demo video: an agent skips a failing test, omni catches it</li>
+<li>60-second demo video: an agent skips a failing test, Countercheck catches it</li>
 <li>Talk to 10–15 people who posted about this pain (links in <code>research/market/</code>)</li>
 <li>Show HN + one Reddit post with the demo</li></ul></td>
 <td>Notes from ≥10 conversations; at least 5 people install it; written list of what they asked for</td><td>2–4 (overlaps P1)</td></tr>
 <tr><td class="next">P3 First release</td><td><ul>
 <li>GitHub Actions release: Mac (Apple silicon + Intel) binaries + <code>SHA256SUMS.txt</code></li>
 <li>Install line (<code>curl | sh</code>) + Homebrew tap</li>
-<li>Launcher: install command-line tools (not only .app), so omni shows <b>Install</b></li>
+<li>Launcher: install command-line tools (not only .app), so Countercheck shows <b>Install</b></li>
 <li>Promote the launcher to PROD</li></ul></td>
-<td>A clean Mac installs omni via each path; launcher installs it and shows the version</td><td>4–5</td></tr>
+<td>A clean Mac installs Countercheck via each path; launcher installs it and shows the version</td><td>4–5</td></tr>
 <tr><td><b>Go / no-go</b></td><td colspan="2">Continue to P4 if ≥3 of the 10–15 people use it on real work for a week, or the Show HN gets real discussion. Otherwise change the pitch using what they said (the research's other two pitches: <i>cost per verified task</i>, <i>review-queue shrinker</i>) and repeat P2.</td><td>end wk 5</td></tr>
-<tr><td class="later">P4 Trust + integrations</td><td><ul><li>Signed receipts (Ed25519) and a local receipt store</li><li>GitHub Action (merge gate)</li><li>MCP server so Hermes, OpenClaw, Cursor can call verify</li><li>Paperclip adapter: receipt attached to the issue</li><li>Apple Developer ID: signed + notarized downloads</li></ul></td><td>A PR in a public repo blocked by omni in CI; a Paperclip issue shows its receipt</td><td>6–8</td></tr>
+<tr><td class="later">P4 Trust + integrations</td><td><ul><li>Signed receipts (Ed25519) and a local receipt store</li><li>GitHub Action (merge gate)</li><li>MCP server so Hermes, OpenClaw, Cursor can call verify</li><li>Paperclip adapter: receipt attached to the issue</li><li>Apple Developer ID: signed + notarized downloads</li></ul></td><td>A PR in a public repo blocked by Countercheck in CI; a Paperclip issue shows its receipt</td><td>6–8</td></tr>
 <tr><td class="later">P5 Beyond code</td><td><ul><li>Read-back checks: SQL query, HTTP page, JSON API (CRM as the first business connector)</li><li>Labels for unverifiable work (e.g. MiroFish runs: "qualitative, not validated")</li></ul></td><td>"CRM updated" claim checked against the CRM API in a demo</td><td>9–10</td></tr>
 <tr><td class="later">P6 Receipts app + team</td><td><ul><li>Tauri + React app: receipt inbox, diff view, one-click approve</li><li>Team server option (Postgres)</li></ul></td><td>A teammate approves work from the app in under 30 s</td><td>10–12</td></tr>
 <tr><td class="later">P7 Outcomes + benchmark</td><td><ul><li>Cost per verified task by agent and model</li><li>Your own regression watch before model upgrades</li><li>Prediction vs reality tracking (MiroFish, Peec)</li></ul></td><td>A monthly report: which agent/model gives the cheapest verified work on your repos</td><td>later</td></tr>
@@ -79,7 +79,7 @@ We already have the engine: <code>omni verify</code> catches an agent's false "d
 <table>
 <tr><th>Metric</th><th>Why</th><th>Target after P3</th></tr>
 <tr><td>False "done" caught per 100 agent tasks</td><td>Proves the core value</td><td>measured on our own and testers' repos</td></tr>
-<tr><td>False alarms (omni says failed, work was fine)</td><td>Noise kills checkers (research T7)</td><td>&lt; 1 in 20</td></tr>
+<tr><td>False alarms (Countercheck says failed, work was fine)</td><td>Noise kills checkers (research T7)</td><td>&lt; 1 in 20</td></tr>
 <tr><td>Weekly active installs</td><td>Real use, not stars</td><td>≥ 10</td></tr>
 <tr><td>Time from "done" to receipt</td><td>Must not slow people down</td><td>≈ the project's own test time + &lt; 5 s</td></tr>
 </table>

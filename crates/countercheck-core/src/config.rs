@@ -1,7 +1,7 @@
-//! The check file a project commits at `.omni/checks.toml`.
+//! The check file a project commits at `.countercheck/checks.toml`.
 //!
 //! ```toml
-//! protected = ["tests/**"]      # paths a worker may not change; .omni/** is always protected
+//! protected = ["tests/**"]      # paths a worker may not change; .countercheck/** is always protected
 //!
 //! [[check]]
 //! name = "unit tests"
@@ -12,15 +12,15 @@
 //! `link = ["node_modules", ".venv"]` makes git-ignored dependency folders visible in the clean
 //! copy (read-only under the sandbox). The receipt lists them, because they come from the worker's tree.
 //!
-//! omni reads this file from the **base** revision (before the worker's change), so a worker
+//! countercheck reads this file from the **base** revision (before the worker's change), so a worker
 //! cannot weaken the checks it is judged by.
 
 use serde::{Deserialize, Serialize};
 
 /// Where the check file lives, relative to the repository root.
-pub const CHECKS_PATH: &str = ".omni/checks.toml";
+pub const CHECKS_PATH: &str = ".countercheck/checks.toml";
 /// Always protected, whatever the file says.
-pub const ALWAYS_PROTECTED: &str = ".omni/**";
+pub const ALWAYS_PROTECTED: &str = ".countercheck/**";
 pub const DEFAULT_TIMEOUT_SECS: u64 = 600;
 pub const MAX_TIMEOUT_SECS: u64 = 7200;
 /// Refuse absurdly large check files (they come from a repository we don't control).
@@ -52,7 +52,7 @@ fn default_timeout() -> u64 {
 }
 
 impl ChecksFile {
-    /// Protected patterns including the always-protected `.omni/**`.
+    /// Protected patterns including the always-protected `.countercheck/**`.
     pub fn protected_patterns(&self) -> Vec<String> {
         let mut out = self.protected.clone();
         if !out.iter().any(|p| p == ALWAYS_PROTECTED) {
@@ -98,7 +98,7 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
             || l.split('/')
                 .any(|seg| seg.is_empty() || seg == "." || seg == "..")
             || l.contains(['*', '?', '[', '\\'])
-            || l.starts_with(".omni")
+            || l.starts_with(".countercheck")
             || l.starts_with(".git");
         if bad {
             return Err(format!(
@@ -110,12 +110,12 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
     Ok(file)
 }
 
-/// The starter file `omni init` writes.
-pub const TEMPLATE: &str = r#"# omni-agent checks: what must be true before work counts as done.
-# omni reads this file from the base revision, so a worker cannot change its own checks.
+/// The starter file `countercheck init` writes.
+pub const TEMPLATE: &str = r#"# countercheck checks: what must be true before work counts as done.
+# countercheck reads this file from the base revision, so a worker cannot change its own checks.
 
-# Paths a worker may not change. If it does, omni runs the checks with the base version
-# and says so on the receipt. .omni/** is always protected.
+# Paths a worker may not change. If it does, countercheck runs the checks with the base version
+# and says so on the receipt. .countercheck/** is always protected.
 protected = ["tests/**"]
 
 [[check]]
@@ -129,11 +129,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_a_valid_file_and_adds_omni_protection() {
+    fn parses_a_valid_file_and_adds_countercheck_protection() {
         let f =
             parse("protected = [\"tests/**\"]\n[[check]]\nname = \"t\"\nrun = \"true\"\n").unwrap();
         assert_eq!(f.checks[0].timeout_secs, DEFAULT_TIMEOUT_SECS);
-        assert_eq!(f.protected_patterns(), vec!["tests/**", ".omni/**"]);
+        assert_eq!(f.protected_patterns(), vec!["tests/**", ".countercheck/**"]);
     }
 
     #[test]
@@ -148,7 +148,15 @@ mod tests {
         );
         assert!(parse("[[check]]\nname=\"a\"\nrun=\"x\"\nextra=1\n").is_err());
         assert!(parse("protected=[\"[\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n").is_err());
-        for bad in ["../x", "/abs", "a/../b", "*.x", ".git", ".omni/r", ""] {
+        for bad in [
+            "../x",
+            "/abs",
+            "a/../b",
+            "*.x",
+            ".git",
+            ".countercheck/r",
+            "",
+        ] {
             let t = format!("link=[\"{bad}\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n");
             assert!(parse(&t).is_err(), "{bad}");
         }

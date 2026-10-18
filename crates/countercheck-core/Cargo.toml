@@ -1,6 +1,6 @@
 [package]
-name = "omni-core"
-description = "omni-agent core: check files, protected paths, receipts and verdicts (pure, no I/O)"
+name = "countercheck-core"
+description = "countercheck core: check files, protected paths, receipts and verdicts (pure, no I/O)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

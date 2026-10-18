@@ -1,10 +1,10 @@
-//! omni-agent core: the pure parts of "is it really done?".
+//! countercheck core: the pure parts of "is it really done?".
 //!
-//! - [`config`]: the check file (`.omni/checks.toml`) a project commits.
+//! - [`config`]: the check file (`.countercheck/checks.toml`) a project commits.
 //! - [`protect`]: which paths a worker may not change (tests, the check file itself).
 //! - [`receipt`]: the record of one verification and how its verdict is decided.
 //!
-//! Nothing here touches the file system, processes or the network; the `omni` binary does that.
+//! Nothing here touches the file system, processes or the network; the `countercheck` binary does that.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,

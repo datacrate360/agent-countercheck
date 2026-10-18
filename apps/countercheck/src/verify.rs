@@ -1,9 +1,9 @@
 //! The verify flow: lock the checks, snapshot, restore protected files, run, decide, seal.
 
 use crate::{git, runner, snapshot};
-use omni_core::config::{self, CHECKS_PATH};
-use omni_core::protect::{Protected, ProtectedChange};
-use omni_core::receipt::{self, Receipt, RepoInfo, Worker};
+use countercheck_core::config::{self, CHECKS_PATH};
+use countercheck_core::protect::{Protected, ProtectedChange};
+use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
 use std::path::PathBuf;
 
 pub struct Options {
@@ -37,7 +37,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
                 ),
                 Err(_) => {
                     return Err(format!(
-                        "no {CHECKS_PATH} found; run `omni init`, edit it and commit it"
+                        "no {CHECKS_PATH} found; run `countercheck init`, edit it and commit it"
                     ));
                 }
             },
@@ -47,7 +47,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
     // 2. A clean copy of the worker's files.
     let scratch = tempfile::Builder::new()
-        .prefix("omni-verify-")
+        .prefix("countercheck-")
         .tempdir()
         .map_err(|e| format!("temp dir: {e}"))?;
     let scratch_root = scratch
@@ -63,7 +63,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // 3. Protected files the worker changed go back to their base version.
     let mut protected_changes = Vec::new();
     for (change, path) in git::changes_since(&root, &base_commit)? {
-        if omni_core::protect::is_junk(&path) || !protected.matches(&path) {
+        if countercheck_core::protect::is_junk(&path) || !protected.matches(&path) {
             continue;
         }
         let pc = ProtectedChange::decide(&path, change);
@@ -97,7 +97,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         id: String::new(),
         receipt_sha256: String::new(),
         created_at: humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string(),
-        omni_version: env!("CARGO_PKG_VERSION").to_string(),
+        countercheck_version: env!("CARGO_PKG_VERSION").to_string(),
         repo: RepoInfo {
             base_rev: opts.base.clone(),
             base_commit,
@@ -122,7 +122,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let dir = opts
         .out
         .clone()
-        .unwrap_or_else(|| root.join(".omni").join("receipts"));
+        .unwrap_or_else(|| root.join(".countercheck").join("receipts"));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     ensure_receipts_ignored(&root, &dir);
     let path = dir.join(format!("{}.json", receipt.id));
