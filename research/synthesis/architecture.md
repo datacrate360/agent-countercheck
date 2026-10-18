@@ -64,7 +64,7 @@ Proposed by the analysts in each report's T13; harmonised here.
 |---|---|---|---|
 | `WorkItemDispatch` → `RunEvent*` → `RunResult` | work layer ↔ engines | dispatch: item id, goal, acceptance criteria, budget, scope, allowed tools, handoff summary; events: progress/tool/cost; result: status, artifacts, evidence, cost | Paperclip T13.4 |
 | `CompletionCheck(item, result) -> passing \| active \| blocked` | work layer ↔ verifier | only this may set "passing"; records evidence | tutorial Stage 9 `check()` |
-| `MemoryPort` | engines ↔ memory | `capture(observation)`, `inject(budget, scope)`, `search(q)`, `timeline`, `get_observations` | claude-mem T13 |
+| `MemoryPort` | engines ↔ memory | `record(event)`, `injectContext(project, budgetChars, query?)`, `search(q)`, `timeline(anchorId)`, `get(ids)`, `save(note)` | claude-mem T13 |
 | `ingest(IngestRequest) -> IngestResult` | anything ↔ ingestion | bytes from our own fetcher; `doc_id = sha256`, anchors, errors (`TOO_LARGE`, `TIMEOUT`, `BLOCKED_SOURCE`) | MarkItDown T13 |
 | Graph query | engines ↔ knowledge graph | `query(q, budget_tokens, seeds?)`, `path(a,b)`, `affected(paths)`; every edge EXTRACTED/INFERRED + score | graphify T13 |
 | `GenUISurface` / `GenUIEvent` | UI ↔ engines | allowed component library → prompt; events back as typed actions; tools allowlisted | OpenUI T13 |
