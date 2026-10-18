@@ -57,7 +57,6 @@ fn seatbelt_profile(workdir: &Path, tmp: &Path) -> String {
          (allow network-bind (local ip \"localhost:*\"))\n\
          (allow network-inbound (local ip \"localhost:*\"))\n\
          (allow network-outbound (remote ip \"localhost:*\"))\n\
-         (allow network* (local unix-socket) (remote unix-socket))\n\
          (deny file-write*)\n\
          (allow file-write* (subpath \"{}\") (subpath \"{}\") (literal \"/dev/null\") \
          (regex #\"^/dev/tty\") (regex #\"^/dev/fd/\"))\n",
