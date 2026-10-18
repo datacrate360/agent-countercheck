@@ -115,8 +115,7 @@ Here is why, in order of importance.
 5. **Interoperate with the giants instead of fighting them.** Treat Claude Code, Codex, Hermes and OpenClaw as
    engines behind one adapter contract (Paperclip already proves this works with 16 adapters). Their progress then
    becomes your progress.
-6. **Constraints are real; plan for them.** Solo, a full-time job, a PhD from September 2026, and no revenue yet
-   because of visa timing. That argues for an open-source-first, part-time plan with a small MVP that builds
+6. **Constraints are real; plan for them.** A small team with limited time and no revenue yet. That argues for an open-source-first, part-time plan with a small MVP that builds
    omni-agent itself. The schedule above assumes that.
 7. **The main risks:** upstream churn breaking adapters (pin versions, contract tests); model cost (budgets with hard
    stops from day one); security liability, because agents run code on people's repos (safe defaults are part of the
