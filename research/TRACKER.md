@@ -18,7 +18,7 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 6 | odysseus-dev/odysseus @ 9712a54 | B: platform | sa-5-c4cfec3a | done | [agents/odysseus/B-platform.md](agents/odysseus/B-platform.md) |
 | 7 | NousResearch/hermes-agent @ v0.22.2 (7b77e29) | full 18-point profile | sa-6-8c96451d | done | [agents/hermes/REPORT.md](agents/hermes/REPORT.md) |
 
-## Wave 2: building blocks (started 2026-10-18 ~09:00 CDT; 8 of 9 repos done by 09:15)
+## Wave 2: building blocks (started 2026-10-18 ~09:00 CDT; all 9 done by 09:35)
 
 | # | Repo @ commit | License | Focus | Analyst | Status | Report |
 |---|---|---|---|---|---|---|
@@ -27,7 +27,7 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 10 | 666ghj/MiroFish @ 7657031 | **AGPL-3.0** | swarm simulation / forecasting | sa-2-240f8849 | done | [tools/mirofish/REPORT.md](tools/mirofish/REPORT.md) |
 | 11 | thesysdev/openui @ 8d9c4c3 | MIT | generative UI language and streaming renderer | sa-3-ebb4aa06 | done | [tools/openui/REPORT.md](tools/openui/REPORT.md) |
 | 12 | paperclipai/paperclip @ c9669a6 | MIT | AI-agent company and work management (closest to Agile) | sa-4-24f1fb5f | done | [tools/paperclip/REPORT.md](tools/paperclip/REPORT.md) |
-| 13 | usestrix/strix @ a0f8ea2 | Apache-2.0 | AI penetration-testing agent | sa-5-027b1408 → **sa-0-b949a489** | re-running (1st run stopped by a content filter while reading pentest material; re-scoped to architecture + defensive integration, no attack content) | `tools/strix/REPORT.md` |
+| 13 | usestrix/strix @ a0f8ea2 | Apache-2.0 | AI penetration-testing agent | sa-5-027b1408 → sa-0-b949a489 → coordinator | done, **reduced depth**: both analysts were stopped by the provider's content filter while reading the pentest knowledge packs; the coordinator wrote an integration profile from docs, config and layout only (22 citations, each matched to its text) | [tools/strix/REPORT.md](tools/strix/REPORT.md) |
 | 14 | morluto/rea @ 23f984b | MIT | reverse-engineering MCP | sa-6-3d4dd82e | done | [tools/rea/REPORT.md](tools/rea/REPORT.md) |
 | 15 | microsoft/markitdown @ 4cc9fa1 + guillaumemeyer/watermarks-remover @ 980c0b4 | MIT + MIT | document ingestion; AI-watermark detection/removal (+ diff vs the local `ai-watermark-remover` copy) | sa-7-be93a8de | done (both reports written; the agent's final message was cut off by a content filter) | [tools/markitdown/REPORT.md](tools/markitdown/REPORT.md), [tools/watermarks-remover/REPORT.md](tools/watermarks-remover/REPORT.md) |
 
@@ -81,6 +81,13 @@ Hand-checked: Paperclip registers exactly 16 adapters (`server/src/adapters/regi
 self-hosted Zep URL (`backend/app/config.py:71-72`); OpenUI's chat calls `window.open(url, "_blank")` with no URL check
 (`react-ui/.../OpenUIChat/utils/actionMessage.ts:28`); claude-mem worker port `37700 + uid % 100`
 (`src/shared/SettingsDefaultsManager.ts:414`); graphify tries Leiden, falls back to Louvain (`graphify/cluster.py:106-112`).
+
+### Limit of the citation checker
+
+`check_citations.py` proves that a cited file exists and that the line number is inside it. It does **not** prove that
+the line says what the report claims. That is why each wave also has hand-checked headline values. While writing the
+Strix profile, 13 `AGENTS.md` line numbers passed the checker but pointed at the wrong lines; they were corrected by
+matching the quoted text.
 
 ## Corrections the research produced
 
