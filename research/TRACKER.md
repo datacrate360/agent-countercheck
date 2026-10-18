@@ -43,6 +43,23 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 19 | Rendered HTML report in the tutorial format (plain-words boxes + SVG diagrams) | pending |
 | 20 | `synthesis/tutorial-audit-hermes.md`: every Hermes claim in agent-harness-tutorial vs source (sa-0-0548e8ad) | done: ~150 claims, 0 broken anchors, 3 wrong / 1 outdated / 19 imprecise / 14 omissions; **applied to the tutorial** |
 
+## Wave 4: market research, where is the open space? (started 2026-10-18 ~10:20 CDT)
+
+What users say on Reddit, Hacker News, GitHub issues and forums. Every quote must be copied from a retrieved page
+with its URL and date. Each theme looks for evidence **for and against** hypotheses H1–H4 (see
+`synthesis/competitive-landscape.md` §4) and for new gaps.
+
+| # | Theme | Analyst | Status | Report |
+|---|---|---|---|---|
+| 21 | T1 Trust in AI-written code (is it safe to merge?) | sa-0-9fc49532 | running | `market/T1-trust-verification.md` |
+| 22 | T2 Running many coding agents at once | sa-1-44e0b8ad | running | `market/T2-multi-agent-orchestration.md` |
+| 23 | T3 Agent safety, security, governance in companies | sa-2-ab8241c9 | running | `market/T3-safety-governance.md` |
+| 24 | T4 Top user requests for Hermes, OpenClaw, Paperclip, Odysseus, OpenHands (GitHub reactions) | sa-3-7cae5958 | running | `market/T4-open-agent-user-requests.md` |
+| 25 | T5 Agents beyond coding (PMs, ops, small businesses, Agile) | sa-4-52cf4f5b | running | `market/T5-beyond-coding.md` |
+| 26 | T6 Cost, reliability, evals, memory in production | sa-5-57d57003 | running | `market/T6-cost-reliability-evals.md` |
+| 27 | T7 Who already builds the "referee / proof of done", and how it's received | sa-6-e8819b2b | running | `market/T7-referee-landscape.md` |
+| 28 | `synthesis/open-space.md`: ranked open spaces from T1–T7 | — | pending | |
+
 ## Citation check (wave 1)
 
 `python3 research/scripts/check_citations.py <report> <clone> [--ref <tag>]` checks every `path:line` citation: the file
