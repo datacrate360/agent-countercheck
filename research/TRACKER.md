@@ -51,14 +51,14 @@ with its URL and date. Each theme looks for evidence **for and against** hypothe
 
 | # | Theme | Analyst | Status | Report |
 |---|---|---|---|---|
-| 21 | T1 Trust in AI-written code (is it safe to merge?) | sa-0-9fc49532 | running | `market/T1-trust-verification.md` |
-| 22 | T2 Running many coding agents at once | sa-1-44e0b8ad | running | `market/T2-multi-agent-orchestration.md` |
-| 23 | T3 Agent safety, security, governance in companies | sa-2-ab8241c9 | running | `market/T3-safety-governance.md` |
-| 24 | T4 Top user requests for Hermes, OpenClaw, Paperclip, Odysseus, OpenHands (GitHub reactions) | sa-3-7cae5958 | running | `market/T4-open-agent-user-requests.md` |
-| 25 | T5 Agents beyond coding (PMs, ops, small businesses, Agile) | sa-4-52cf4f5b | running | `market/T5-beyond-coding.md` |
-| 26 | T6 Cost, reliability, evals, memory in production | sa-5-57d57003 | running | `market/T6-cost-reliability-evals.md` |
-| 27 | T7 Who already builds the "referee / proof of done", and how it's received | sa-6-e8819b2b | running | `market/T7-referee-landscape.md` |
-| 28 | `synthesis/open-space.md`: ranked open spaces from T1–T7 | — | pending | |
+| 21 | T1 Trust in AI-written code (is it safe to merge?) | sa-0-9fc49532 | done | `market/T1-trust-verification.md` |
+| 22 | T2 Running many coding agents at once | sa-1-44e0b8ad | done | `market/T2-multi-agent-orchestration.md` |
+| 23 | T3 Agent safety, security, governance in companies | sa-2-ab8241c9 | done | `market/T3-safety-governance.md` |
+| 24 | T4 Top user requests for Hermes, OpenClaw, Paperclip, Odysseus, OpenHands (GitHub reactions) | sa-3-7cae5958 | done | `market/T4-open-agent-user-requests.md` |
+| 25 | T5 Agents beyond coding (PMs, ops, small businesses, Agile) | sa-4-52cf4f5b | done | `market/T5-beyond-coding.md` |
+| 26 | T6 Cost, reliability, evals, memory in production | sa-5-57d57003 | done | `market/T6-cost-reliability-evals.md` |
+| 27 | T7 Who already builds the "referee / proof of done", and how it's received | sa-6-e8819b2b | done | `market/T7-referee-landscape.md` |
+| 28 | [synthesis/open-space.md](synthesis/open-space.md): ranked open spaces from T1–T7 (spot-checked) | coordinator | done | |
 
 ## Citation check (wave 1)
 
