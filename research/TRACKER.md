@@ -39,6 +39,7 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 17 | `synthesis/capability-map.md`: every capability across the 12 repos → one omni-agent module, with build/borrow/skip for each | pending |
 | 18 | `synthesis/architecture.md`: proposed omni-agent architecture for the Agile lifecycle, interface contracts, license plan, build order | pending |
 | 19 | Rendered HTML report in the tutorial format (plain-words boxes + SVG diagrams) | pending |
+| 20 | `synthesis/tutorial-audit-hermes.md`: every Hermes claim in agent-harness-tutorial vs source (sa-0-0548e8ad) | done: ~150 claims, 0 broken anchors, 3 wrong / 1 outdated / 19 imprecise / 14 omissions; **applied to the tutorial** |
 
 ## Citation check (wave 1)
 
