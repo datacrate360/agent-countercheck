@@ -6,12 +6,12 @@ and when its report lands.
 
 Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking the report's citations).
 
-## Wave 1: agents (started 2026-10-18 08:44 CDT)
+## Wave 1: agents (started 2026-10-18 08:44 CDT, all 7 done by 09:01)
 
 | # | Repo @ commit | Scope | Analyst | Status | Report |
 |---|---|---|---|---|---|
-| 1 | openclaw/openclaw @ 15ae101a | A: core runtime (loop, providers, harness plugins, context) | sa-0-c124ff6c | running | `agents/openclaw/A-runtime.md` |
-| 2 | openclaw/openclaw @ 15ae101a | B: tools, sandbox, security | sa-1-2e93c9b8 | running | `agents/openclaw/B-tools-security.md` |
+| 1 | openclaw/openclaw @ 15ae101a | A: core runtime (loop, providers, harness plugins, context) | sa-0-c124ff6c | done | [agents/openclaw/A-runtime.md](agents/openclaw/A-runtime.md) |
+| 2 | openclaw/openclaw @ 15ae101a | B: tools, sandbox, security | sa-1-2e93c9b8 | done | [agents/openclaw/B-tools-security.md](agents/openclaw/B-tools-security.md) |
 | 3 | openclaw/openclaw @ 15ae101a | C: memory, skills, orchestration | sa-2-b845864a | done | [agents/openclaw/C-memory-orchestration.md](agents/openclaw/C-memory-orchestration.md) |
 | 4 | openclaw/openclaw @ 15ae101a | D: platform, surfaces, ops, repo practices | sa-3-159c659d | done | [agents/openclaw/D-platform.md](agents/openclaw/D-platform.md) |
 | 5 | odysseus-dev/odysseus @ 9712a54 | A: agent core | sa-4-865705c5 | done | [agents/odysseus/A-agent-core.md](agents/odysseus/A-agent-core.md) |
@@ -39,6 +39,14 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 17 | `synthesis/capability-map.md`: every capability across the 12 repos → one omni-agent module, with build/borrow/skip for each | pending |
 | 18 | `synthesis/architecture.md`: proposed omni-agent architecture for the Agile lifecycle, interface contracts, license plan, build order | pending |
 | 19 | Rendered HTML report in the tutorial format (plain-words boxes + SVG diagrams) | pending |
+
+## Corrections the research produced
+
+- Hermes curator: skills go stale after **14** days and are archived after **30** (`hermes_cli/config_defaults.py:1502-1503`),
+  not 30/90. Fixed in the agent-harness-tutorial (§6).
+- Hermes default turn limit is **unlimited** (`agent.max_turns: None`, `config_defaults.py:78`); "500" in some docs is out of
+  date. Fixed in the tutorial (§5).
+- Hermes `delegation.max_iterations` is 250 in code and the user docs; only `agent-loop.md` and a docstring say 50.
 
 ## Notes
 
