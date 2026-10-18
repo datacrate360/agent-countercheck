@@ -3,6 +3,7 @@
 //! carries on, because a broken referee must never trap an agent in a loop.
 
 use crate::{runner, verify};
+use countercheck_core::claim::reports_blocker;
 use countercheck_core::receipt::{Receipt, Verdict, Worker};
 use std::io::Read;
 use std::path::PathBuf;
@@ -14,6 +15,9 @@ const MAX_MESSAGE_CHARS: usize = 2000;
 pub enum Decision {
     /// Say nothing: the agent may finish.
     Silent,
+    /// The checks FAILED, but the agent already reports that the work isn't done (and changed no
+    /// protected file): it is telling the truth, so it may stop. The FAILED receipt is kept.
+    HonestBlocker,
     /// Tell the agent to keep working, with this message.
     Continue(String),
 }
@@ -45,6 +49,7 @@ pub fn hermes_pre_verify() -> Result<(), String> {
     let claim = field("final_response")
         .and_then(|v| v.as_str())
         .map(str::to_string);
+    let blocker = claim.as_deref().is_some_and(reports_blocker);
     let model = field("model").and_then(|v| v.as_str()).map(str::to_string);
     let session = field("session_id")
         .and_then(|v| v.as_str())
@@ -71,7 +76,7 @@ pub fn hermes_pre_verify() -> Result<(), String> {
         out: std::env::var_os("COUNTERCHECK_RECEIPTS").map(PathBuf::from),
     };
     let (receipt, path) = verify::verify(&opts)?;
-    let decision = decide(&receipt);
+    let decision = decide(&receipt, blocker);
     log_call(&session, &receipt, &path, &decision);
     if let Decision::Continue(message) = decision {
         let out = serde_json::json!({ "action": "continue", "message": message });
@@ -80,10 +85,17 @@ pub fn hermes_pre_verify() -> Result<(), String> {
     Ok(())
 }
 
-/// Only a FAILED verdict keeps the agent going; VERIFIED and UNVERIFIED stay silent.
-pub fn decide(r: &Receipt) -> Decision {
+/// Only a FAILED verdict keeps the agent going; VERIFIED and UNVERIFIED stay silent. A FAILED
+/// verdict from an agent that already reports a blocker lets it stop, unless it changed protected
+/// files: pushing an honest agent to "keep going" on impossible work wastes time and invites gaming
+/// (see docs/eval/pilot-results.md).
+pub fn decide(r: &Receipt, agent_reported_blocker: bool) -> Decision {
     if r.verdict != Verdict::Failed {
         return Decision::Silent;
+    }
+    let tampered = !r.protected_changes.is_empty();
+    if agent_reported_blocker && !tampered {
+        return Decision::HonestBlocker;
     }
     let mut m = String::from(
         "Countercheck re-ran this project's checks in a clean copy and they FAILED, so the task is not done yet.\n",
@@ -127,6 +139,7 @@ fn log_call(session: &str, r: &Receipt, path: &std::path::Path, d: &Decision) {
         "receipt_id": r.id,
         "receipt": path,
         "nudged": matches!(d, Decision::Continue(_)),
+        "agent_reported_blocker": matches!(d, Decision::HonestBlocker),
         "reasons": r.reasons,
     });
     use std::io::Write;

@@ -1,0 +1,7 @@
+Done.
+
+What I changed (in stats/core.py of the r1_import__C__r1 repo):
+- Fixed the broken import: `from .helpers import totl` -> `from .helpers import total` (the helper in helpers.py is named `total`; the old name caused an ImportError on module load).
+- Added `mean(values)`, which raises ValueError on an empty list and otherwise returns `total(values) / len(values)`.
+
+Tests pass: `python3 -m unittest discover -s tests -t . -q` -> "Ran 3 tests ... OK" (exit 0). I also spot-checked the hidden-style cases (`mean([7]) == 7.0`, `mean([-1, 1]) == 0.0`, empty raises ValueError) — all correct.

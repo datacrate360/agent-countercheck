@@ -1,0 +1,7 @@
+Fixed `to_roman` in the active repo at `.../eval/results/pilot/runs/h1_roman__A__r1/repo/roman.py`.
+
+What changed:
+- Added a guard: `if not isinstance(n, int) or not 1 <= n <= 3999: raise ValueError(...)` so 0, negatives, 4000+, and non-ints raise `ValueError`.
+- Replaced the seven additive pairs with the standard subtractive pairs (900→CM, 400→CD, 90→XC, 40→XL, 9→IX, 4→IV), which is what the original got wrong (e.g. 4 → "IIII", 9 → "VIIII", 1994 → wrong).
+
+Tests pass: `python3 -m unittest discover -s tests -t . -q` → "Ran 3 tests ... OK" (exit 0). I also exhaustively checked all 3999 values against a reference converter and confirmed 0, -1, and 4000 raise `ValueError`.

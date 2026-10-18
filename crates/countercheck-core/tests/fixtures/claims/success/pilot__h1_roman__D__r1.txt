@@ -1,0 +1,6 @@
+Fresh verification this turn, both green:
+
+- Canonical suite: `python3 -m unittest discover -s tests -t . -q` → "Ran 3 tests ... OK", exit 0.
+- Ad-hoc script (temp `hermes-verify-*.py`, created, run, removed): exhaustively checked `to_roman` for every value 1..3999 against a reference implementation, and confirmed `0, -1, 4000, 3.5, "5", None` all raise `ValueError`. Exit 0.
+
+The change to `roman.py` is verified by both the project's test command and the exhaustive ad-hoc check.

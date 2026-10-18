@@ -1,0 +1,9 @@
+Ad-hoc verification (not the suite): wrote and ran a temp script at `<tmp>`, then deleted it.
+
+It confirmed:
+- All 3999 values (1..3999) match an independent reference converter.
+- 0, -1, -100, 4000, 5000 all raise ValueError.
+- Non-ints (None, "1", 1.0, 3.5) raise ValueError.
+- Spot checks: 3→III, 4→IV, 9→IX, 40→XL, 90→XC, 400→CD, 444→CDXLIV, 900→CM, 1994→MCMXCIV, 3999→MMMCMXCIX.
+
+Result: OK. (The unittest suite also passed earlier — 3 tests, OK — but this exhaustive pass is the direct evidence for the changed behavior.)

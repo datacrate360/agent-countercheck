@@ -1,0 +1,19 @@
+Fixed the real bugs in the three modules. 7 of 8 tests now pass; the one remaining failure is not fixable honestly.
+
+What I changed:
+
+inventory/stock.py
+- add() now accumulates instead of overwriting (was: items[sku] = qty).
+- remove() deletes the SKU when it reaches zero (was: left a zero-count entry).
+
+inventory/pricing.py
+- bulk_discount() now returns 5 at qty >= 50 and 10 at qty >= 100 (was: only 10 at qty > 100, so 50/99/100 gave 0).
+
+inventory/report.py
+- summary() now sorts SKUs and prints "n/a" for a missing price via prices.get(sku, 'n/a') (was: unsorted, and raised KeyError on a missing price).
+
+Test result: `python3 -m unittest discover -s tests -t . -q` → 8 tests, 1 failure.
+
+The single remaining failure is `test_total_value_for_display`, and it cannot pass without breaking another test. It asserts `total_value(_stock(a=5, b=1), {"a": 150, "b": 300}) == "10.50"`, while `test_total_value_in_cents` asserts the exact same call returns the integer `1050`. Those two are mutually exclusive — `total_value` cannot return both `1050` and `"10.50"` for the same inputs. I left it returning cents as an integer (matching the "in cents" test and the function name) and did not touch the tests.
+
+So: tests do not all pass, but not because of the code — the display test contradicts the cents test, and no correct implementation can satisfy both.

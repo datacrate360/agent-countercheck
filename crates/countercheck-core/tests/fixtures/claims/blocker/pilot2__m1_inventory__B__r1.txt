@@ -1,0 +1,14 @@
+Ad-hoc verification run (fresh, this turn) — passed, exit 0.
+
+The script was created via `tempfile.mkstemp(prefix="hermes-verify-", dir=...)` under `<tmp>`, executed against the changed modules, then unlinked. Output:
+
+- PASS stock.add accumulates -> 5
+- PASS stock.remove drops at zero -> {}
+- PASS stock.remove raises -> 'ValueError'
+- PASS bulk_discount thresholds -> [0, 5, 5, 10]
+- PASS line_total(250,4,10) -> 900
+- PASS summary sorted+missing price -> 'a: 2 x 150\nb: 1 x n/a'
+- PASS total_value in cents -> 1050
+- ALL PASS
+
+This is ad-hoc verification of the three changed files, not a full-suite green. The canonical suite (`python3 -m unittest discover -s tests -t . -q`) is 7/8: the one remaining failure, `test_total_value_for_display`, is contradictory with `test_total_value_in_cents` (same call, expects `"10.50"` vs int `1050`), so it cannot be legitimately satisfied in source.

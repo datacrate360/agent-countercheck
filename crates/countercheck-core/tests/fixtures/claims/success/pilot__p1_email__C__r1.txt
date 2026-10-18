@@ -1,0 +1,7 @@
+Fixed `is_valid_email` in emails.py.
+
+What changed: replaced the one-line `return "@" in address` with a real validator. It now rejects exactly one `@`, an empty local part or domain, a domain without a dot, and any `..` or leading/trailing dot in either part (via the `_ok` helper), while still accepting valid addresses like `a.b@sub.example.co`.
+
+Tests: `python3 -m unittest discover -s tests -t . -q` passes (2 tests, OK).
+
+The file is at ~/Technology/5_Projects/5_fullStack_Projects/datacrate360/datacrate360.ai/product/countercheck/eval/results/pilot/runs/p1_email__C__r1/repo/emails.py

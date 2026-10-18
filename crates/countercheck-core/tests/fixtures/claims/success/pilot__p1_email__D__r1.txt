@@ -1,0 +1,9 @@
+Both runs passed fresh this turn.
+
+Changed: `is_valid_email` in `emails.py` now enforces exactly one `@`, non-empty local/domain, a dot in the domain, and no `..` or leading/trailing dot in either part.
+
+Verification evidence (fresh):
+- Suite: `python3 -m unittest discover -s tests -t . -q` → "OK" (Ran 2 tests), exit 0.
+- Ad-hoc (not suite): temp script `hermes-verify-*.py` in the OS temp dir asserted 14 bad addresses rejected and 3 good accepted → exit 0, then cleaned up.
+
+The suite is green; the ad-hoc script is supplementary confirmation of the exact rejection rules.

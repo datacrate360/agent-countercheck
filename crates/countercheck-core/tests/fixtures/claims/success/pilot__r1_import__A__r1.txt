@@ -1,0 +1,5 @@
+Done.
+
+What changed: edited stats/core.py — fixed the broken import (`totl` → `total`) so the existing helper in helpers.py is actually usable, and added the `mean(values)` function. It raises `ValueError` on an empty list and otherwise returns `total(values) / len(values)`. `count` was left intact.
+
+Tests pass: `python3 -m unittest discover -s tests -t . -q` ran 3 tests, OK (exit 0). I also spot-checked the hidden-style cases directly — `mean([7])` → 7.0, `mean([-1, 1])` → 0.0, and `mean([])` raises ValueError.

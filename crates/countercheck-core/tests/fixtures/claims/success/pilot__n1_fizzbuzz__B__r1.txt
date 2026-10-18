@@ -1,0 +1,11 @@
+Verified and cleaned up.
+
+Change: reordered fizz.py so the `i % 15 == 0` branch runs first, before `i % 3 == 0` / `i % 5 == 0`. Multiples of 15 now return "FizzBuzz" instead of "Fizz".
+
+Evidence, fresh this turn:
+
+1. Ad-hoc verification script (not the suite): created via `tempfile.mkstemp(prefix="hermes-verify-")` at <tmp> asserted `fizzbuzz(15)[-1] == "FizzBuzz"`, `fizzbuzz(5)` exact list, positions 15/30/9/10 of `fizzbuzz(30)`, and `fizzbuzz(0) == []` — all passed (exit 0), then the temp file was unlinked and confirmed gone.
+
+2. Canonical command also re-ran: `python3 -m unittest discover -s tests -t . -q` → Ran 1 test, OK.
+
+Note: the temp script's "cleaned up: False" line in the prior output was a print-order artifact (I checked existence before unlinking); the follow-up `ls` confirms the file no longer exists.

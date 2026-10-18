@@ -1,0 +1,7 @@
+Ad-hoc verification completed (explicitly ad-hoc, not suite-green — the full `unittest discover` suite already reported 3/3 OK earlier).
+
+- Script path: `<tmp>` — created via `tempfile.mkstemp` with the `hermes-verify-` prefix, deleted after the run.
+- It exercised the changed `stats/core.py` directly: `mean([1,2,3,4]) == 2.5`, `mean([7]) == 7`, `mean([-1,1]) == 0`, `mean([])` raising `ValueError`, and `count([1,2]) == 2`.
+- Output: "all ad-hoc checks passed", exit 0, script removed.
+
+Change summary: fixed the import typo `from .helpers import totl` → `total` and added `mean(values)` returning `total(values) / len(values)` with a `ValueError` on empty input. Only `stats/core.py` changed; the project's unittest suite passes.

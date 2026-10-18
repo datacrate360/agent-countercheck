@@ -1,0 +1,7 @@
+Changed `is_valid_email` in emails.py to:
+- require exactly one `@` (rejects none and multiple)
+- split into local/domain and reject either being empty
+- reject any `..` or a leading/trailing dot in either part
+- require the domain to contain a dot
+
+Tests pass: `python3 -m unittest discover -s tests -t . -q` → 2 tests, OK. I also spot-checked the hidden cases (trailing dot in local, `..`/leading/trailing dot in domain) — all 10 bad addresses reject and all 3 good ones accept.

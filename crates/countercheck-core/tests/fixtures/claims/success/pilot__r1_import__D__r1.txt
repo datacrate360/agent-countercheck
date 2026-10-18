@@ -1,0 +1,6 @@
+Fresh verification this turn:
+
+- Canonical suite (`python3 -m unittest discover -s tests -t . -q`, the command configured in `.countercheck/checks.toml`): "Ran 3 tests ... OK", exit 0.
+- Ad-hoc script (OS-safe `tempfile` path `<tmp>`, created → run → deleted): imported `mean, count, total` from the repo and asserted `mean([1,2,3,4])==2.5`, `mean([7])==7`, `mean([-1,1])==0`, `count([1,2])==2`, `total([1,2,3])==6`, and `mean([])` raises `ValueError`. Exit 0, cleaned up (`cleaned_up: True`).
+
+The `stats/core.py` change — `totl`→`total` import fix plus the new `mean` — is verified by both the project's configured check and the ad-hoc script.

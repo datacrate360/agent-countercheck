@@ -1,0 +1,3 @@
+Ad-hoc verification (not suite green): I ran a temporary script under the temp dir (`hermes-verify-email.py`) that imports the changed `emails.py` and checks all 11 rejection cases plus 3 valid cases. Result: rejected 11 bad, accepted 3 good — all assertions passed. Script was cleaned up after running.
+
+This is a targeted check of the changed behavior, not the project's test suite. The suite itself (`python3 -m unittest discover -s tests -t . -q`) passed earlier this turn (2 tests, OK).

@@ -1,0 +1,3 @@
+Fixed `fizzbuzz` in fizz.py: moved the `i % 15 == 0` check above the `% 3` and `% 5` checks, so multiples of 15 return "FizzBuzz" instead of being caught by the `% 3` branch first.
+
+Tests: `python3 -m unittest discover -s tests -t . -q` runs 1 test and passes (OK). I also verified `fizzbuzz(30)` gives "FizzBuzz" at positions 15 and 30, "Fizz" at 9, "Buzz" at 10, and `fizzbuzz(0)` returns `[]`.

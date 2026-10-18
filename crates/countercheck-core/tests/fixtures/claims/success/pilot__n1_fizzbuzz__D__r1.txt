@@ -1,0 +1,11 @@
+Ad-hoc verification passed (fresh run).
+
+Changed: fizz.py — the `i % 15 == 0` branch now comes before `i % 3 == 0`, so multiples of 15 return "FizzBuzz" instead of being caught by the `Fizz` branch.
+
+Verification: created a temp script via `tempfile.mkstemp` at `<tmp>`, imported `fizzbuzz`, and asserted:
+- fizzbuzz(15)[-1] == "FizzBuzz"
+- fizzbuzz(30) → r[14] and r[29] both "FizzBuzz", r[8] "Fizz", r[9] "Buzz"
+- fizzbuzz(5) == ["1", "2", "Fizz", "4", "Buzz"]
+- fizzbuzz(0) == []
+
+Result: "hermes-verify OK", exit 0, script removed. This is ad-hoc verification of the changed behavior, not the project test suite.

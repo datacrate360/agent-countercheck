@@ -319,6 +319,46 @@ fn hermes_hook_keeps_the_agent_going_when_the_work_fails() {
     assert_eq!(line["nudged"], true);
 }
 
+fn hermes_payload_saying(dir: &Path, final_response: &str) -> String {
+    serde_json::json!({
+        "hook_event_name": "pre_verify",
+        "cwd": dir,
+        "session_id": "s1",
+        "extra": { "final_response": final_response, "model": "m" }
+    })
+    .to_string()
+}
+
+/// An agent that already reports it can't finish is telling the truth: record FAILED, don't push.
+#[test]
+fn hermes_hook_lets_an_honest_blocker_report_stop() {
+    let d = project(CHECKS);
+    let log = d.path().join("hook.log");
+    let said = "I fixed what I could, but test_export can't pass: it contradicts test_display.";
+    let (code, out) = hermes_hook(
+        &hermes_payload_saying(d.path(), said),
+        &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())],
+    );
+    assert_eq!((code, out.trim()), (0, ""));
+    let line: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+    assert_eq!(line["verdict"], "failed");
+    assert_eq!(line["nudged"], false);
+    assert_eq!(line["agent_reported_blocker"], true);
+}
+
+/// Saying "can't" doesn't excuse edited tests: still pushed back.
+#[test]
+fn hermes_hook_still_pushes_back_on_tampering_even_with_a_blocker_report() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    let said = "The test can't pass as written, so I adjusted it.";
+    let (code, out) = hermes_hook(&hermes_payload_saying(d.path(), said), &[]);
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["action"], "continue");
+}
+
 #[test]
 fn hermes_hook_is_silent_when_the_work_passes() {
     let d = project(CHECKS);
