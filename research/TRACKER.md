@@ -40,6 +40,26 @@ Status values: `running` · `done` · `failed` · `reviewing` (I'm spot-checking
 | 18 | `synthesis/architecture.md`: proposed omni-agent architecture for the Agile lifecycle, interface contracts, license plan, build order | pending |
 | 19 | Rendered HTML report in the tutorial format (plain-words boxes + SVG diagrams) | pending |
 
+## Citation check (wave 1)
+
+`python3 research/scripts/check_citations.py <report> <clone> [--ref <tag>]` checks every `path:line` citation: the file
+exists and the line is inside it. Short names resolve when exactly one tracked file matches.
+
+| Report | Citations | Resolve to a real file and line | Left over |
+|---|---|---|---|
+| openclaw/A-runtime | 194 | 193 | 1 ambiguous short name (`run-loop.ts`, 2 files; full path given nearby) |
+| openclaw/B-tools-security | 273 | 263 | 10 ambiguous short names (`config.ts`, 57 files; full path in the same bullet) |
+| openclaw/C-memory-orchestration | 175 | 174 | 1 ambiguous short name |
+| openclaw/D-platform | 195 | 195 | 0 |
+| odysseus/A-agent-core | 264 | 264 | 0 |
+| odysseus/B-platform | 260 | 260 | 0 |
+| hermes/REPORT (@v0.22.2) | 247 | 221 | 26 ambiguous doc names (`agent-loop.md`/`architecture.md` also exist as zh-Hans translations) |
+
+Hand-checked headline values: OpenClaw exec defaults `full`/`off` (`src/infra/exec-approvals-config.ts:94-95`), dreaming
+promotion `score>=0.75, recalls>=3, uniqueQueries>=3` (`extensions/memory-core/src/dreaming-command.ts:22`), fallback
+blocked after delivery/side effect (`src/agents/embedded-agent-runner/run-entry.ts:226-237`); Odysseus
+`MAX_AGENT_ROUNDS = 20` (`src/agent_tools/__init__.py:86`); Hermes curator 14/30 days and `max_turns: None`. All match.
+
 ## Corrections the research produced
 
 - Hermes curator: skills go stale after **14** days and are archived after **30** (`hermes_cli/config_defaults.py:1502-1503`),
