@@ -95,3 +95,18 @@ in public and change direction (cost per verified task, or receipts across vendo
 2. **Permission to create the `countercheck-eval` Hermes profile** (a new folder under `~/.hermes/profiles/`, with
    its own config and the hook; the owner's profiles stay unchanged).
 3. Whether to publish the results (recommended either way: an honest public result is the best launch material).
+
+## 9. How to run (built 2026-10-18)
+
+```sh
+cargo build --release                         # countercheck binary used by the hook
+python3 eval/validate.py                      # 24/24 tasks must be valid
+python3 eval/setup_profile.py                 # creates ~/.hermes/profiles/countercheck-eval (idempotent)
+# owner: add DEEPSEEK_API_KEY=... to ~/.hermes/profiles/countercheck-eval/.env (never in chat)
+python3 eval/run.py --tasks pilot --reps 1 --budget-usd 1 --out eval/results/pilot
+python3 eval/report.py eval/results/pilot
+```
+
+Checked so far without spending: dry run of all 16 pilot runs (plumbing, judging, report); the hook fired
+through Hermes's own runner (`hermes hooks test pre_verify`) and returned `continue` with the failure in 0.23 s;
+Hermes accepted the runner's exact command line and stopped only at the missing DeepSeek key.
