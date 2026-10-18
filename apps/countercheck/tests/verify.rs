@@ -224,3 +224,109 @@ fn cache_files_are_not_reported() {
     assert_eq!(code, 0, "{r:#}");
     assert_eq!(r["protected_changes"].as_array().unwrap().len(), 0);
 }
+
+/// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
+fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
+    use std::io::Write;
+    let mut cmd = Command::new(BIN);
+    cmd.args(["hook", "hermes-pre-verify"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    if nested() {
+        cmd.env("COUNTERCHECK_SANDBOX", "none");
+    }
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    let mut child = cmd.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+fn hermes_payload(dir: &Path) -> String {
+    serde_json::json!({
+        "hook_event_name": "pre_verify",
+        "cwd": dir,
+        "session_id": "s1",
+        "extra": { "final_response": "Fixed it, all tests pass.", "changed_paths": ["tests/check.sh"], "model": "m" }
+    })
+    .to_string()
+}
+
+#[test]
+fn hermes_hook_keeps_the_agent_going_when_the_work_fails() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    let log = d.path().join("hook.log");
+    let (code, out) = hermes_hook(
+        &hermes_payload(d.path()),
+        &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())],
+    );
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["action"], "continue");
+    let msg = v["message"].as_str().unwrap();
+    assert!(
+        msg.contains("FAILED") && msg.contains("fix the code instead"),
+        "{msg}"
+    );
+    let line: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+    assert_eq!(line["verdict"], "failed");
+    assert_eq!(line["nudged"], true);
+}
+
+#[test]
+fn hermes_hook_is_silent_when_the_work_passes() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, out) = hermes_hook(&hermes_payload(d.path()), &[]);
+    assert_eq!((code, out.trim()), (0, ""));
+}
+
+#[test]
+fn hermes_hook_can_be_switched_off_and_fails_open() {
+    let d = project(CHECKS);
+    let (code, out) = hermes_hook(
+        &hermes_payload(d.path()),
+        &[("COUNTERCHECK_HOOK_DISABLED", "1")],
+    );
+    assert_eq!((code, out.trim()), (0, ""));
+    let (code, out) = hermes_hook("not json", &[]);
+    assert_eq!((code, out.trim()), (0, ""));
+}
+
+#[test]
+fn hermes_hook_uses_a_fixed_base_when_the_agent_commits() {
+    let d = project(CHECKS);
+    let base = String::from_utf8(
+        Command::new("git")
+            .args(["-C"])
+            .arg(d.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    // The agent "fixes" the test and commits it: HEAD moves, but the base must not.
+    sh(
+        d.path(),
+        "echo 'exit 0' > tests/check.sh && git commit -qam weaken",
+    );
+    let (_, out) = hermes_hook(
+        &hermes_payload(d.path()),
+        &[("COUNTERCHECK_BASE", base.trim())],
+    );
+    assert!(out.contains("\"continue\""), "{out}");
+}

@@ -9,6 +9,7 @@
 )]
 
 mod git;
+mod hook;
 mod runner;
 mod snapshot;
 mod verify;
@@ -74,6 +75,17 @@ enum Cmd {
     },
     /// Check that a saved receipt hasn't been edited, and print it.
     Show { receipt: PathBuf },
+    /// Run as an agent hook (reads the agent's hook JSON on stdin).
+    Hook {
+        #[command(subcommand)]
+        hook: HookCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum HookCmd {
+    /// Hermes `pre_verify` hook: keep Hermes working while the checks fail.
+    HermesPreVerify,
 }
 
 fn main() -> ExitCode {
@@ -111,7 +123,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             if sandbox == runner::Sandbox::Seatbelt && !runner::seatbelt_works() {
                 return Err(
                     "the macOS sandbox could not start (macOS doesn't allow a sandbox inside another \
-                     sandbox, e.g. when countercheck runs inside an countercheck check); use --sandbox none"
+                     sandbox, e.g. when countercheck runs inside a countercheck check); use --sandbox none"
                         .to_string(),
                 );
             }
@@ -152,6 +164,15 @@ fn run(cli: Cli) -> Result<u8, String> {
                 "wrote {}\nedit the check commands, then commit it: countercheck only trusts checks that are in the base revision.",
                 path.display()
             );
+            Ok(0)
+        }
+        Cmd::Hook {
+            hook: HookCmd::HermesPreVerify,
+        } => {
+            // Fail open: a broken referee must never stop the agent.
+            if let Err(e) = hook::hermes_pre_verify() {
+                eprintln!("countercheck hook: {e}");
+            }
             Ok(0)
         }
         Cmd::Show { receipt } => {
