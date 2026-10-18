@@ -34,3 +34,5 @@ Issues = "https://github.com/datacrate360/countercheck/issues"
 bindings = "bin"
 manifest-path = "apps/countercheck/Cargo.toml"
 strip = true
+# The workspace LICENSE sits outside the CLI crate; pack it so PKG-INFO's License-File exists.
+include = [{ path = "LICENSE", format = "sdist" }]

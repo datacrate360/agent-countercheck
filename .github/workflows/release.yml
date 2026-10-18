@@ -150,3 +150,5 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { pattern: "{wheel-*,sdist}", path: dist, merge-multiple: true }
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
