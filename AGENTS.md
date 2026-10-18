@@ -10,7 +10,9 @@ be more trustworthy than the agents it checks.
 - `apps/countercheck`: the `countercheck` binary: `git.rs` (git CLI wrappers), `snapshot.rs` (clean copy, restore, tree hash),
   `runner.rs` (run a check, seatbelt sandbox, timeouts), `verify.rs` (the flow), `main.rs` (CLI).
 - `apps/countercheck/tests/verify.rs`: end-to-end tests with real git repos and the real binary.
-- `research/`, `reports/`, `docs/decisions/`: research and decisions (read `docs/decisions/0001-stack.md`).
+- `eval/` + `docs/eval/`: the evaluation against Hermes Agent (tasks with hidden tests, runner, report).
+- `docs/decisions/`: design decisions (read `docs/decisions/0001-stack.md`). Market and ecosystem research is kept
+  outside this repo; keep this repo about the tool.
 
 ## Golden rules
 

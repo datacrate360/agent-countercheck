@@ -16,7 +16,7 @@ Countercheck earns its place only if it beats **Hermes's own built-in check**, n
 | `verify_on_stop` | After code edits, if there's no "fresh passing verification evidence", nudges the agent to run the tests and repair failures (max 2 attempts) | **off**: "the nudges proved more noise than signal" | `agent/verification_stop.py`, `hermes_cli/config_defaults.py:214-221` |
 | `hermes verify --json` | Build + test + start + readiness; a pass records evidence for the workspace | manual | `agent/verification_stop.py:189-193` |
 | `pre_verify` hook | Outside script runs when the agent tries to finish after code edits; `{"action":"continue","message":…}` makes it keep working (max 3 nudges per turn); Claude-Code Stop format accepted | no hook configured | `agent/shell_hooks.py:485-497`, `agent/turn_stop_gates.py` |
-| `/goal` judge | A helper model decides whether a goal is met; fails open | manual | research/agents/hermes/REPORT.md |
+| `/goal` judge | A helper model decides whether a goal is met; fails open | manual | Hermes source, read at v0.22.0 |
 
 **What the built-in check doesn't do** (what Countercheck adds), each tested below:
 

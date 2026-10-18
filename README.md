@@ -73,17 +73,19 @@ locked in the base revision, or none ran) · `1` error · `4` (`countercheck sho
 ## Status
 
 Early (v0.1, macOS first). Not yet: signed receipts (Ed25519), cost read from agent logs, read-back checks against real
-systems (databases, CRMs, web pages), a receipts UI, and Linux/Windows sandboxes. See `docs/decisions/` and `research/`.
+systems (databases, CRMs, web pages), a receipts UI, and Linux/Windows sandboxes. See `docs/decisions/`.
 
 ## Build
 
-Rust 1.90+: `cargo build --release` → `target/release/Countercheck`. Gate: `cargo fmt --check`, `cargo clippy --workspace
+Rust 1.90+: `cargo build --release` → `target/release/countercheck`. Gate: `cargo fmt --check`, `cargo clippy --workspace
 --all-targets -- -D warnings`, `cargo test`. Countercheck also verifies itself: `countercheck verify` (checks in `.countercheck/checks.toml`).
 
 ## Repository
 
 - `crates/countercheck-core`: pure logic (check file, protected paths, receipts, verdicts)
 - `apps/countercheck`: the CLI (git, clean copy, sandbox, runner)
-- `research/`: the research behind the project · `reports/`: rendered reports · `docs/decisions/`: decisions
+- `eval/`, `docs/eval/`: the evaluation against Hermes Agent (tasks with hidden tests)
+- `packaging/`, `install.sh`, `pyproject.toml`: release packaging (Homebrew, install script, Python wheels)
+- `docs/decisions/`: design decisions
 
 MIT licensed.
