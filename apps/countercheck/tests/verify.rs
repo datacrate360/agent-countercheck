@@ -163,6 +163,39 @@ fn seatbelt_blocks_writes_outside_the_check_folder() {
     assert!(target.exists());
 }
 
+/// Web tests run a local server and a browser over localhost: the sandbox must allow that, or
+/// honest work is reported as FAILED. The internet stays blocked.
+#[cfg(target_os = "macos")]
+#[test]
+fn seatbelt_allows_localhost_but_not_the_internet() {
+    if nested() {
+        return; // covered by the outer run; macOS can't nest sandboxes
+    }
+    let checks = "[[check]]\nname = \"loopback\"\nrun = \"python3 tests/loopback.py\"\n\
+                  [[check]]\nname = \"internet\"\nrun = \"python3 tests/internet.py\"\n";
+    let d = project(checks);
+    fs::write(
+        d.path().join("tests/loopback.py"),
+        "import socket\ns = socket.socket()\ns.bind(('127.0.0.1', 0))\ns.listen(1)\n\
+         c = socket.create_connection(s.getsockname(), timeout=5)\na, _ = s.accept()\n\
+         c.sendall(b'hi')\nassert a.recv(2) == b'hi'\n",
+    )
+    .unwrap();
+    // Exits 0 only when the sandbox itself refuses (EPERM), not when the network is just down.
+    fs::write(
+        d.path().join("tests/internet.py"),
+        "import socket, sys\ntry:\n    socket.create_connection(('1.1.1.1', 443), timeout=5)\n\
+         except PermissionError:\n    sys.exit(0)\nexcept OSError:\n    sys.exit(3)\nsys.exit(1)\n",
+    )
+    .unwrap();
+    sh(d.path(), "git add -A && git commit -qm probes");
+    let (code, json) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{json}");
+    // Outside the sandbox the internet probe can't succeed (it needs EPERM): proves it really tests the sandbox.
+    let (code, _) = countercheck(d.path(), &["--sandbox", "none"]);
+    assert_eq!(code, 2);
+}
+
 #[test]
 fn edited_receipts_are_detected() {
     let d = project(CHECKS);

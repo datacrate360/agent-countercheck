@@ -21,7 +21,9 @@ impl Sandbox {
     pub fn label(self) -> &'static str {
         match self {
             Sandbox::None => "none",
-            Sandbox::Seatbelt => "macos-seatbelt (no network, writes only in the check folder)",
+            Sandbox::Seatbelt => {
+                "macos-seatbelt (no internet, localhost only; writes only in the check folder)"
+            }
         }
     }
 }
@@ -48,7 +50,15 @@ fn sb_str(p: &Path) -> String {
 
 fn seatbelt_profile(workdir: &Path, tmp: &Path) -> String {
     format!(
-        "(version 1)\n(allow default)\n(deny network*)\n(deny file-write*)\n\
+        // Network: the internet is blocked, this machine's loopback is allowed. Web tests start a
+        // local server and a browser that talk over localhost (Playwright, Cypress, pytest-httpserver);
+        // blocking that turned honest work into a false FAILED.
+        "(version 1)\n(allow default)\n(deny network*)\n\
+         (allow network-bind (local ip \"localhost:*\"))\n\
+         (allow network-inbound (local ip \"localhost:*\"))\n\
+         (allow network-outbound (remote ip \"localhost:*\"))\n\
+         (allow network* (local unix-socket) (remote unix-socket))\n\
+         (deny file-write*)\n\
          (allow file-write* (subpath \"{}\") (subpath \"{}\") (literal \"/dev/null\") \
          (regex #\"^/dev/tty\") (regex #\"^/dev/fd/\"))\n",
         sb_str(workdir),
