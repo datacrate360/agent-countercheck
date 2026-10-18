@@ -101,4 +101,5 @@ differ in what they're for and what they trust.
 - **Evidence-gated "done" across a whole work item** (not just one turn): an independent checker whose verdict is
   the only path to "passing".
 - **Safe defaults for a team**: Hermes and OpenClaw both run commands on the host by default.
-- **Domain depth for data work**: no warehouse, dbt, Airflow or data-contract awareness in any of them.
+- **A team of specialised roles with one shared definition of done**: each project has *one* kind of agent (a coder, an
+  assistant, a pentester); none splits planning, building, checking and remembering into separate accountable roles.

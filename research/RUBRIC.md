@@ -30,7 +30,7 @@ Every section starts with **"In plain words"**: 2 to 4 sentences anyone can foll
 | D15 | Deployment and operations, telemetry |
 | D16 | Practices the project uses on its own repo (AGENTS.md etc.) |
 | D17 | Distinctive ideas, weaknesses, risks |
-| D18 | Relevance to a data engineer |
+| D18 | Relevance to omni-agent |
 
 ## B. Building-block tools (claude-mem, graphify, MiroFish, OpenUI, Paperclip, Strix, MarkItDown, REA, watermarks-remover): 14 dimensions
 

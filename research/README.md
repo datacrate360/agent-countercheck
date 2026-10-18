@@ -7,7 +7,9 @@ Source-level research behind omni-agent: one platform that runs an Agile workflo
 - **[RUBRIC.md](RUBRIC.md)**: the questions every report answers, and the citation rules
 - `agents/`: the three full agents (Hermes Agent, OpenClaw, Odysseus)
 - `tools/`: the nine building blocks (claude-mem, graphify, MiroFish, OpenUI, Paperclip, Strix, REA, MarkItDown, watermarks-remover)
-- `synthesis/`: comparison, capability map, proposed architecture (written once every report is in)
+- `synthesis/`: agent comparison, capability map, the nine agent roles, proposed architecture and build order
+
+omni-agent is a standalone, general-purpose project; the research and plans are not tied to any other product.
 
 ## Rules
 

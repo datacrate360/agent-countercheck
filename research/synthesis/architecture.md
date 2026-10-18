@@ -52,8 +52,7 @@ plugged in through one contract.
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-Stack [Inference]: Python 3.12 + FastAPI + Postgres for the work layer and services (the owner's strongest stack, and
-DataCrate360's), React + OpenUI for generated views, SQLite allowed for single-user mode. Engines talk over HTTP/MCP,
+Stack [Inference]: Python 3.12 + FastAPI + Postgres for the work layer and services (the owner's strongest stack), React + OpenUI for generated views, SQLite allowed for single-user mode. Engines talk over HTTP/MCP,
 so the engine's language doesn't matter.
 
 ## 4. Contracts (the parts that must not change often)
@@ -75,7 +74,7 @@ Proposed by the analysts in each report's T13; harmonised here.
 
 ## 5. Build order
 
-Each phase ends with something the owner uses on his own work (DataCrate360 is the first customer). Estimates are
+Each phase ends with something usable on real projects; omni-agent's own repo is the first project it runs (dogfooding). Estimates are
 full-time weeks (FTW); multiply by about 2.5 for part-time [Inference].
 
 | Phase | Goal | Contents | FTW |
@@ -111,19 +110,18 @@ Here is why, in order of importance.
 4. **Out-featuring them is a losing game; out-*focusing* them is not.** OpenClaw has a foundation and ~10
    releases a month; Hermes has Nous Research behind it. But **none of the 12 does verified Agile delivery**: no
    sprints, estimates, WIP limits or evidence-gated "done" (Paperclip comes closest and has none of the Agile
-   pieces; agents-compared §6). And none knows data work (warehouses, dbt, Airflow, data contracts). That
-   intersection, *agents that ship verified increments for data teams*, is empty, and it matches your background,
-   your DataCrate360 labs and your users.
+   pieces; agents-compared §6). *An AI team that ships verified work* is an empty category; see
+   `agent-roles.md` for the agents it needs.
 5. **Interoperate with the giants instead of fighting them.** Treat Claude Code, Codex, Hermes and OpenClaw as
    engines behind one adapter contract (Paperclip already proves this works with 16 adapters). Their progress then
    becomes your progress.
 6. **Constraints are real; plan for them.** Solo, a full-time job, a PhD from September 2026, and no revenue yet
-   because of visa timing. That argues for an open-source-first, part-time plan with a small MVP that you use daily on
-   DataCrate360 itself. The schedule above assumes that.
+   because of visa timing. That argues for an open-source-first, part-time plan with a small MVP that builds
+   omni-agent itself. The schedule above assumes that.
 7. **The main risks:** upstream churn breaking adapters (pin versions, contract tests); model cost (budgets with hard
    stops from day one); security liability, because agents run code on people's repos (safe defaults are part of the
    product); legal exposure (no watermark removal, REA only static and clean-room, no AGPL code).
 
-**What success looks like in six months [Inference]:** DataCrate360's own backlog runs on omni-agent. Every merged
-change passed an independent check. Cycle time and "done with evidence" rate are measured. One outside data team
+**What success looks like in six months [Inference]:** omni-agent's own backlog runs on omni-agent. Every merged
+change passed an independent check. Cycle time and "done with evidence" rate are measured. A first outside team
 uses it. That is a far stronger position than a feature list, and it's reachable.
