@@ -1,0 +1,17 @@
+# omni-agent verifies itself with the same tool it ships.
+protected = ["apps/omni/tests/**", "clippy.toml"]
+
+[[check]]
+name = "format"
+run = "cargo fmt --all --check"
+timeout_secs = 120
+
+[[check]]
+name = "lint"
+run = "cargo clippy --offline --workspace --all-targets -q -- -D warnings"
+timeout_secs = 900
+
+[[check]]
+name = "tests"
+run = "cargo test --offline --workspace -q"
+timeout_secs = 900
