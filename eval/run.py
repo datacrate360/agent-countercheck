@@ -154,7 +154,8 @@ def main() -> int:
     plan = [(BY_ID[t], arm, rep) for rep in range(1, a.reps + 1) for t in tasks for arm in arms]
     random.Random(a.seed).shuffle(plan)  # spread arms over time so rate limits or model drift hit all equally
 
-    out = Path(a.out or f"eval/results/{time.strftime('%Y%m%d-%H%M%S')}{'-dry' if a.dry_run else ''}")
+    # Absolute: Hermes and the hook run inside each task repo, so a relative path would land there.
+    out = Path(a.out or f"eval/results/{time.strftime('%Y%m%d-%H%M%S')}{'-dry' if a.dry_run else ''}").resolve()
     out.mkdir(parents=True, exist_ok=True)
     results = out / "results.jsonl"
     done = set()
@@ -176,6 +177,10 @@ def main() -> int:
             print(f"budget reached: ${spent:.4f} spent; next run would exceed ${a.budget_usd}. Stopping.")
             break
         r = one_run(task, arm, rep, a, out)
+        if r["cost_usd"] is None and not a.dry_run:
+            print(f"no cost recorded for {task.id} {arm} r{rep} (usage file missing?); stopping so the budget "
+                  "cap can't be bypassed. This run was not saved.")
+            return 1
         cost = r["cost_usd"] or 0.0
         costs.append(cost)
         spent += cost
