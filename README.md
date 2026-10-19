@@ -16,7 +16,7 @@ passes, or never run it. `countercheck verify` checks the claim itself:
 $ countercheck verify --claim "Fixed the discount bug. All tests pass." --agent claude-code --cost-usd 0.42
 countercheck receipt 9073a384e88f9d37  FAILED
   claim:    "Fixed the discount bug. All tests pass." -> CONTRADICTED by evidence
-  checks:   .countercheck/checks.toml @ HEAD (locked), sandbox: macos-seatbelt (no network, writes only in the check folder)
+  checks:   .countercheck/checks.toml @ HEAD (locked), sandbox: macos-seatbelt (no internet, localhost only; writes only in the check folder)
   protected Modified: tests/test_pricing.py -> restored_from_base
   [FAIL] unit tests  (65 ms)  $ python3 -m unittest -q
          |     self.assertEqual(apply_discount(10, 150), 0)
