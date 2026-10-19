@@ -349,4 +349,45 @@ mod tests {
         edited.verdict = Verdict::Verified;
         assert!(!edited.seal_is_valid());
     }
+
+    #[test]
+    fn seal_survives_reading_the_receipt_back() {
+        // Costs with many digits once read back one bit off, so `show` called a fresh receipt BROKEN.
+        for cost in [0.000_108_000_000_000_000_01, 5.669_748_844_129_758e178, 0.1 + 0.2] {
+            let w = Worker {
+                cost_usd: Some(cost),
+                ..Worker::default()
+            };
+            let r = Receipt {
+                schema: SCHEMA.into(),
+                id: String::new(),
+                receipt_sha256: String::new(),
+                created_at: String::new(),
+                countercheck_version: String::new(),
+                repo: RepoInfo {
+                    base_rev: String::new(),
+                    base_commit: String::new(),
+                    head_commit: String::new(),
+                    dirty: false,
+                },
+                worker: w,
+                claim: None,
+                claim_status: ClaimStatus::NoClaim,
+                checks_locked: false,
+                checks_source: String::new(),
+                sandbox: String::new(),
+                tree_sha256: String::new(),
+                linked: vec![],
+                protected_changes: vec![],
+                checks: vec![],
+                verdict: Verdict::Unverified,
+                reasons: vec![],
+            }
+            .seal()
+            .unwrap();
+            let back: Receipt =
+                serde_json::from_str(&serde_json::to_string_pretty(&r).unwrap()).unwrap();
+            assert!(back.seal_is_valid(), "cost {cost}");
+        }
+    }
 }
