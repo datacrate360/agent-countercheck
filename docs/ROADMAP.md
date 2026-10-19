@@ -19,12 +19,13 @@ section. Ideas and use cases are welcome as issues.
 
 ## In progress
 
-- **Benchmark vs Hermes `verify_on_stop`** (`eval/`, plan in `docs/eval/hermes-eval-plan.md`): 29 tasks × 4 setups ×
-  3 repeats on DeepSeek V4 Pro and GPT 6.1. Pilot results: `docs/eval/pilot-results.md`.
+- **Benchmark results** published: `docs/eval/results-2026-10.md` (GPT 6.1: false "done" 7 → 3, impossible-task
+  cheats 6 → 0; DeepSeek: no difference). Next: sandbox the agent during evals, Claude models.
 
 ## Next
 
-1. **Publish the benchmark**: method, per-model results, every impossible-task answer, known blind spots.
+1. **UNVERIFIED, not FAILED,** when a check fails only because the sandbox blocked the network (the benchmark's only
+   false alarms), plus a per-check network allow-list.
 2. **Test with real users**: Claude Code users, and a data team converting PL/SQL packages to Snowflake with
    Cortex Code (same hook format; confirm it on a real Cortex Code install).
 3. **Benchmark on more models**: Claude Opus / Sonnet on the trap and impossible tasks.
