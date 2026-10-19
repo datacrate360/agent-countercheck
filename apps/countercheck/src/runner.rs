@@ -212,7 +212,7 @@ fn not_started(spec: &PlannedCheck, why: String) -> CheckResult {
 
 /// Kill the check and everything it started.
 #[cfg(unix)]
-fn kill_tree(child: &mut std::process::Child, _tree: ()) {
+fn kill_tree(child: &mut std::process::Child) {
     // Kill the whole process group so test runners' children die too. The child leads its
     // own group, so the group id is its pid. Spelled `-s KILL -- -<pgid>`: procps-ng 4's
     // `kill -KILL -<pgid>` misreads the group (e.g. -1234 as -1, which kills every process).
@@ -241,10 +241,6 @@ fn watch_tree(child: &std::process::Child) -> Option<win32job::Job> {
     job.assign_process(child.as_raw_handle() as isize).ok()?;
     Some(job)
 }
-
-/// Unix: the check leads its own process group (set before it starts).
-#[cfg(unix)]
-fn watch_tree(_child: &std::process::Child) {}
 
 /// Kill the check and everything it started: close its Job Object, and `taskkill /T` in case a
 /// process got out before the check was put in the job.
@@ -314,18 +310,24 @@ pub fn run_check(
         }
         Err(e) => return Err(format!("check \"{}\": {e}", spec.name)),
     };
-    let tree = watch_tree(&child);
+    // Unix: the check leads its own process group (set before it started).
+    #[cfg(windows)]
+    let job = watch_tree(&child);
     let status = child
         .wait_timeout(Duration::from_secs(spec.timeout_secs))
         .map_err(|e| e.to_string())?;
     let (exit_code, timed_out) = match status {
         Some(s) => {
             // Windows: closing the job also stops what the check left running in the background.
-            drop(tree);
+            #[cfg(windows)]
+            drop(job);
             (s.code(), false)
         }
         None => {
-            kill_tree(&mut child, tree);
+            #[cfg(windows)]
+            kill_tree(&mut child, job);
+            #[cfg(unix)]
+            kill_tree(&mut child);
             let _ = child.wait();
             (None, true)
         }
