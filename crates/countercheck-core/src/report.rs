@@ -83,7 +83,7 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
         "{HEAD_START}<meta http-equiv=\"Content-Security-Policy\" content=\"{csp}\">"
     );
     let _ = write!(h, "<title>{}</title>", escape(title));
-    h.push_str(STYLE);
+    let _ = write!(h, "<style>{STYLE}</style>");
     h.push_str("</head><body><main>");
     let _ = write!(
         h,
@@ -139,20 +139,7 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
 
 /// Poll `/state` every 2 s (same token as the page); reload when it changes, remembering which runs
 /// were open. Uses only the page's own server.
-const LIVE_JS: &str = "(function(){\
-var t=new URLSearchParams(location.search).get('t')||'',k='countercheck-open',last=null,\
-live=document.getElementById('live');\
-try{var o=JSON.parse(sessionStorage.getItem(k)||'null');if(o){document.querySelectorAll('details.run')\
-.forEach(function(d){d.open=o.indexOf(d.id)>=0;});}}catch(e){}\
-function save(){try{sessionStorage.setItem(k,JSON.stringify(Array.prototype.map.call(\
-document.querySelectorAll('details.run[open]'),function(d){return d.id;})));}catch(e){}}\
-document.addEventListener('toggle',save,true);\
-function poll(){fetch('/state?t='+encodeURIComponent(t),{cache:'no-store'})\
-.then(function(r){if(!r.ok)throw 0;return r.text();})\
-.then(function(s){if(last!==null&&s!==last){save();location.reload();return;}last=s;\
-live.textContent='live, checked '+new Date().toLocaleTimeString();setTimeout(poll,2000);})\
-.catch(function(){live.textContent='disconnected: is countercheck ui still running?';setTimeout(poll,5000);});}\
-poll();})();";
+const LIVE_JS: &str = include_str!("../assets/live.js");
 
 /// `reconcile [schema=CA1]` → (`reconcile`, `schema`, `CA1`).
 fn matrix_parts(name: &str) -> Option<(&str, &str, &str)> {
@@ -371,38 +358,8 @@ const HEAD_START: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
 <meta name=\"referrer\" content=\"no-referrer\">";
 
-const STYLE: &str = "<style>\
-:root{--teal:#0F766E;--coral:#C2410C;--green:#047857;--ink:#0F172A;--muted:#64748B;--line:#E2E8F0;--soft:#F8FAFC}\
-*{box-sizing:border-box}\
-body{margin:0;background:var(--soft);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}\
-main{max-width:1100px;margin:0 auto;padding:24px}\
-h1{margin:0;font-size:22px;color:var(--teal)}h2{font-size:16px;margin:28px 0 8px}\
-.muted{color:var(--muted)}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}\
-pre{background:#0F172A;color:#E2E8F0;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:4px 0}\
-.totals{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}\
-.totals div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}\
-.totals b{display:block;font-size:22px}.totals span{color:var(--muted)}\
-.t-verified b{color:var(--green)}.t-failed b{color:var(--coral)}.t-unverified b{color:var(--muted)}\
-.run{background:#fff;border:1px solid var(--line);border-radius:10px;margin:8px 0}\
-.run summary{cursor:pointer;padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}\
-.badge{font-weight:700;font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid}\
-.badge.verified{color:var(--green);border-color:var(--green);background:#ECFDF5}\
-.badge.failed{color:var(--coral);border-color:var(--coral);background:#FFF7ED}\
-.badge.unverified{color:var(--muted);border-color:var(--muted);background:var(--soft)}\
-.when,.nowrap{font-variant-numeric:tabular-nums;white-space:nowrap}.who,.count{color:var(--muted)}\
-.claim{flex-basis:100%;color:var(--muted);font-style:italic}\
-.seal{font-size:12px}.seal.ok{color:var(--green)}.seal.bad{color:#fff;background:var(--coral);padding:1px 6px;border-radius:4px;font-weight:700}\
-.body{padding:0 14px 14px;border-top:1px solid var(--line)}\
-blockquote{margin:0;padding:6px 12px;border-left:3px solid var(--teal);background:var(--soft)}\
-table{border-collapse:collapse;width:100%;margin:10px 0}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}\
-th{color:var(--muted);font-weight:600}\
-td.ok{color:var(--green);font-weight:700}td.bad{color:var(--coral);font-weight:700}\
-.grid{width:auto;background:#fff}.grid td.ok{background:#ECFDF5}.grid td.bad{background:#FFF7ED}\
-.scroll{overflow:auto;max-height:480px;border:1px solid var(--line);border-radius:10px}\
-.facts{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px;color:var(--muted);margin-top:10px}\
-.facts dd{margin:0}.reasons{margin:10px 0}\
-footer{margin:32px 0 8px;font-size:12px}\
-</style>";
+/// Styles for the report and the live UI: `assets/report.css`, compiled into the binary.
+const STYLE: &str = include_str!("../assets/report.css");
 
 #[cfg(test)]
 mod tests {
@@ -570,6 +527,23 @@ mod tests {
         assert!(html.contains("connect-src 'self'"));
         assert!(html.contains("id=\"live\""));
         assert!(!render_html(&e, "r", "now").contains("<script"));
+    }
+
+    #[test]
+    fn assets_are_embedded_and_safe() {
+        assert!(STYLE.contains("--teal"));
+        assert!(LIVE_JS.contains("/state?t="));
+        assert!(!LIVE_JS.to_lowercase().contains("</script"));
+        assert!(!STYLE.to_lowercase().contains("</style"));
+        for s in [STYLE, LIVE_JS] {
+            assert!(
+                !s.contains("http://") && !s.contains("https://"),
+                "no outside resources"
+            );
+        }
+        let html = render_live(&[], "r", "now", "n1");
+        assert!(html.contains("location.reload()"));
+        assert!(html.contains("<style>:root") || html.contains("<style>/*"));
     }
 
     #[test]
