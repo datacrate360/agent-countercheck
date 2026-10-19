@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>How Countercheck works</title>
+  <desc>Three inputs (the base revision with the locked checks and protected tests, the agent's working tree, and the agent's claim) go into Countercheck, which locks the checks, makes a clean copy with protected files put back, runs the checks in a sandbox, and writes a sealed receipt. The verdict is VERIFIED (the agent may finish), FAILED (the agent is sent back with the failing check), or an honest blocker (the agent may stop; the FAILED receipt is kept).</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowCoral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="560" rx="16" fill="#FFFFFF"/>
+
+  <!-- Column titles -->
+  <text x="150" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">WHAT IT READS</text>
+  <text x="480" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">WHAT IT DOES</text>
+  <text x="815" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">WHAT HAPPENS NEXT</text>
+
+  <!-- Inputs -->
+  <g>
+    <rect x="20" y="56" width="260" height="104" rx="12" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.5"/>
+    <text x="36" y="82" font-size="15" font-weight="700" fill="#0F172A">Base revision (before the agent)</text>
+    <text x="36" y="106" font-size="13" fill="#334155">.countercheck/checks.toml</text>
+    <text x="36" y="126" font-size="13" fill="#334155">protected files (your tests)</text>
+    <text x="36" y="148" font-size="12" font-weight="700" fill="#0F766E">locked: the agent can't change these</text>
+  </g>
+  <g>
+    <rect x="20" y="180" width="260" height="90" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="36" y="206" font-size="15" font-weight="700" fill="#0F172A">The agent's work</text>
+    <text x="36" y="230" font-size="13" fill="#334155">its files now, committed or not</text>
+    <text x="36" y="250" font-size="13" fill="#334155">(may include edited tests)</text>
+  </g>
+  <g>
+    <rect x="20" y="290" width="260" height="70" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="36" y="316" font-size="15" font-weight="700" fill="#0F172A">The agent's claim</text>
+    <text x="36" y="340" font-size="13" font-style="italic" fill="#334155">"Done, all tests pass."</text>
+  </g>
+
+  <!-- arrows into Countercheck -->
+  <line x1="280" y1="108" x2="328" y2="140" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="280" y1="225" x2="328" y2="225" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="280" y1="325" x2="328" y2="300" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Countercheck -->
+  <rect x="330" y="56" width="300" height="350" rx="14" fill="#0F766E"/>
+  <text x="480" y="84" text-anchor="middle" font-size="17" font-weight="700" fill="#FFFFFF">countercheck verify</text>
+  <g font-size="13" fill="#0F172A">
+    <rect x="346" y="98" width="268" height="66" rx="10" fill="#FFFFFF"/>
+    <text x="360" y="120" font-weight="700">1  Lock the checks</text>
+    <text x="360" y="140" fill="#334155">read checks + protected files from</text>
+    <text x="360" y="156" fill="#334155">the base revision, not the agent's copy</text>
+
+    <rect x="346" y="172" width="268" height="66" rx="10" fill="#FFFFFF"/>
+    <text x="360" y="194" font-weight="700">2  Clean copy</text>
+    <text x="360" y="214" fill="#334155">copy the agent's files to a new folder;</text>
+    <text x="360" y="230" fill="#334155">put any edited protected file back</text>
+
+    <rect x="346" y="246" width="268" height="66" rx="10" fill="#FFFFFF"/>
+    <text x="360" y="268" font-weight="700">3  Run in a sandbox</text>
+    <text x="360" y="288" fill="#334155">no internet, writes only in the copy</text>
+    <text x="360" y="304" fill="#334155">(macOS; network = true to opt in)</text>
+
+    <rect x="346" y="320" width="268" height="72" rx="10" fill="#FFFFFF"/>
+    <text x="360" y="342" font-weight="700">4  Decide and seal</text>
+    <text x="360" y="362" fill="#334155">verdict + a receipt sealed with SHA-256</text>
+    <text x="360" y="380" fill="#334155">(any later edit is detectable)</text>
+  </g>
+
+  <!-- Outcomes -->
+  <line x1="630" y1="150" x2="688" y2="98" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="630" y1="230" x2="688" y2="210" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="630" y1="330" x2="688" y2="335" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="690" y="56" width="250" height="82" rx="12" fill="#ECFDF5" stroke="#059669" stroke-width="1.5"/>
+    <text x="706" y="84" font-size="15" font-weight="700" fill="#047857">VERIFIED</text>
+    <text x="706" y="106" font-size="13" fill="#334155">every check passed with the</text>
+    <text x="706" y="124" font-size="13" fill="#334155">original tests: the agent may finish</text>
+  </g>
+  <g>
+    <rect x="690" y="156" width="250" height="110" rx="12" fill="#FFF7ED" stroke="#C2410C" stroke-width="1.5"/>
+    <text x="706" y="184" font-size="15" font-weight="700" fill="#C2410C">FAILED + claims success</text>
+    <text x="706" y="206" font-size="13" fill="#334155">the hook blocks "done" and sends</text>
+    <text x="706" y="224" font-size="13" fill="#334155">back the failing check's output</text>
+    <text x="706" y="250" font-size="12" font-weight="700" fill="#C2410C">→ the agent keeps working (max 3×)</text>
+  </g>
+  <g>
+    <rect x="690" y="284" width="250" height="100" rx="12" fill="#F8FAFC" stroke="#64748B" stroke-width="1.5"/>
+    <text x="706" y="312" font-size="15" font-weight="700" fill="#334155">FAILED + honest blocker</text>
+    <text x="706" y="334" font-size="13" fill="#334155">"this can't pass, because …"</text>
+    <text x="706" y="352" font-size="13" fill="#334155">and no protected file changed:</text>
+    <text x="706" y="370" font-size="13" fill="#334155">it may stop; the receipt says FAILED</text>
+  </g>
+
+  <!-- loop back from FAILED to the agent's work -->
+  <path d="M940,211 H951 V452 H9 V225 H18" fill="none" stroke="#C2410C" stroke-width="1.8" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#arrowCoral)"/>
+  <text x="24" y="443" font-size="13" font-weight="700" fill="#C2410C">↺ the agent fixes the code (not the tests) and says "done" again</text>
+
+  <!-- Receipt -->
+  <rect x="330" y="478" width="300" height="62" rx="12" fill="#F8FAFC" stroke="#0F766E" stroke-width="1.5"/>
+  <text x="480" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Receipt (every run)</text>
+  <text x="480" y="525" text-anchor="middle" font-size="12.5" fill="#334155">.countercheck/receipts/&lt;id&gt;.json · countercheck show</text>
+  <line x1="480" y1="406" x2="480" y2="474" stroke="#0F766E" stroke-width="1.6" marker-end="url(#arrow)"/>
+</svg>

@@ -28,6 +28,28 @@ countercheck receipt 9073a384e88f9d37  FAILED
 
 (The agent's own run said `OK (skipped=1)`: it had marked the failing test as skipped.)
 
+## How it works
+
+![How Countercheck works: it reads the locked checks from the base revision, the agent's work and its claim; locks the checks, makes a clean copy with protected files put back, runs the checks in a sandbox, and seals a receipt; then the agent may finish (VERIFIED), is sent back with the failing check (FAILED), or may stop after honestly reporting a blocker.](docs/img/how-it-works.svg)
+
+The mental model: **the agent never grades itself.** Its claim is compared with what actually runs, on rules it
+couldn't change:
+
+```text
+base revision (locked)        agent's work + claim
+  checks.toml, your tests          files, "Done, all tests pass."
+          \                           /
+           +--> countercheck verify <+
+                1 lock the checks     (from the base revision)
+                2 clean copy          (edited tests put back)
+                3 run in a sandbox    (no internet unless a check opts in)
+                4 decide + seal       (receipt with a SHA-256 seal)
+                        |
+      VERIFIED -> agent may finish
+      FAILED + "done" -> hook sends the failure back; agent fixes the code (max 3 rounds)
+      FAILED + honest "can't, because ..." -> agent may stop; receipt still says FAILED
+```
+
 ## Does it work?
 
 We gave [Hermes Agent](https://github.com/NousResearch/hermes-agent) 29 small coding tasks, 3 times each, in four
