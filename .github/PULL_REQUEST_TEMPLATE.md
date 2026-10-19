@@ -1,3 +1,5 @@
+<!-- Base branch: DEV (GitHub suggests PROD, the release branch; please switch it). -->
+
 ## What and why
 
 <!-- What changes, and the problem it solves. Link the issue if there is one. -->

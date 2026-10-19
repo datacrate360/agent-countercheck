@@ -35,7 +35,7 @@ OK to install an open-source tool (MIT licence) if it asks for one.
 ```sh
 pip install countercheck
 mkdir -p .countercheck/inventory
-R=https://raw.githubusercontent.com/datacrate360/countercheck/DEV/recipes/oracle-to-snowflake
+R=https://raw.githubusercontent.com/datacrate360/countercheck/PROD/recipes/oracle-to-snowflake
 ```
 
 `R` is just a shortcut for the recipe's address in the next steps (PowerShell: `$R = "https://…"`, same address).
