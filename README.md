@@ -44,6 +44,8 @@ script checks every download against `SHA256SUMS.txt` before installing. Windows
 On Linux there is no sandbox yet: checks run as a normal process and the receipt says so; run Countercheck inside
 a container with networking off when you need isolation.
 
+What's shipped, in progress and next: [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Quick start
 
 ```sh
