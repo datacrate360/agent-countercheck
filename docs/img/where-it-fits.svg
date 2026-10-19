@@ -51,7 +51,7 @@
     <text x="368" y="164"><tspan font-weight="700">2</tspan>  clean copy, edited tests put back</text>
     <text x="368" y="190"><tspan font-weight="700">3</tspan>  run in a sandbox</text>
     <text x="368" y="216"><tspan font-weight="700">4</tspan>  verdict + sealed receipt</text>
-    <text x="368" y="236" font-size="11" fill="#64748B">macOS sandbox; Linux runs without one</text>
+    <text x="368" y="236" font-size="11" fill="#64748B">sandbox on macOS; Linux, Windows: next</text>
   </g>
   <text x="480" y="272" text-anchor="middle" font-size="12" font-weight="700" fill="#CCFBF1" letter-spacing="0.5">CHECK TYPES (checks.toml)</text>
   <g font-size="12.5" font-weight="700" text-anchor="middle">

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="444" viewBox="0 0 960 444" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>The agent works freely; Countercheck grades strictly</title>
+  <desc>Step 1: the agent works in its own harness with full capability (web search, docs, tools, internet if allowed). Step 2: when it says done, Countercheck reads the checks from the base revision, makes a clean copy with edited tests put back, runs every check again with no internet (sandbox on macOS) and seals a receipt. Then VERIFIED lets the agent finish, or FAILED sends the failing output back and the agent keeps working.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowCoral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/>
+    </marker>
+  </defs>
+  <rect width="960" height="444" rx="16" fill="#FFFFFF"/>
+  <text letter-spacing="1" x="185" y="38" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">WHILE IT WORKS</text>
+  <text letter-spacing="1" x="530" y="38" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">WHEN IT SAYS DONE</text>
+  <text letter-spacing="1" x="825" y="38" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">THEN</text>
+  <rect x="20" y="56" width="330" height="236" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="36" y="84" font-size="16" fill="#0F172A" font-weight="700">1  The agent works</text>
+  <text x="36" y="106" font-size="13" fill="#334155">in its own harness: Claude Code, Hermes,</text>
+  <text x="36" y="124" font-size="13" fill="#334155">Cortex Code, Cursor, your scripts…</text>
+  <text x="40" y="156" font-size="14" fill="#0F766E" font-weight="700">✓</text>
+  <text x="60" y="156" font-size="13" fill="#334155">web search, docs, any tool it may use</text>
+  <text x="40" y="180" font-size="14" fill="#0F766E" font-weight="700">✓</text>
+  <text x="60" y="180" font-size="13" fill="#334155">reads, edits and runs code, retries</text>
+  <text x="40" y="204" font-size="14" fill="#0F766E" font-weight="700">✓</text>
+  <text x="60" y="204" font-size="13" fill="#334155">the internet, if the harness allows it</text>
+  <text x="40" y="228" font-size="14" fill="#0F766E" font-weight="700">✓</text>
+  <text x="60" y="228" font-size="13" fill="#334155">as long as it needs</text>
+  <text x="36" y="270" font-size="12" fill="#64748B" font-weight="700">Countercheck isn't involved here: full capability</text>
+  <line x1="350" y1="174" x2="398" y2="174" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="374" y="160" font-size="12" fill="#334155" text-anchor="middle" font-style="italic">"done"</text>
+  <rect x="400" y="56" width="260" height="236" rx="16" fill="#0F766E"/>
+  <text x="530" y="84" font-size="16" fill="#FFFFFF" font-weight="700" text-anchor="middle">2  Countercheck grades</text>
+  <circle cx="424" cy="120" r="3.5" fill="#FFFFFF"/>
+  <text x="436" y="125" font-size="13" fill="#FFFFFF">checks read from the base revision</text>
+  <circle cx="424" cy="150" r="3.5" fill="#FFFFFF"/>
+  <text x="436" y="155" font-size="13" fill="#FFFFFF">a clean copy, edited tests put back</text>
+  <circle cx="424" cy="180" r="3.5" fill="#FFFFFF"/>
+  <text x="436" y="185" font-size="13" fill="#FFFFFF">every check runs again, for real</text>
+  <circle cx="424" cy="210" r="3.5" fill="#FFFFFF"/>
+  <text x="436" y="215" font-size="13" fill="#FFFFFF">no internet during the checks *</text>
+  <circle cx="424" cy="240" r="3.5" fill="#FFFFFF"/>
+  <text x="436" y="245" font-size="13" fill="#FFFFFF">a receipt sealed with SHA-256</text>
+  <text x="530" y="278" font-size="11" fill="#CCFBF1" text-anchor="middle">* macOS sandbox; network = true opts in</text>
+  <rect x="710" y="56" width="230" height="96" rx="12" fill="#ECFDF5" stroke="#047857" stroke-width="1.5"/>
+  <text x="726" y="84" font-size="15" fill="#047857" font-weight="700">VERIFIED</text>
+  <text x="726" y="108" font-size="13" fill="#334155">every locked check passed:</text>
+  <text x="726" y="128" font-size="13" fill="#334155">the agent may finish</text>
+  <rect x="710" y="172" width="230" height="120" rx="12" fill="#FFF7ED" stroke="#C2410C" stroke-width="1.5"/>
+  <text x="726" y="200" font-size="15" fill="#C2410C" font-weight="700">FAILED</text>
+  <text x="726" y="224" font-size="13" fill="#334155">the failing output goes back</text>
+  <text x="726" y="244" font-size="13" fill="#334155">to the agent; it keeps working</text>
+  <text x="726" y="270" font-size="12" fill="#C2410C" font-weight="700">(at most 3 push-backs)</text>
+  <line x1="660" y1="140" x2="708" y2="108" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="660" y1="210" x2="708" y2="230" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M825,292 V322 H185 V298" fill="none" stroke="#C2410C" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrowCoral)"/>
+  <text x="505" y="340" font-size="13" fill="#C2410C" font-weight="700" text-anchor="middle">back to step 1 with the reasons: fix the code, not the tests</text>
+  <rect x="20" y="360" width="920" height="64" rx="12" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.5"/>
+  <text x="36" y="386" font-size="13" fill="#0F766E" font-weight="700">In plain words</text>
+  <text x="36" y="408" font-size="13" fill="#334155">Open-book study, closed-book exam: the agent may use everything while it works; the grade only counts what the work does on its own.</text>
+</svg>

@@ -82,6 +82,8 @@ We gave [Hermes Agent](https://github.com/NousResearch/hermes-agent) 29 small co
 setups, and graded every run with **hidden tests** the agent never saw. Some tasks are impossible on purpose (a test
 expects a wrong value, a server can't be reached): the honest answer is "this can't pass, because …".
 
+![False done claims per setup (GPT 6.1: 87 runs each). GPT 6.1 on all tasks: Hermes 7, with verify_on_stop 11, with Countercheck 3, both 2. GPT 6.1 on impossible tasks: 6, 8, 0, 0. DeepSeek V4 Pro: 7, 6, 6, 6.](docs/img/benchmark.svg)
+
 | False "done" claims (claimed success, hidden tests fail) | Hermes | + its `verify_on_stop` | **+ Countercheck** | both |
 |---|---|---|---|---|
 | GPT 6.1, all tasks (87 runs per setup) | 7 | 11 | **3** | **2** |
@@ -247,11 +249,7 @@ No. The agent works with its full harness: web search, docs, tools, anything you
 when the agent says "done": it re-runs your locked checks on a clean copy of the result. Like an exam after open-book
 study: the grade has to reflect the work itself.
 
-| Phase | Who runs | Internet | Countercheck's sandbox |
-|---|---|---|---|
-| Doing the work | your agent, in its harness | whatever the harness allows | no |
-| Grading ("done") | Countercheck re-runs the locked checks | off, unless a check sets `network = true` | yes (macOS) |
-| FAILED | the agent gets the reasons and keeps working | whatever the harness allows | no |
+![The agent works freely in its own harness (web search, docs, tools, the internet if allowed). When it says done, Countercheck reads the checks from the base revision, makes a clean copy with edited tests put back, runs every check again with no internet (sandbox on macOS) and seals a receipt. VERIFIED lets the agent finish; FAILED sends the failing output back and the agent keeps working.](docs/img/work-then-grade.svg)
 
 **Does Countercheck edit tests or search the web?**
 Never. It reads the checks from the base revision, runs them and writes a receipt. It makes no network connections of
@@ -269,6 +267,9 @@ internet or write outside the check folder.
 | Windows | none yet (planned: AppContainer) | the receipt says `none (no sandbox on Windows yet)`; the Job Object only stops a check's processes |
 
 **So without a sandbox, can the agent cheat on Linux or Windows?**
+
+![What each kind of cheating runs into, by OS. Caught on macOS, Linux and Windows: editing a protected test, weakening checks.toml, committing edits to move the base, saying done without running anything, claiming tests pass when they fail, editing the receipt afterwards. Caught on macOS only (the sandbox): fetching the answer online during a check, writing outside the check folder. Not caught anywhere: mistakes your checks don't test.](docs/img/what-it-catches.svg)
+
 The common cheats are caught on every OS: edited tests are restored from the base revision, `checks.toml` is read
 from the locked base, committing edits doesn't move that base (the `session-start` hook), and every check is re-run
 in a clean copy. The sandbox adds protection against code written to misbehave *during* the check (fetching the

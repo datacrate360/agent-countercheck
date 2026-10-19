@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="496" viewBox="0 0 960 496" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>What each kind of cheating runs into, by operating system</title>
+  <desc>Caught on macOS, Linux and Windows: editing a protected test, weakening checks.toml, committing edits to move the base, saying done without running anything, claiming tests pass when they fail, editing the receipt afterwards. Caught on macOS only (the sandbox; Linux and Windows not yet): fetching the answer online during a check, writing outside the check folder. Not caught anywhere: mistakes the checks don't test.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowCoral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/>
+    </marker>
+  </defs>
+  <rect width="960" height="496" rx="16" fill="#FFFFFF"/>
+  <text letter-spacing="1" x="20" y="40" font-size="13" fill="#64748B" font-weight="700">THE AGENT…</text>
+  <text letter-spacing="1" x="350" y="40" font-size="13" fill="#64748B" font-weight="700">WHAT STOPS IT</text>
+  <text x="770" y="40" font-size="13" fill="#0F172A" font-weight="700" text-anchor="middle">macOS</text>
+  <text x="840" y="40" font-size="13" fill="#0F172A" font-weight="700" text-anchor="middle">Linux</text>
+  <text x="910" y="40" font-size="13" fill="#0F172A" font-weight="700" text-anchor="middle">Windows</text>
+  <rect x="12" y="56" width="936" height="40" rx="8" fill="#F8FAFC"/>
+  <text x="24" y="81" font-size="13.5" fill="#0F172A" font-weight="700">Edits a protected test so it passes</text>
+  <text x="350" y="81" font-size="13" fill="#334155">Put back from the base revision; listed on the receipt</text>
+  <circle cx="770" cy="76" r="11" fill="#0F766E"/>
+  <text x="770" y="81" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="76" r="11" fill="#0F766E"/>
+  <text x="840" y="81" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="76" r="11" fill="#0F766E"/>
+  <text x="910" y="81" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <rect x="12" y="100" width="936" height="40" rx="8" fill="#FFFFFF"/>
+  <text x="24" y="125" font-size="13.5" fill="#0F172A" font-weight="700">Weakens the rules in checks.toml</text>
+  <text x="350" y="125" font-size="13" fill="#334155">Checks are always read from the locked base revision</text>
+  <circle cx="770" cy="120" r="11" fill="#0F766E"/>
+  <text x="770" y="125" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="120" r="11" fill="#0F766E"/>
+  <text x="840" y="125" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="120" r="11" fill="#0F766E"/>
+  <text x="910" y="125" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <rect x="12" y="144" width="936" height="40" rx="8" fill="#F8FAFC"/>
+  <text x="24" y="169" font-size="13.5" fill="#0F172A" font-weight="700">Commits those edits to move the base</text>
+  <text x="350" y="169" font-size="13" fill="#334155">The session-start hook locks the commit the session began on</text>
+  <circle cx="770" cy="164" r="11" fill="#0F766E"/>
+  <text x="770" y="169" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="164" r="11" fill="#0F766E"/>
+  <text x="840" y="169" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="164" r="11" fill="#0F766E"/>
+  <text x="910" y="169" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <rect x="12" y="188" width="936" height="40" rx="8" fill="#FFFFFF"/>
+  <text x="24" y="213" font-size="13.5" fill="#0F172A" font-weight="700">Says "done" without running anything</text>
+  <text x="350" y="213" font-size="13" fill="#334155">Countercheck runs every check itself, in a clean copy</text>
+  <circle cx="770" cy="208" r="11" fill="#0F766E"/>
+  <text x="770" y="213" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="208" r="11" fill="#0F766E"/>
+  <text x="840" y="213" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="208" r="11" fill="#0F766E"/>
+  <text x="910" y="213" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <rect x="12" y="232" width="936" height="40" rx="8" fill="#F8FAFC"/>
+  <text x="24" y="257" font-size="13.5" fill="#0F172A" font-weight="700">Says "all tests pass" when some fail</text>
+  <text x="350" y="257" font-size="13" fill="#334155">The verdict comes from the checks, never from the claim</text>
+  <circle cx="770" cy="252" r="11" fill="#0F766E"/>
+  <text x="770" y="257" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="252" r="11" fill="#0F766E"/>
+  <text x="840" y="257" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="252" r="11" fill="#0F766E"/>
+  <text x="910" y="257" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <rect x="12" y="276" width="936" height="40" rx="8" fill="#FFFFFF"/>
+  <text x="24" y="301" font-size="13.5" fill="#0F172A" font-weight="700">Edits the receipt afterwards</text>
+  <text x="350" y="301" font-size="13" fill="#334155">The SHA-256 seal no longer matches: show / report flag it</text>
+  <circle cx="770" cy="296" r="11" fill="#0F766E"/>
+  <text x="770" y="301" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="296" r="11" fill="#0F766E"/>
+  <text x="840" y="301" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="296" r="11" fill="#0F766E"/>
+  <text x="910" y="301" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <rect x="12" y="320" width="936" height="40" rx="8" fill="#F8FAFC"/>
+  <text x="24" y="345" font-size="13.5" fill="#0F172A" font-weight="700">Fetches the answer online during a check</text>
+  <text x="350" y="345" font-size="13" fill="#334155">Sandbox: no internet (a check may opt in: network = true)</text>
+  <circle cx="770" cy="340" r="11" fill="#0F766E"/>
+  <text x="770" y="345" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="340" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="840" y="344" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
+  <circle cx="910" cy="340" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="910" y="344" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
+  <rect x="12" y="364" width="936" height="40" rx="8" fill="#FFFFFF"/>
+  <text x="24" y="389" font-size="13.5" fill="#0F172A" font-weight="700">Writes files outside the check folder</text>
+  <text x="350" y="389" font-size="13" fill="#334155">Sandbox: writes only inside the check's copy</text>
+  <circle cx="770" cy="384" r="11" fill="#0F766E"/>
+  <text x="770" y="389" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="840" cy="384" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="840" y="388" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
+  <circle cx="910" cy="384" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="910" y="388" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
+  <rect x="12" y="408" width="936" height="40" rx="8" fill="#FFF7ED"/>
+  <text x="24" y="433" font-size="13.5" fill="#0F172A" font-weight="700">Gets wrong what your checks don't test</text>
+  <text x="350" y="433" font-size="13" fill="#C2410C" font-weight="700">Nothing can: add stronger checks (golden, coverage, budget)</text>
+  <circle cx="770" cy="428" r="11" fill="#C2410C"/>
+  <text x="770" y="433" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✗</text>
+  <circle cx="840" cy="428" r="11" fill="#C2410C"/>
+  <text x="840" y="433" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✗</text>
+  <circle cx="910" cy="428" r="11" fill="#C2410C"/>
+  <text x="910" y="433" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✗</text>
+  <circle cx="30" cy="470" r="8" fill="#0F766E"/>
+  <text x="46" y="475" font-size="12" fill="#334155">caught</text>
+  <circle cx="120" cy="470" r="8" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="136" y="475" font-size="12" fill="#334155">not yet: no sandbox (the receipt says so); run inside a container with --network none</text>
+  <circle cx="680" cy="470" r="8" fill="#C2410C"/>
+  <text x="696" y="475" font-size="12" fill="#334155">outside what any checker can see</text>
+</svg>

@@ -59,7 +59,7 @@
     <rect x="346" y="246" width="268" height="66" rx="10" fill="#FFFFFF"/>
     <text x="360" y="268" font-weight="700">3  Run in a sandbox</text>
     <text x="360" y="288" fill="#334155">no internet, writes only in the copy</text>
-    <text x="360" y="304" fill="#334155">(macOS; network = true to opt in)</text>
+    <text x="360" y="304" fill="#334155">(macOS today; Linux, Windows: next)</text>
 
     <rect x="346" y="320" width="268" height="72" rx="10" fill="#FFFFFF"/>
     <text x="360" y="342" font-weight="700">4  Decide and seal</text>
@@ -100,6 +100,6 @@
   <!-- Receipt -->
   <rect x="330" y="478" width="300" height="62" rx="12" fill="#F8FAFC" stroke="#0F766E" stroke-width="1.5"/>
   <text x="480" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Receipt (every run)</text>
-  <text x="480" y="525" text-anchor="middle" font-size="12.5" fill="#334155">.countercheck/receipts/&lt;id&gt;.json · countercheck show</text>
+  <text x="480" y="525" text-anchor="middle" font-size="12.5" fill="#334155">.countercheck/receipts/&lt;id&gt;.json · countercheck show / report / ui</text>
   <line x1="480" y1="406" x2="480" y2="474" stroke="#0F766E" stroke-width="1.6" marker-end="url(#arrow)"/>
 </svg>
