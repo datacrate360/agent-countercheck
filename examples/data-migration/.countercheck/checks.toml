@@ -1,0 +1,34 @@
+# A made-up data migration: two tenants, a toy converter, hand-converted SQL views.
+protected = ["source/**"]   # the legacy data is the truth; the worker may not change it
+
+# Matrix: reconcile each tenant separately, so the receipt names the tenant that fails.
+[[check]]
+name = "reconcile"
+run = "python3 scripts/reconcile.py --tenant {tenant}"
+matrix = { tenant = ["alpha", "beta"] }
+timeout_secs = 60
+
+# Golden + budget: the converted file must match the locked reference, and must not be empty.
+[[check]]
+name = "converted file"
+run = "python3 scripts/convert.py {tenant}"
+matrix = { tenant = ["alpha", "beta"] }
+golden = { output = "target/{tenant}.csv", expected = ".countercheck/golden/{tenant}.csv", mode = "csv", tolerance = 0.005, sort_rows = true }
+budget = { metric = "rows", min = 1 }
+timeout_secs = 60
+
+# Forbid: no old-dialect functions left in the converted SQL.
+[[forbid]]
+name = "no old-dialect functions"
+pattern = '\b(NVL|DECODE)\s*\('
+paths = ["sql/**/*.sql"]
+message = "Use COALESCE or CASE instead."
+case_insensitive = true
+
+# Coverage: every view in the inventory must be created somewhere.
+[[coverage]]
+name = "every view converted"
+items = ".countercheck/inventory/views.txt"
+paths = ["sql/**/*.sql"]
+pattern = 'CREATE\s+OR\s+REPLACE\s+VIEW\s+{item}\b'
+case_insensitive = true

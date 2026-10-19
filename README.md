@@ -67,7 +67,8 @@ run = "pytest -q"                 # any command; runs with `sh -c` in the clean 
 timeout_secs = 600
 ```
 
-Besides plain commands, a check can run once per target (`matrix`) and more: see [docs/checks.md](docs/checks.md).
+Besides plain commands there are matrix, forbid, golden, budget and coverage checks: see [docs/checks.md](docs/checks.md)
+and the runnable example in [examples/data-migration](examples/data-migration).
 
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
 locked in the base revision, or none ran) · `1` error · `4` (`countercheck show`) receipt was edited.

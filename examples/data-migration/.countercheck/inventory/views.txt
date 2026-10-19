@@ -1,0 +1,4 @@
+# Every view of the old system must exist in the new one.
+active_customers
+tenant_totals
+monthly_revenue

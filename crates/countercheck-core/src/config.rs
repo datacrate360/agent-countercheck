@@ -783,6 +783,15 @@ mod tests {
     }
 
     #[test]
+    fn the_example_check_file_parses() {
+        let text = include_str!("../../../examples/data-migration/.countercheck/checks.toml");
+        let f = parse(text).unwrap();
+        let p = plan(&f, &BTreeMap::new()).unwrap();
+        assert_eq!(p.len(), 4);
+        assert_eq!((f.forbids.len(), f.coverages.len()), (1, 1));
+    }
+
+    #[test]
     fn template_parses() {
         assert!(parse(TEMPLATE).is_ok());
     }

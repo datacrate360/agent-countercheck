@@ -12,9 +12,11 @@ the checks came from the base revision and all of them passed.
 | [Command](#command) | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
 | [Matrix](#matrix) | the same command must pass for many targets (tenants, schemas, levels, files) | `[[check]]` + `matrix` |
 | [Forbid](#forbid) | some text must not appear in the worker's files (leftover syntax, debug code, secrets) | `[[forbid]]` |
+| [Golden](#golden) | a command's output file must match a reference you keep (exports, reports, renders) | `[[check]]` + `golden` |
 | [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
 | [Coverage](#coverage) | every item in a list you keep must show up in the worker's files (tables, procedures, levels, pages) | `[[coverage]]` |
-| [Golden](#golden) | a command's output file must match a reference you keep (exports, reports, renders) | `[[check]]` + `golden` |
+
+[examples/data-migration](../examples/data-migration) uses all of them on a small made-up migration.
 
 ## Command
 
