@@ -292,7 +292,12 @@ fn safe_id(session: &str) -> String {
 fn last_assistant_text(path: &str) -> Option<String> {
     use std::io::{Seek, SeekFrom};
     const TAIL: u64 = 8 * 1024 * 1024;
-    let path = match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
+    // `~/...` (or `~\...` on Windows, where the home folder is USERPROFILE when HOME isn't set).
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    let rest = path
+        .strip_prefix("~/")
+        .or_else(|| path.strip_prefix("~\\").filter(|_| cfg!(windows)));
+    let path = match (rest, home) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
         _ => PathBuf::from(path),
     };

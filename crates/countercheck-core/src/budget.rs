@@ -120,6 +120,15 @@ mod tests {
     }
 
     #[test]
+    fn metric_lines_with_windows_line_endings_parse() {
+        assert_eq!(metric_in_line("METRIC seconds=1.5\r", "seconds"), Some(1.5));
+        assert_eq!(
+            last_metric("x\r\nMETRIC seconds=2\r\nMETRIC seconds=3\r\n", "seconds"),
+            Some(3.0)
+        );
+    }
+
+    #[test]
     fn the_last_metric_line_counts() {
         let out = "warming up\nMETRIC seconds=40\nMETRIC rows=10\n  METRIC seconds = 12.4  \nMETRIC seconds=abc\n";
         assert_eq!(last_metric(out, "seconds"), Some(12.4));

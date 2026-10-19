@@ -25,6 +25,11 @@ humantime = { workspace = true }
 # Random token and nonces for `countercheck ui` (already in the tree through tempfile).
 getrandom = { workspace = true }
 
+# Windows: `link` folders (node_modules, .venv) become directory junctions, which need no admin
+# rights or Developer Mode (a safe API over the reparse-point calls; our crates stay unsafe-free).
+[target.'cfg(windows)'.dependencies]
+junction = "1"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 serde_json = { workspace = true }

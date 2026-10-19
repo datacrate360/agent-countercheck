@@ -8,7 +8,7 @@ use std::path::Path;
 /// Remove an output file the worker left in the clean copy, so only what the command writes
 /// is compared (a committed fake output can't pass).
 pub fn clear_output(work: &Path, g: &GoldenSpec) -> Result<(), String> {
-    let path = work.join(&g.output);
+    let path = work.join(crate::snapshot::safe_rel(&g.output)?);
     match fs::symlink_metadata(&path) {
         Ok(m) if m.is_dir() => Ok(()), // reported as "not a file" after the run
         Ok(_) => fs::remove_file(&path).map_err(|e| format!("{}: {e}", g.output)),
@@ -18,7 +18,7 @@ pub fn clear_output(work: &Path, g: &GoldenSpec) -> Result<(), String> {
 
 /// Read the output file, refusing anything that leaves the clean copy or is too big.
 fn read_output(work: &Path, g: &GoldenSpec) -> Result<Vec<u8>, String> {
-    let path = work.join(&g.output);
+    let path = work.join(crate::snapshot::safe_rel(&g.output)?);
     let meta = fs::symlink_metadata(&path)
         .map_err(|_| format!("the check did not write its output file {}", g.output))?;
     if meta.file_type().is_symlink() {
@@ -31,9 +31,7 @@ fn read_output(work: &Path, g: &GoldenSpec) -> Result<Vec<u8>, String> {
         return Err(format!("the output {} is not a file", g.output));
     }
     // A folder on the way could be a symlink out of the clean copy.
-    let real = path
-        .canonicalize()
-        .map_err(|e| format!("{}: {e}", g.output))?;
+    let real = crate::snapshot::canonical(&path).map_err(|e| format!("{}: {e}", g.output))?;
     if !real.starts_with(work) {
         return Err(format!("the output {} is outside the clean copy", g.output));
     }

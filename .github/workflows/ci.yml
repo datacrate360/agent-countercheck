@@ -45,6 +45,35 @@ jobs:
       - name: Install script syntax
         run: sh -n install.sh && sh -n packaging/homebrew/formula.sh
 
+  windows:
+    name: test (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup show; rustup component add clippy
+      # Tests run from PowerShell with the runner's usual PATH; countercheck finds Git for Windows' sh.
+      - name: Which sh
+        run: where.exe sh; where.exe git; git --exec-path
+        continue-on-error: true
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      # The example's check runs `python3`; Windows' Python is `python`, so give sh a python3 if needed.
+      - name: python3 for the example
+        shell: bash
+        run: |
+          if ! python3 -c "print(1)" >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/shim"
+            printf '#!/bin/sh\nexec python "$@"\n' > "$RUNNER_TEMP/shim/python3"
+            chmod +x "$RUNNER_TEMP/shim/python3"
+            echo "$RUNNER_TEMP/shim" >> "$GITHUB_PATH"
+          fi
+      - name: Examples give the expected verdicts
+        shell: bash
+        run: sh examples/ml-eval-threshold/run-example.sh "$PWD/target/debug/countercheck.exe"
+
   dco:
     name: sign-off (DCO)
     if: github.event_name == 'pull_request'

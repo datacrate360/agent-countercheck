@@ -154,6 +154,13 @@ fn run(cli: Cli) -> Result<u8, String> {
         } => {
             let sandbox = match sandbox {
                 SandboxArg::Auto if runner::seatbelt_works() => runner::Sandbox::Seatbelt,
+                SandboxArg::Auto if cfg!(windows) => {
+                    eprintln!(
+                        "note: no check sandbox on Windows yet; checks run as a normal process \
+                         (the receipt records this)."
+                    );
+                    runner::Sandbox::None
+                }
                 SandboxArg::Auto => {
                     eprintln!(
                         "note: no check sandbox on this system; checks run as a normal process \
@@ -164,6 +171,12 @@ fn run(cli: Cli) -> Result<u8, String> {
                 SandboxArg::Seatbelt => runner::Sandbox::Seatbelt,
                 SandboxArg::None => runner::Sandbox::None,
             };
+            if sandbox == runner::Sandbox::Seatbelt && cfg!(windows) {
+                return Err(
+                    "there is no check sandbox on Windows yet (seatbelt is macOS only); use --sandbox none"
+                        .to_string(),
+                );
+            }
             if sandbox == runner::Sandbox::Seatbelt
                 && !std::path::Path::new("/usr/bin/sandbox-exec").exists()
             {

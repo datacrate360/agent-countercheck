@@ -6,10 +6,12 @@ use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_countercheck");
 
 fn sh(dir: &Path, cmd: &str) {
-    let ok = Command::new("sh")
+    let ok = Command::new(common::sh_program())
         .args(["-c", cmd])
         .current_dir(dir)
         .status()
@@ -22,10 +24,7 @@ fn sh(dir: &Path, cmd: &str) {
 fn project_with_receipt() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     let p = d.path();
-    sh(
-        p,
-        "git init -q -b main && git config user.email t@t && git config user.name t",
-    );
+    sh(p, common::GIT_INIT);
     fs::create_dir_all(p.join(".countercheck")).unwrap();
     fs::write(
         p.join(".countercheck/checks.toml"),

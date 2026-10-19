@@ -1,0 +1,4 @@
+# Keep LF in the working tree on every OS. Git for Windows checks text out with CRLF by default, and
+# `sh` can't run scripts with CRLF (the examples, eval tasks and test fixtures are shell scripts and
+# exact text). Countercheck itself handles CRLF in projects it checks (see the CRLF tests).
+* text=auto eol=lf

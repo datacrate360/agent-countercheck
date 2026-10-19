@@ -25,10 +25,8 @@ fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
         let path = entry.path();
         if ft.is_dir() {
             walk(base, &path, out)?;
-        } else if ft.is_file()
-            && let Ok(rel) = path.strip_prefix(base)
-        {
-            out.push(rel.to_string_lossy().into_owned());
+        } else if ft.is_file() && path.starts_with(base) {
+            out.push(crate::snapshot::rel_slash(base, &path));
         }
     }
     Ok(())
