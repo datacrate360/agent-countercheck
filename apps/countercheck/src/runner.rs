@@ -104,10 +104,18 @@ pub fn run_check(
     let (exit_code, timed_out) = match status {
         Some(s) => (s.code(), false),
         None => {
-            // Kill the whole process group so test runners' children die too.
-            let _ = Command::new("kill")
-                .args(["-KILL", &format!("-{}", child.id())])
-                .status();
+            // Kill the whole process group so test runners' children die too. The child leads its
+            // own group, so the group id is its pid. Spelled `-s KILL -- -<pgid>`: procps-ng 4's
+            // `kill -KILL -<pgid>` misreads the group (e.g. -1234 as -1, which kills every process).
+            let pgid = child.id();
+            if pgid > 1 {
+                let _ = Command::new("kill")
+                    .args(["-s", "KILL", "--", &format!("-{pgid}")])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
             let _ = child.kill();
             let _ = child.wait();
             (None, true)

@@ -142,6 +142,38 @@ fn timeouts_fail() {
     assert_eq!(r["checks"][0]["timed_out"], true);
 }
 
+/// A timed-out check's background children die with it (the whole process group is killed).
+#[test]
+fn timeouts_kill_the_whole_process_group() {
+    let outside = tempfile::tempdir().unwrap();
+    let pid_file = outside.path().join("bg.pid");
+    let checks = format!(
+        "[[check]]\nname = \"bg\"\nrun = \"sleep 60 & echo $! > '{}'; wait\"\ntimeout_secs = 1\n",
+        pid_file.display()
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["timed_out"], true);
+    let pid = fs::read_to_string(&pid_file).unwrap();
+    // Gone, or a zombie waiting to be reaped: either way it no longer runs.
+    let running = || {
+        let out = Command::new("ps")
+            .args(["-o", "stat=", "-p", pid.trim()])
+            .output()
+            .unwrap();
+        let stat = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        !stat.is_empty() && !stat.starts_with('Z')
+    };
+    for _ in 0..20 {
+        if !running() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("background process {} survived the timeout", pid.trim());
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn seatbelt_blocks_writes_outside_the_check_folder() {
