@@ -27,8 +27,26 @@ pip install countercheck
 mkdir -p .countercheck/inventory
 ```
 
-**2. List what must be converted.** Run this on Oracle and save the names, one per line, as
-`.countercheck/inventory/objects.txt`:
+Not a git repository yet? Run `git init` in the project folder first (it stays on your machine).
+
+**2. List what must be converted**, one object per line, in `.countercheck/inventory/objects.txt`.
+
+*Already have your Oracle DDL extracted to files* (one folder per schema with `procedures.sql`, `functions.sql`,
+`views_ddl.sql`, `package_bodies.sql`)? Let the inventory script read them; no Oracle connection needed:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/datacrate360/countercheck/DEV/docs/guides/oracle-inventory.py
+python3 oracle-inventory.py Oracle/SALES --package ORDER_API
+```
+
+- It lists standalone procedures, functions and views, plus every routine inside each package body (overloads once).
+- **Start with one package** (`--package`): a few routines make a short first session. Drop `--package` for the
+  whole schema.
+- Snowflake has no packages, so a package routine is listed as `ORDER_API_CREATE_ORDER` by default. If your team
+  names them differently, say so: `--package-format "{package}.{routine}"` gives `ORDER_API.CREATE_ORDER`. The names
+  must match how they're created in Snowflake, or coverage reports them all as missing.
+
+*Otherwise*, run this on Oracle and save the names:
 
 ```sql
 SELECT object_name FROM user_objects
@@ -37,7 +55,8 @@ ORDER BY object_name;
 ```
 
 **3. Save the checks** as `.countercheck/checks.toml`. It assumes the Oracle code is in `oracle/` and the agent writes
-Snowflake code to `snowflake/`; change the two folder names if yours differ:
+Snowflake code to `snowflake/`; change the two folder names if yours differ (folder names are case-sensitive in the
+patterns, e.g. `"Oracle/**"` and `"Snowflake/**/*.sql"`):
 
 ```toml
 # Oracle PL/SQL -> Snowflake: checks locked before the agent starts.
