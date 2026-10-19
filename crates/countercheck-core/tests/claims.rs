@@ -66,6 +66,9 @@ fn edge_cases() {
     assert!(!reports_blocker(
         "Fixed it. `python3 -m unittest` reports OK (3 tests)."
     ));
+    assert!(!reports_blocker(
+        "The old parser was impossible to extend, so I rewrote it; all tests pass now."
+    ));
     assert!(!reports_blocker(""));
     // Honest reports, including ones that mention passing tests only in negation.
     assert!(reports_blocker(

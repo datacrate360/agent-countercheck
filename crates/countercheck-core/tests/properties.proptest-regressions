@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8fbb34b3d05787599be334012ec2c58df51f079b79066750731c4699e8bcbc43 # shrinks to pats = [".countercheck/**"], p = ".countercheck/a"
+cc 529796b2c9db5207e21b29265acecafbfc80fa6dff2eb9a1c4224b8609a3792a # shrinks to pats = ["**"], p = "_", ups = 1
+cc ee8b9cfce1afa06d631978fbf34b8c7631cb3242806da76380e69eeb3cbc622c # shrinks to r = Receipt { schema: "countercheck.receipt/v0", id: "", receipt_sha256: "", created_at: "", countercheck_version: "", repo: RepoInfo { base_rev: "", base_commit: "", head_commit: "", dirty: false }, worker: Worker { agent: None, model: None, cost_usd: Some(5.669748844129758e178) }, claim: None, claim_status: NoClaim, checks_locked: false, checks_source: "", sandbox: "", tree_sha256: "", linked: [], protected_changes: [], checks: [], verdict: Verified, reasons: [] }

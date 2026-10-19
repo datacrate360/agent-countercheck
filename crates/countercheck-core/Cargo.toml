@@ -17,3 +17,6 @@ serde_json = { workspace = true, features = ["float_roundtrip"] }
 toml = { workspace = true }
 sha2 = { workspace = true }
 globset = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"

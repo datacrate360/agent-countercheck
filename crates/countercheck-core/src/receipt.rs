@@ -278,6 +278,92 @@ mod tests {
         }
     }
 
+    fn receipt() -> Receipt {
+        Receipt {
+            schema: SCHEMA.into(),
+            id: String::new(),
+            receipt_sha256: String::new(),
+            created_at: "2026-10-18T00:00:00Z".into(),
+            countercheck_version: "0".into(),
+            repo: RepoInfo {
+                base_rev: "HEAD".into(),
+                base_commit: "0123456789abcdef".into(),
+                head_commit: "fedcba9876543210".into(),
+                dirty: false,
+            },
+            worker: Worker::default(),
+            claim: None,
+            claim_status: ClaimStatus::NoClaim,
+            checks_locked: true,
+            checks_source: "src".into(),
+            sandbox: "none".into(),
+            tree_sha256: "t".into(),
+            linked: vec![],
+            protected_changes: vec![],
+            checks: vec![],
+            verdict: Verdict::Unverified,
+            reasons: vec![],
+        }
+    }
+
+    #[test]
+    fn exit_codes_and_labels() {
+        assert_eq!(Verdict::Verified.exit_code(), 0);
+        assert_eq!(Verdict::Failed.exit_code(), 2);
+        assert_eq!(Verdict::Unverified.exit_code(), 3);
+        assert_eq!(Verdict::Verified.label(), "VERIFIED");
+        assert_eq!(Verdict::Failed.label(), "FAILED");
+        assert_eq!(Verdict::Unverified.label(), "UNVERIFIED");
+    }
+
+    #[test]
+    fn only_restored_files_are_reported_as_protected_changes() {
+        for p in [
+            vec![],
+            vec![ProtectedChange::decide("tests/new", Change::Added)],
+        ] {
+            let (v, reasons) = decide(true, &[result(true)], &p);
+            assert_eq!(v, Verdict::Verified);
+            assert_eq!(reasons, vec!["all 1 check(s) passed in a clean copy"]);
+        }
+    }
+
+    #[test]
+    fn seal_checks_the_id_too() {
+        let r = receipt().seal().unwrap();
+        let mut edited = r.clone();
+        edited.id = "0000000000000000".into();
+        assert!(!edited.seal_is_valid());
+        let mut edited = r.clone();
+        edited.receipt_sha256 = "0".repeat(64);
+        assert!(!edited.seal_is_valid());
+    }
+
+    #[test]
+    fn text_shows_the_evidence() {
+        let mut r = receipt();
+        r.verdict = Verdict::Failed;
+        let mut failing = result(false);
+        failing.name = "unit".into();
+        failing.output_tail = "line one\nAssertionError: boom".into();
+        let mut passing = result(true);
+        passing.name = "lint".into();
+        passing.output_tail = "quiet on success".into();
+        r.checks = vec![failing, passing];
+        let text = r.clone().seal().unwrap().render_text();
+        assert!(text.starts_with("countercheck receipt "), "{text}");
+        assert!(text.contains("FAILED"), "{text}");
+        assert!(text.contains("HEAD (0123456789)"), "{text}");
+        assert!(text.contains("worker tree: fedcba9876\n"), "{text}");
+        assert!(text.contains("[FAIL] unit"), "{text}");
+        assert!(text.contains("| AssertionError: boom"), "{text}");
+        assert!(text.contains("[pass] lint"), "{text}");
+        assert!(!text.contains("quiet on success"), "{text}");
+        assert!(!text.contains("linked:"), "{text}");
+        r.linked = vec!["node_modules".into()];
+        assert!(r.render_text().contains("linked:   node_modules"));
+    }
+
     #[test]
     fn verdicts() {
         assert_eq!(decide(true, &[result(true)], &[]).0, Verdict::Verified);
@@ -353,7 +439,11 @@ mod tests {
     #[test]
     fn seal_survives_reading_the_receipt_back() {
         // Costs with many digits once read back one bit off, so `show` called a fresh receipt BROKEN.
-        for cost in [0.000_108_000_000_000_000_01, 5.669_748_844_129_758e178, 0.1 + 0.2] {
+        for cost in [
+            0.000_108_000_000_000_000_01,
+            5.669_748_844_129_758e178,
+            0.1 + 0.2,
+        ] {
             let w = Worker {
                 cost_usd: Some(cost),
                 ..Worker::default()
