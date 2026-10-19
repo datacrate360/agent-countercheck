@@ -7,6 +7,10 @@ changed. Everything under `.countercheck/` is always protected.
 A check result is `pass` or `FAIL`. Any failed check makes the verdict `FAILED`. The verdict is `VERIFIED` only when
 the checks came from the base revision and all of them passed.
 
+**Pick the right base.** The base is the commit the work started from. `countercheck verify` defaults to `HEAD`, which
+is right for uncommitted work. If the work was committed, pass where it started (`--base origin/main` in CI). Agent
+hooks find it themselves with `countercheck hook session-start` (README "Agent hooks").
+
 | Type | Use it when | Table |
 |---|---|---|
 | [Command](#command) | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
@@ -50,6 +54,7 @@ network = true
 - When a check fails while it ran without the internet, Countercheck adds a hint saying so. The verdict stays
   FAILED: a failure that might be caused by the missing internet is still a failure until the check file says the
   check may use it.
+- The hint only appears when the output looks like a connection error (blocked, can't resolve, unreachable).
 - On Linux there is no sandbox yet, so checks always have the internet there.
 
 ## Matrix
@@ -150,6 +155,10 @@ budget = { metric = "seconds", max = 30 }  # or min = ..., or both
 - The output shows the value and the limit, e.g. `budget: seconds = 12.4 (max 30; within the limit)`. A missing
   metric fails with a plain message.
 - Works with `matrix` (one value per target).
+- **A budget alone can be faked:** an agent can simply print `METRIC accuracy=0.99`. Pair it with a `[[forbid]]` on
+  hard-coded metric lines, or a `golden` on the real output.
+- With `golden` on the same check, the order is: the command must exit 0, then the budget, then the golden file. The
+  first failure is the one reported.
 
 ## Coverage
 

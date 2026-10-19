@@ -2,7 +2,7 @@
 //! going when the work fails. Hooks fail open: any error is logged to stderr and the agent
 //! carries on, because a broken referee must never trap an agent in a loop.
 
-use crate::{runner, verify};
+use crate::{git, runner, verify};
 use countercheck_core::claim::reports_blocker;
 use countercheck_core::receipt::{Receipt, Verdict, Worker};
 use std::io::Read;
@@ -56,9 +56,10 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
     } else {
         runner::Sandbox::Seatbelt
     };
+    let base = session_base(&input.cwd, &input.session);
     let opts = verify::Options {
         repo: input.cwd,
-        base: std::env::var("COUNTERCHECK_BASE").unwrap_or_else(|_| "HEAD".to_string()),
+        base,
         claim: input.claim,
         worker: Worker {
             agent: Some(input.agent.to_string()),
@@ -74,7 +75,7 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
 }
 
 /// Hermes `pre_verify`: stdin is Hermes's hook JSON; stdout is `{"action":"continue",...}` or
-/// nothing. Env: `COUNTERCHECK_BASE` (default HEAD), `COUNTERCHECK_HOOK_DISABLED=1` (no-op),
+/// nothing. Env: `COUNTERCHECK_BASE` (default: the commit the session started from, else HEAD), `COUNTERCHECK_HOOK_DISABLED=1` (no-op),
 /// `COUNTERCHECK_HOOK_LOG` (append one JSON line per call), `COUNTERCHECK_SANDBOX=none`.
 pub fn hermes_pre_verify() -> Result<(), String> {
     let Some(payload) = read_payload()? else {
@@ -148,6 +149,100 @@ pub fn claude_stop() -> Result<(), String> {
         println!("{out}");
     }
     Ok(())
+}
+
+/// The commit the checks are locked to: `COUNTERCHECK_BASE` if set, else the commit this session
+/// started from (recorded by `countercheck hook session-start`), else HEAD. Without a recorded
+/// start, an agent that commits its own edits to the checks or protected files moves HEAD, and
+/// with it the "locked" rules.
+fn session_base(cwd: &Path, session: &str) -> String {
+    if let Ok(b) = std::env::var("COUNTERCHECK_BASE") {
+        return b;
+    }
+    recorded_base(cwd, session).unwrap_or_else(|| "HEAD".to_string())
+}
+
+/// Where a session's starting commit is kept: inside the git directory, outside the work tree, so
+/// it is never copied into the clean copy, never committed, and not in the agent's file list.
+fn session_file(cwd: &Path, session: &str) -> Option<PathBuf> {
+    if safe_id(session) == "unknown" {
+        return None;
+    }
+    let root = git::toplevel(cwd).ok()?;
+    let dir = git::git_dir(&root).ok()?;
+    Some(
+        dir.join("countercheck")
+            .join("sessions")
+            .join(format!("{}.json", safe_id(session))),
+    )
+}
+
+/// The recorded start commit, if there is one and it still exists.
+fn recorded_base(cwd: &Path, session: &str) -> Option<String> {
+    let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let base = v.get("base")?.as_str()?;
+    if base.len() < 40 || !base.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let root = git::toplevel(cwd).ok()?;
+    git::resolve_commit(&root, base).ok()
+}
+
+/// Session start (Claude Code / Cortex Code `SessionStart`, Hermes `on_session_start`): remember
+/// the commit the session starts from, so the stop hook locks the checks to it even if the agent
+/// commits. Prints nothing. A resumed session keeps its first record. Files older than 30 days
+/// are removed.
+pub fn session_start() -> Result<(), String> {
+    let Some(payload) = read_payload()? else {
+        return Ok(());
+    };
+    let text = |k: &str| payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    let cwd = PathBuf::from(text("cwd"));
+    let session = text("session_id");
+    let Some(file) = session_file(&cwd, session) else {
+        return Ok(()); // no session id, or not a git repository: nothing to lock
+    };
+    if file.exists() {
+        return Ok(());
+    }
+    let root = git::toplevel(&cwd)?;
+    let Ok(head) = git::resolve_commit(&root, "HEAD") else {
+        return Ok(()); // no commit yet
+    };
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        prune_old(dir);
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    std::fs::write(
+        &file,
+        serde_json::json!({ "session_id": session, "base": head, "recorded_at_unix": now })
+            .to_string(),
+    )
+    .map_err(|e| format!("{}: {e}", file.display()))
+}
+
+/// Remove session records older than 30 days.
+fn prune_old(dir: &Path) {
+    const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let old = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > MAX_AGE);
+        if old {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
 }
 
 /// Count one push-back for this session; false once the session has used them all. State lives

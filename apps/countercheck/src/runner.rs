@@ -162,12 +162,38 @@ pub fn run_check(
     }
     // Only when the command itself failed (not when it passed but missed a budget).
     let command_failed = timed_out || exit_code != Some(0);
-    if command_failed && sandbox == Sandbox::Seatbelt && !spec.network {
+    if command_failed
+        && sandbox == Sandbox::Seatbelt
+        && !spec.network
+        && looks_like_network_error(&result.output_tail)
+    {
         // A hint only: the verdict never changes, or a worker could fail on purpose behind a
         // blocked network call to turn FAILED into something softer.
         result.output_tail.push_str(NO_INTERNET_HINT);
     }
     Ok(result)
+}
+
+/// Error text that usually means a blocked or failed connection (Python, Node, curl, Go, Java).
+/// Only decides whether to show a hint, never the verdict, so a guess is fine here.
+fn looks_like_network_error(output: &str) -> bool {
+    const SIGNS: [&str; 13] = [
+        "operation not permitted",
+        "nodename nor servname",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "getaddrinfo",
+        "could not resolve",
+        "enotfound",
+        "eai_again",
+        "network is unreachable",
+        "no route to host",
+        "urlopen error",
+        "unknownhostexception",
+        "dial tcp",
+    ];
+    let lower = output.to_lowercase();
+    SIGNS.iter().any(|s| lower.contains(s))
 }
 
 /// Added to a failed check that ran without internet access.

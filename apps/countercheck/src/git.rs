@@ -45,6 +45,11 @@ pub fn resolve_commit(root: &Path, rev: &str) -> Result<String, String> {
     .map_err(|_| format!("revision \"{rev}\" not found"))
 }
 
+/// This work tree's own git directory (absolute; per worktree, so each has its own HEAD).
+pub fn git_dir(root: &Path) -> Result<PathBuf, String> {
+    run_text(root, &["rev-parse", "--absolute-git-dir"]).map(PathBuf::from)
+}
+
 pub fn is_dirty(root: &Path) -> Result<bool, String> {
     Ok(!run(root, &["status", "--porcelain", "-z"])?.is_empty())
 }

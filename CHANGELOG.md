@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Security: `countercheck hook session-start`** (Claude Code / Cortex Code `SessionStart`, Hermes
+  `on_session_start`). The stop hooks locked the checks to `HEAD`, so an agent that **committed** an edit to a
+  protected test or to `checks.toml` moved the "locked" rules with it and was let through. The new hook records the
+  commit each session started from (in `.git/countercheck/sessions/`), and the stop hooks lock the checks to it.
+  Add it to your hook settings (README "Agent hooks"). The benchmark was not affected: it pinned the base with
+  `COUNTERCHECK_BASE`.
+
 - **`network = true`** on a check lets it use the internet under the macOS sandbox (writes stay confined; the receipt
   marks it). A check that fails while running without the internet gets a hint; the verdict stays FAILED, so a
   worker can't soften a failure by making a blocked network call on purpose. This removes the benchmark's only

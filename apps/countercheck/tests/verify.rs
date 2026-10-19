@@ -260,6 +260,19 @@ fn a_failed_check_without_internet_gets_a_hint_and_stays_failed() {
     );
 }
 
+/// An ordinary failure under the sandbox gets no internet hint (it would only mislead the agent).
+#[cfg(target_os = "macos")]
+#[test]
+fn an_ordinary_failure_gets_no_internet_hint() {
+    if nested() {
+        return;
+    }
+    let d = project("[[check]]\nname = \"bad\"\nrun = \"echo assertion failed; exit 1\"\n");
+    let (_, json) = countercheck(d.path(), &[]);
+    let tail = json["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(!tail.contains("network = true"), "{tail}");
+}
+
 /// Without the sandbox there is no hint: the network wasn't blocked by Countercheck.
 #[test]
 fn no_internet_hint_without_the_sandbox() {
@@ -991,6 +1004,91 @@ fn hermes_hook_uses_a_fixed_base_when_the_agent_commits() {
         &[("COUNTERCHECK_BASE", base.trim())],
     );
     assert!(out.contains("\"continue\""), "{out}");
+}
+
+fn session_start(dir: &Path, session: &str) -> (i32, String) {
+    let input = serde_json::json!({
+        "session_id": session, "cwd": dir, "hook_event_name": "SessionStart", "source": "startup"
+    });
+    run_hook("session-start", &input.to_string(), &[])
+}
+
+/// The agent edits the protected test AND commits it, so HEAD now holds the weakened test. With the
+/// session's start recorded, both stop hooks still lock the checks to where the session began.
+#[test]
+fn session_start_keeps_the_checks_locked_when_the_agent_commits() {
+    let d = project(CHECKS);
+    assert_eq!(session_start(d.path(), "s1"), (0, String::new()));
+    sh(
+        d.path(),
+        "echo 'exit 0' > tests/check.sh && git commit -qam 'fix the tests'",
+    );
+    let (_, out) = claude_hook(
+        &claude_payload(d.path(), "s1", "Done, all tests pass."),
+        &[],
+    );
+    assert!(block_reason(&out).contains("FAILED"), "{out}");
+    let (_, out) = hermes_hook(&hermes_payload(d.path()), &[]);
+    assert!(out.contains("\"continue\""), "{out}");
+    // Nothing was written into the work tree.
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(d.path())
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
+}
+
+/// Without a recorded start, the base is HEAD: the documented weakness this hook closes.
+#[test]
+fn without_session_start_a_committed_test_edit_moves_the_base() {
+    let d = project(CHECKS);
+    sh(
+        d.path(),
+        "echo 'exit 0' > tests/check.sh && git commit -qam 'fix the tests'",
+    );
+    let (_, out) = claude_hook(
+        &claude_payload(d.path(), "s2", "Done, all tests pass."),
+        &[],
+    );
+    assert_eq!(out.trim(), "");
+}
+
+/// A resumed session keeps its first start; another session gets its own; COUNTERCHECK_BASE wins.
+#[test]
+fn session_start_keeps_the_first_record_and_env_wins() {
+    let d = project(CHECKS);
+    session_start(d.path(), "s1");
+    sh(
+        d.path(),
+        "echo 'exit 0' > tests/check.sh && git commit -qam weaken",
+    );
+    session_start(d.path(), "s1"); // resume: must not move the start to the weakened commit
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s1", "Done."), &[]);
+    assert!(block_reason(&out).contains("FAILED"), "{out}");
+    session_start(d.path(), "s3"); // a new session starts from the weakened commit
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s3", "Done."), &[]);
+    assert_eq!(out.trim(), "", "{out}");
+    let (_, out) = claude_hook(
+        &claude_payload(d.path(), "s3", "Done."),
+        &[("COUNTERCHECK_BASE", "HEAD~1")],
+    );
+    assert!(block_reason(&out).contains("FAILED"), "{out}");
+}
+
+/// Session start fails open and stays silent: garbage input, no session id, not a git repo.
+#[test]
+fn session_start_fails_open() {
+    let not_git = tempfile::tempdir().unwrap();
+    for input in [
+        "not json".to_string(),
+        serde_json::json!({ "cwd": not_git.path(), "session_id": "s" }).to_string(),
+        serde_json::json!({ "cwd": not_git.path() }).to_string(),
+    ] {
+        let (code, out) = run_hook("session-start", &input, &[]);
+        assert_eq!((code, out.as_str()), (0, ""), "{input}");
+    }
 }
 
 /// Run `countercheck hook claude-stop` with `input` on stdin; returns (exit code, stdout).
