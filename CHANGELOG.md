@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.2.1 (2026-10-19)
+
+**Upgrade note:** add the new `session-start` hook next to your existing stop hook (snippets in the README, "Agent
+hooks"). Without it, hooks behave as in v0.2.0.
 
 - **Security: `countercheck hook session-start`** (Claude Code / Cortex Code `SessionStart`, Hermes
   `on_session_start`). The stop hooks locked the checks to `HEAD`, so an agent that **committed** an edit to a
@@ -12,7 +15,10 @@
 - **`network = true`** on a check lets it use the internet under the macOS sandbox (writes stay confined; the receipt
   marks it). A check that fails while running without the internet gets a hint; the verdict stays FAILED, so a
   worker can't soften a failure by making a blocked network call on purpose. This removes the benchmark's only
-  false alarms (checks that call a real website).
+  false alarms (checks that call a real website). The hint only appears when the output looks like a connection
+  error.
+- **Contributors:** `docs/architecture.md` (the rules and one run step by step), step-by-step guides in
+  `.claude/skills/`, a new example `examples/ml-eval-threshold/`, DCO sign-off for pull requests.
 
 ## v0.2.0 (2026-10-19)
 

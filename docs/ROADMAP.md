@@ -13,7 +13,8 @@ section. Ideas and use cases are welcome as issues.
 | Hermes Agent hook (`hook hermes-pre-verify`) | v0.1.0 |
 | Hook lets an agent stop when it honestly reports a blocker; still pushes back on success claims and test edits | v0.2.0 |
 | Claude Code `Stop` hook (`hook claude-stop`), loop guard (max push-backs per session) | v0.2.0 |
-| `network = true` per check (internet under the macOS sandbox, marked on the receipt); a failed check that ran without internet gets a hint, verdict unchanged | DEV |
+| `network = true` per check (internet under the macOS sandbox, marked on the receipt); a failed check that ran without internet gets a hint, verdict unchanged | v0.2.1 |
+| `countercheck hook session-start`: hooks lock the checks to the commit the session started from | v0.2.1 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |
