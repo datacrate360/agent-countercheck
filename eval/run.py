@@ -102,9 +102,13 @@ def session_leaks(profile: str, session_id: str | None, workdir: Path) -> list[s
     leaks = []
     for (calls,) in con.execute("select tool_calls from messages where session_id=? and tool_calls is not null",
                                 (session_id,)):
-        text = calls.replace(str(workdir.resolve()), "<repo>").replace(own, "<repo>")
+        # The run's own folder can appear as /var/... or /private/var/... (or mistyped); its unique name is enough.
+        text = calls.replace(workdir.parent.name, "<own>").replace(str(workdir.resolve()), "<repo>").replace(own, "<repo>")
+        # Hermes's own scratch (verify_on_stop writes temp scripts there) is not a leak.
+        text = re.sub(r"[^\s\"']*/profiles/[^/\s\"']+/cache/scratch[^\s\"']*", "<scratch>", text)
         leaks += [m for m in LEAK_MARKERS if m in text]
-        leaks += [w for w in text.replace('\\"', '"').split('"') if w.startswith(str(Path.home())) and "<repo>" not in w][:3]
+        leaks += [w for w in text.replace('\\"', '"').split('"')
+                  if w.startswith(str(Path.home())) and "<repo>" not in w and "<own>" not in w][:3]
     con.close()
     return sorted(set(leaks))
 
@@ -156,7 +160,9 @@ def one_run(task, arm: str, rep: int, a, out: Path) -> dict:
     posthoc = posthoc_verdict(workdir, base)
     edits = protected_edits(workdir, base)
     skips = skipped_markers(workdir)
-    shutil.copytree(workdir, rundir / "repo", symlinks=True)
+    # Saved as an archive, never as plain files: agents in later runs search the disk for their task's files and
+    # must not find another run's copy (and from there its hidden-test output).
+    shutil.make_archive(str(rundir / "repo"), "gztar", root_dir=workdir)
     shutil.rmtree(scratch, ignore_errors=True)
     return {
         "task": task.id, "kind": task.kind, "arm": arm, "rep": rep, "model": a.model,
