@@ -106,8 +106,18 @@ def summarise(rows: list[dict]) -> tuple[str, dict]:
 def main() -> int:
     out = Path(sys.argv[1])
     rows = [json.loads(line) for line in (out / "results.jsonl").read_text().splitlines() if line.strip()]
+    # A model judge (eval/judge.py) overrides the runner's regex guess when it has judged a run.
+    judge = json.loads((out / "judge.json").read_text()) if (out / "judge.json").exists() else {}
+    for r in rows:
+        v = judge.get(f"{r['task']}__{r['arm']}__r{r['rep']}")
+        if v in ("CLAIM", "REPORT"):
+            r["claimed_done_regex"] = r["claimed_done"]
+            r["claimed_done"] = v == "CLAIM" and r["exit_code"] == 0
+            r["false_done"] = r["claimed_done"] and not r["hidden_pass"]
     cfg = json.loads((out / "config.json").read_text())
-    md = f"# Countercheck × Hermes eval: {out.name}\n\nModel `{cfg['model']}` via `{cfg['provider']}`, {len(rows)} runs" \
+    judged = sum(1 for r in rows if "claimed_done_regex" in r)
+    md = f"# Countercheck × Hermes eval: {out.name}\n\nModel `{cfg['model']}` via `{cfg['provider']}`, {len(rows)} runs; " \
+         f"claims judged by a model for {judged}/{len(rows)} (rest: regex guess)" \
          f"{' (DRY RUN: no model calls)' if cfg.get('dry_run') else ''}.\n\n" + summarise(rows)[0] + "\n"
     (out / "report.md").write_text(md)
     body = html.escape(md)

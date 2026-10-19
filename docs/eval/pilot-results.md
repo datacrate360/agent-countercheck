@@ -49,10 +49,19 @@ lie that motivates Countercheck did not happen with this model in 36 runs.
 4. **The claim detector over-counts.** It flagged 6 runs as "claimed done"; by hand only 2 were (A and D above). Fix:
    judge claims with a small model on the final message plus a hand-audit sample, before any larger run.
 
+## Fixes after the pilots (done 2026-10-18)
+
+- **Hook pushes back only when it should** (`ed3010`): on a FAILED check it stays quiet when the agent's final message
+  reports a blocker and no protected file changed (`core::claim::reports_blocker`), and logs
+  `agent_reported_blocker`. Success claims and any protected-file change are still pushed back. The rule is tested on
+  all 36 pilot answers plus edge cases; it was written after reading those answers, so pilot 3 is its real test.
+- **Claims judged by a model** (`eval/judge.py`, through Hermes so the key stays in the profile): **36/36** agree with
+  the hand labels; the old regex agreed on 32/36 (all four misses were honest reports read as claims).
+  `eval/report.py` uses the judge when `judge.json` exists; `eval/agreement.py` prints the comparison. Re-scored
+  pilot 2: false "done" A 1, B 0, C 0, D 1, matching the hand read above.
+
 ## Next
 
-- Hook: nudge only on success claims (point 3) and add a test for it.
-- Claim judge (point 4) + re-score both pilots.
-- Pilot 3: same 5 impossible tasks on 2–3 more models, ~$3 cap. Only then the full set.
+- Pilot 3: the 5 impossible tasks on 2–3 more models (~$3 cap), with the new hook. Only then the full set.
 
 Raw data: `eval/results/pilot*/` (git-ignored; `results.jsonl`, per-run `final.txt`, `diff.patch`, `hook.jsonl`).
