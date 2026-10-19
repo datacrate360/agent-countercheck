@@ -49,7 +49,18 @@ fn sb_str(p: &Path) -> String {
         .replace('"', "\\\"")
 }
 
-fn seatbelt_profile(workdir: &Path, tmp: &Path) -> String {
+fn seatbelt_profile(workdir: &Path, tmp: &Path, network: bool) -> String {
+    if network {
+        // `network = true`: the project says this check needs the internet. Writes stay confined.
+        return format!(
+            "(version 1)\n(allow default)\n\
+             (deny file-write*)\n\
+             (allow file-write* (subpath \"{}\") (subpath \"{}\") (literal \"/dev/null\") \
+             (regex #\"^/dev/tty\") (regex #\"^/dev/fd/\"))\n",
+            sb_str(workdir),
+            sb_str(tmp)
+        );
+    }
     format!(
         // Network: the internet is blocked, this machine's loopback is allowed. Web tests start a
         // local server and a browser that talk over localhost (Playwright, Cypress, pytest-httpserver);
@@ -80,7 +91,9 @@ pub fn run_check(
         Sandbox::None => Command::new("sh"),
         Sandbox::Seatbelt => {
             let mut c = Command::new("/usr/bin/sandbox-exec");
-            c.arg("-p").arg(seatbelt_profile(workdir, tmp)).arg("sh");
+            c.arg("-p")
+                .arg(seatbelt_profile(workdir, tmp, spec.network))
+                .arg("sh");
             c
         }
     };
@@ -134,6 +147,7 @@ pub fn run_check(
         passed: !timed_out && exit_code == Some(0),
         output_tail,
         output_sha256,
+        network: spec.network,
     };
     if let Some(b) = &spec.budget
         && result.passed
@@ -146,8 +160,19 @@ pub fn run_check(
             format!("{}\n{line}", result.output_tail)
         };
     }
+    // Only when the command itself failed (not when it passed but missed a budget).
+    let command_failed = timed_out || exit_code != Some(0);
+    if command_failed && sandbox == Sandbox::Seatbelt && !spec.network {
+        // A hint only: the verdict never changes, or a worker could fail on purpose behind a
+        // blocked network call to turn FAILED into something softer.
+        result.output_tail.push_str(NO_INTERNET_HINT);
+    }
     Ok(result)
 }
+
+/// Added to a failed check that ran without internet access.
+pub const NO_INTERNET_HINT: &str = "\n[countercheck] this check ran without internet access (sandbox); \
+    if it needs the internet, set `network = true` on it in .countercheck/checks.toml";
 
 /// Longest output line looked at for a `METRIC` value; longer lines are skipped.
 const MAX_METRIC_LINE: usize = 4096;

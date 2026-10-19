@@ -31,6 +31,27 @@ run = "pytest -q"
 timeout_secs = 600          # optional, default 600, max 7200
 ```
 
+### Checks that need the internet
+
+On macOS, checks run in a sandbox with no internet (this machine's localhost still works), so a check can't
+quietly depend on, or leak to, an outside service. If a check really needs the internet (a live API, a package
+registry, a real website), say so on that check:
+
+```toml
+[[check]]
+name = "live api"
+run = "pytest tests/test_live_api.py"
+network = true
+```
+
+- Only that check gets the internet; writes outside the check folder stay blocked. The receipt marks it
+  (`internet allowed`).
+- It lives in the locked check file, so a worker can't grant itself the internet.
+- When a check fails while it ran without the internet, Countercheck adds a hint saying so. The verdict stays
+  FAILED: a failure that might be caused by the missing internet is still a failure until the check file says the
+  check may use it.
+- On Linux there is no sandbox yet, so checks always have the internet there.
+
 ## Matrix
 
 Runs one check once per value. Each run is its own result on the receipt, named `<name> [<key>=<value>]`, so you see

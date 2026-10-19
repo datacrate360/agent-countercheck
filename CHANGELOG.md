@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **`network = true`** on a check lets it use the internet under the macOS sandbox (writes stay confined; the receipt
+  marks it). A check that fails while running without the internet gets a hint; the verdict stays FAILED, so a
+  worker can't soften a failure by making a blocked network call on purpose. This removes the benchmark's only
+  false alarms (checks that call a real website).
+
 ## v0.2.0 (2026-10-19)
 
 **Upgrade if you use Countercheck on Linux.** In v0.1.0, when a check ran past its time limit, Countercheck

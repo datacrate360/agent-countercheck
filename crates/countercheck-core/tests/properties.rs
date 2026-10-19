@@ -42,6 +42,7 @@ fn check_result() -> impl Strategy<Value = CheckResult> {
                     passed,
                     output_tail,
                     output_sha256,
+                    network: false,
                 }
             },
         )
@@ -197,6 +198,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
             passed: false,
             output_tail: String::new(),
             output_sha256: String::new(),
+            network: false,
         });
         return &mut r.checks[0];
     }
@@ -204,7 +206,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 32;
+const EDITS: usize = 33;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -268,6 +270,7 @@ fn edit(r: &mut Receipt, which: usize) {
         28 => first_check(r).output_tail.push('x'),
         29 => first_check(r).output_sha256.push('x'),
         30 => r.verdict = other_verdict(r.verdict),
+        31 => first_check(r).network ^= true,
         _ => r.reasons.push(String::new()),
     }
 }

@@ -77,6 +77,7 @@ pub fn forbid_all(
                 duration_ms,
                 passed,
                 output_sha256: countercheck_core::sha256_hex(output.as_bytes()),
+                network: false,
                 output_tail: output,
             }
         })
@@ -117,6 +118,7 @@ pub fn coverage_all(
             duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             passed,
             output_sha256: countercheck_core::sha256_hex(output.as_bytes()),
+            network: false,
             output_tail: output,
         });
     }

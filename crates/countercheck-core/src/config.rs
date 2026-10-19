@@ -75,6 +75,10 @@ pub struct CheckSpec {
     /// After `run` passes, a `METRIC <name>=<number>` it printed must be within limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<BudgetSpec>,
+    /// The check needs the internet: run it with network access even under the sandbox. Set in the
+    /// locked check file, so a worker can't grant itself the internet.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub network: bool,
 }
 
 /// One run of a check, after matrix expansion: what the runner executes.
@@ -90,6 +94,8 @@ pub struct PlannedCheck {
     /// The golden comparison, with `{key}` replaced in its paths.
     pub golden: Option<GoldenSpec>,
     pub budget: Option<BudgetSpec>,
+    /// Internet allowed for this run (`network = true` on the check).
+    pub network: bool,
 }
 
 fn default_timeout() -> u64 {
@@ -335,6 +341,7 @@ fn plan_inner(
                 env: Vec::new(),
                 golden: planned_golden(c, None, &protected)?,
                 budget: c.budget.clone(),
+                network: c.network,
             });
             continue;
         };
@@ -360,6 +367,7 @@ fn plan_inner(
                 env: vec![(matrix::env_name(key), v.clone())],
                 golden: planned_golden(c, Some((key, v)), &protected)?,
                 budget: c.budget.clone(),
+                network: c.network,
             });
             if out.len() > matrix::MAX_EXPANSIONS {
                 break; // refused just below; stop before building more
@@ -414,6 +422,17 @@ mod tests {
             parse("protected = [\"tests/**\"]\n[[check]]\nname = \"t\"\nrun = \"true\"\n").unwrap();
         assert_eq!(f.checks[0].timeout_secs, DEFAULT_TIMEOUT_SECS);
         assert_eq!(f.protected_patterns(), vec!["tests/**", ".countercheck/**"]);
+    }
+
+    #[test]
+    fn network_is_off_unless_the_check_file_turns_it_on() {
+        let f = parse(
+            "[[check]]\nname = \"a\"\nrun = \"true\"\n[[check]]\nname = \"b\"\nrun = \"true\"\nnetwork = true\n",
+        )
+        .unwrap();
+        assert!(!f.checks[0].network);
+        assert!(f.checks[1].network);
+        assert!(parse("[[check]]\nname = \"a\"\nrun = \"true\"\nnetwork = \"yes\"\n").is_err());
     }
 
     #[test]

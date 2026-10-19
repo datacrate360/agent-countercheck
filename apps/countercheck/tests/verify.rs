@@ -197,6 +197,78 @@ fn seatbelt_blocks_writes_outside_the_check_folder() {
 
 /// Web tests run a local server and a browser over localhost: the sandbox must allow that, or
 /// honest work is reported as FAILED. The internet stays blocked.
+/// `network = true`: the check reaches the internet under the sandbox (EPERM would mean blocked),
+/// while writes outside the check folder stay blocked; the receipt marks it.
+#[cfg(target_os = "macos")]
+#[test]
+fn network_true_lets_a_check_use_the_internet_but_not_write_outside() {
+    if nested() {
+        return; // covered by the outer run; macOS can't nest sandboxes
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().canonicalize().unwrap().join("leak.txt");
+    let checks = format!(
+        "[[check]]\nname = \"net\"\nrun = \"python3 tests/net.py\"\nnetwork = true\n\
+         [[check]]\nname = \"write\"\nrun = \"echo x > {}\"\nnetwork = true\n",
+        target.display()
+    );
+    let d = project(&checks);
+    // Exits 0 when the connection isn't refused by the sandbox (EPERM); a plain network error
+    // (offline machine) also counts as "not blocked by us".
+    fs::write(
+        d.path().join("tests/net.py"),
+        "import socket, sys\ntry:\n    socket.create_connection(('1.1.1.1', 443), timeout=5)\n\
+         except PermissionError:\n    sys.exit(1)\nexcept OSError:\n    pass\n",
+    )
+    .unwrap();
+    sh(d.path(), "git add -A && git commit -qm probes");
+    let (code, json) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{json}");
+    let checks = json["checks"].as_array().unwrap();
+    assert_eq!(
+        checks[0]["passed"], true,
+        "internet blocked despite network = true: {json}"
+    );
+    assert_eq!(checks[0]["network"], true);
+    assert_eq!(checks[1]["passed"], false, "write outside allowed: {json}");
+    assert!(!target.exists());
+}
+
+/// A check that fails without internet gets a hint, but the verdict stays FAILED: a worker must
+/// not be able to soften a failure by making a blocked network call on purpose.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_failed_check_without_internet_gets_a_hint_and_stays_failed() {
+    if nested() {
+        return;
+    }
+    let d = project("[[check]]\nname = \"fetch\"\nrun = \"python3 tests/fetch.py\"\n");
+    fs::write(
+        d.path().join("tests/fetch.py"),
+        "import socket\nsocket.create_connection(('1.1.1.1', 443), timeout=5)\n",
+    )
+    .unwrap();
+    sh(d.path(), "git add -A && git commit -qm fetch");
+    let (code, json) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{json}");
+    assert_eq!(json["verdict"], "failed");
+    let tail = json["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(tail.contains("network = true"), "{tail}");
+    assert!(
+        json["checks"][0].get("network").is_none(),
+        "absent when false: {json}"
+    );
+}
+
+/// Without the sandbox there is no hint: the network wasn't blocked by Countercheck.
+#[test]
+fn no_internet_hint_without_the_sandbox() {
+    let d = project("[[check]]\nname = \"bad\"\nrun = \"exit 1\"\n");
+    let (_, json) = countercheck(d.path(), &["--sandbox", "none"]);
+    let tail = json["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(!tail.contains("network = true"), "{tail}");
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn seatbelt_allows_localhost_but_not_the_internet() {

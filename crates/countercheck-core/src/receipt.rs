@@ -56,6 +56,9 @@ pub struct CheckResult {
     pub output_tail: String,
     /// SHA-256 of the full combined output.
     pub output_sha256: String,
+    /// The check ran with internet access (`network = true`). Absent on older receipts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub network: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -234,8 +237,9 @@ impl Receipt {
         }
         for r in &self.checks {
             let mark = if r.passed { "pass" } else { "FAIL" };
+            let net = if r.network { ", internet allowed" } else { "" };
             s.push_str(&format!(
-                "  [{mark}] {}  ({} ms)  $ {}\n",
+                "  [{mark}] {}  ({} ms{net})  $ {}\n",
                 r.name, r.duration_ms, r.run
             ));
             if !r.passed {
@@ -281,6 +285,7 @@ mod tests {
             passed,
             output_tail: String::new(),
             output_sha256: String::new(),
+            network: false,
         }
     }
 
