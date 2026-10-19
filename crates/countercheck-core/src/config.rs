@@ -166,6 +166,36 @@ mod tests {
     }
 
     #[test]
+    fn limits_are_inclusive() {
+        let one = "[[check]]\nname = \"a\"\nrun = \"x\"\n";
+        // The size cap is 64 KiB: a file of exactly that size is read, one byte more is refused.
+        let at_cap = format!("{one}{}", "#".repeat(65536 - one.len()));
+        assert!(parse(&at_cap).is_ok());
+        assert!(
+            parse(&format!("{at_cap}#"))
+                .unwrap_err()
+                .contains("larger than")
+        );
+        let with_timeout = |t: u64| format!("{one}timeout_secs = {t}\n");
+        assert!(parse(&with_timeout(1)).is_ok());
+        assert!(parse(&with_timeout(7200)).is_ok());
+        assert!(
+            parse(&with_timeout(7201))
+                .unwrap_err()
+                .contains("between 1 and 7200")
+        );
+    }
+
+    #[test]
+    fn link_entries_with_empty_or_dot_segments_are_refused() {
+        for bad in ["a//b", "a/", "./x", "a/./b", "."] {
+            let t = format!("link=[\"{bad}\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n");
+            assert!(parse(&t).is_err(), "{bad}");
+        }
+        assert!(parse("link=[\"a/b\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n").is_ok());
+    }
+
+    #[test]
     fn template_parses() {
         assert!(parse(TEMPLATE).is_ok());
     }

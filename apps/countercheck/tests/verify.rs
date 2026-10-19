@@ -221,6 +221,24 @@ fn edited_receipts_are_detected() {
 }
 
 #[test]
+fn receipts_with_a_reported_cost_keep_their_seal() {
+    // 36 * 0.000003: JSON read it back as 0.000108, one bit off, and `show` said BROKEN.
+    let d = project(CHECKS);
+    let (_, r) = countercheck(d.path(), &["--cost-usd", "0.00010800000000000001"]);
+    let path = d
+        .path()
+        .join(".countercheck/receipts")
+        .join(format!("{}.json", r["id"].as_str().unwrap()));
+    let code = Command::new(BIN)
+        .arg("show")
+        .arg(&path)
+        .status()
+        .unwrap()
+        .code();
+    assert_eq!(code, Some(0));
+}
+
+#[test]
 fn ignored_dependency_folders_can_be_linked() {
     let base = "protected = [\"tests/**\"]\n[[check]]\nname = \"dep\"\nrun = \"sh deps/lib.sh\"\n";
     let d = project(&format!("link = [\"deps\"]\n{base}"));
