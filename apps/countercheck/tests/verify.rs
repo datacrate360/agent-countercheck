@@ -142,6 +142,38 @@ fn timeouts_fail() {
     assert_eq!(r["checks"][0]["timed_out"], true);
 }
 
+/// A timed-out check's background children die with it (the whole process group is killed).
+#[test]
+fn timeouts_kill_the_whole_process_group() {
+    let outside = tempfile::tempdir().unwrap();
+    let pid_file = outside.path().join("bg.pid");
+    let checks = format!(
+        "[[check]]\nname = \"bg\"\nrun = \"sleep 60 & echo $! > '{}'; wait\"\ntimeout_secs = 1\n",
+        pid_file.display()
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["timed_out"], true);
+    let pid = fs::read_to_string(&pid_file).unwrap();
+    // Gone, or a zombie waiting to be reaped: either way it no longer runs.
+    let running = || {
+        let out = Command::new("ps")
+            .args(["-o", "stat=", "-p", pid.trim()])
+            .output()
+            .unwrap();
+        let stat = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        !stat.is_empty() && !stat.starts_with('Z')
+    };
+    for _ in 0..20 {
+        if !running() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("background process {} survived the timeout", pid.trim());
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn seatbelt_blocks_writes_outside_the_check_folder() {
@@ -274,6 +306,468 @@ fn cache_files_are_not_reported() {
     let (code, r) = countercheck(p, &[]);
     assert_eq!(code, 0, "{r:#}");
     assert_eq!(r["protected_changes"].as_array().unwrap().len(), 0);
+}
+
+/// Names of the checks on a receipt, in order.
+fn check_names(r: &serde_json::Value) -> Vec<String> {
+    r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The receipt entry for the check called `name`.
+fn check<'a>(r: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
+    r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == name)
+        .unwrap_or_else(|| panic!("no check {name} in {r:#}"))
+}
+
+#[test]
+fn matrix_runs_once_per_target_and_names_the_failing_one() {
+    // Target 2 fails; the value is both in the command and in the environment.
+    let d = project(
+        "[[check]]\nname = \"target\"\nrun = \"[ \\\"$COUNTERCHECK_MATRIX_N\\\" = {n} ] && [ {n} != 2 ]\"\n\
+         matrix = { n = [\"1\", \"2\", \"3\"] }\n",
+    );
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(
+        check_names(&r),
+        vec!["target [n=1]", "target [n=2]", "target [n=3]"]
+    );
+    assert_eq!(check(&r, "target [n=1]")["passed"], true);
+    assert_eq!(check(&r, "target [n=2]")["passed"], false);
+    assert_eq!(
+        check(&r, "target [n=2]")["run"],
+        "[ \"$COUNTERCHECK_MATRIX_N\" = 2 ] && [ 2 != 2 ]"
+    );
+    assert_eq!(check(&r, "target [n=3]")["passed"], true);
+    let reasons = r["reasons"].to_string();
+    assert!(reasons.contains("target [n=2]"), "{reasons}");
+    assert!(!reasons.contains("target [n=1]"), "{reasons}");
+}
+
+#[test]
+fn matrix_file_edited_by_the_worker_is_ignored() {
+    let d = project(
+        "[[check]]\nname = \"target\"\nrun = \"[ {n} != 2 ]\"\n\
+         matrix_file = { n = \".countercheck/targets.txt\" }\n",
+    );
+    let p = d.path();
+    fs::write(p.join(".countercheck/targets.txt"), "# targets\n1\n2\n").unwrap();
+    sh(p, "git add -A && git commit -qm targets");
+    // The worker drops the failing target from the list.
+    fs::write(p.join(".countercheck/targets.txt"), "1\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check_names(&r), vec!["target [n=1]", "target [n=2]"]);
+    assert_eq!(check(&r, "target [n=2]")["passed"], false);
+    assert_eq!(
+        r["protected_changes"][0]["path"],
+        ".countercheck/targets.txt"
+    );
+}
+
+#[test]
+fn matrix_values_that_are_not_plain_are_refused() {
+    let d = project(
+        "[[check]]\nname = \"t\"\nrun = \"echo {n}\"\nmatrix = { n = [\"a;touch pwned\"] }\n",
+    );
+    let out = Command::new(BIN)
+        .args(["verify", "--sandbox", "none", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("not allowed"), "{err}");
+    assert!(!d.path().join("pwned").exists());
+}
+
+const FORBID: &str = "[[forbid]]\nname = \"no oracle syntax\"\npattern = '\\(\\+\\)|\\bDECODE\\s*\\('\n\
+                      paths = [\"sql/**/*.sql\"]\nmessage = \"Convert these to the new syntax.\"\ncase_insensitive = true\n";
+
+#[test]
+fn forbid_hit_fails_with_path_and_line() {
+    let d = project(&format!("{CHECKS}{FORBID}"));
+    let p = d.path();
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    fs::create_dir_all(p.join("sql/sales")).unwrap();
+    fs::write(
+        p.join("sql/sales/q.sql"),
+        "select 1\nfrom a, b where a.id = b.id(+)\n",
+    )
+    .unwrap();
+    fs::write(p.join("sql/ok.sql"), "select coalesce(x, 0) from t\n").unwrap();
+    // Outside `paths`: not scanned.
+    fs::write(p.join("src/old.sql"), "select decode(x, 1, 2) from t\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "calc")["passed"], true);
+    let f = check(&r, "forbid: no oracle syntax");
+    assert_eq!(f["passed"], false);
+    let out = f["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("sql/sales/q.sql:2: from a, b where a.id = b.id(+)"),
+        "{out}"
+    );
+    assert!(
+        out.starts_with("1 forbidden line(s) in 1 file(s); 2 file(s) scanned"),
+        "{out}"
+    );
+    assert!(out.ends_with("Convert these to the new syntax."), "{out}");
+    assert!(!out.contains("src/old.sql"), "{out}");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("forbid: no oracle syntax")
+    );
+}
+
+#[test]
+fn forbid_with_no_matching_files_passes_and_says_so() {
+    let d = project(&format!("{CHECKS}{FORBID}"));
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let f = check(&r, "forbid: no oracle syntax");
+    assert_eq!(f["passed"], true);
+    assert_eq!(
+        f["output_tail"],
+        "no files match sql/**/*.sql; nothing to scan"
+    );
+}
+
+/// A file that is only `[[forbid]]` works, and a binary file is listed as skipped, not scanned.
+#[test]
+fn forbid_alone_skips_binary_files() {
+    let d = project(FORBID);
+    let p = d.path();
+    fs::create_dir_all(p.join("sql")).unwrap();
+    fs::write(p.join("sql/a.sql"), "select 1\n").unwrap();
+    fs::write(p.join("sql/blob.sql"), b"decode(\0\x01").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.contains("no forbidden lines in 1 file(s)"), "{out}");
+    assert!(
+        out.contains("skipped 1 file(s) (binary or over 5 MiB): sql/blob.sql"),
+        "{out}"
+    );
+}
+
+const EXPECTED_CSV: &str = "id,region,total\n1,north,10.5\n2,south,20\n3,east,30.25\n";
+
+/// A project whose check runs the worker's `src/export.sh` and compares `out/totals.csv` with a
+/// locked reference. `golden_extra` adds keys to the golden table (mode, tolerance, sort_rows).
+fn golden_project(golden_extra: &str) -> tempfile::TempDir {
+    let d = project(&format!(
+        "[[check]]\nname = \"totals\"\nrun = \"mkdir -p out && sh src/export.sh > out/totals.csv\"\n\
+         golden = {{ output = \"out/totals.csv\", expected = \".countercheck/golden/totals.csv\"{golden_extra} }}\n"
+    ));
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/golden")).unwrap();
+    fs::write(p.join(".countercheck/golden/totals.csv"), EXPECTED_CSV).unwrap();
+    fs::write(p.join("src/export.sh"), "echo not yet\n").unwrap();
+    sh(p, "git add -A && git commit -qm golden");
+    d
+}
+
+/// The worker's export prints `csv`.
+fn export_prints(d: &Path, csv: &str) {
+    fs::write(d.join("src/export.sh"), format!("cat <<'EOF'\n{csv}EOF\n")).unwrap();
+}
+
+#[test]
+fn golden_csv_rows_in_another_order_pass_only_with_sort_rows() {
+    let shuffled = "id,region,total\n3,east,30.25\n1,north,10.5\n2,south,20\n";
+    let d = golden_project(", mode = \"csv\", sort_rows = true");
+    export_prints(d.path(), shuffled);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert!(
+        r["checks"][0]["output_tail"]
+            .as_str()
+            .unwrap()
+            .ends_with("golden: out/totals.csv matches .countercheck/golden/totals.csv")
+    );
+
+    let d = golden_project(", mode = \"csv\"");
+    export_prints(d.path(), shuffled);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let c = &r["checks"][0];
+    assert_eq!(c["exit_code"], 0);
+    let out = c["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("golden: out/totals.csv does not match"),
+        "{out}"
+    );
+    assert!(out.contains("row 1, column id: expected 1, got 3"), "{out}");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("failed (exit 0; its output did not pass)")
+    );
+}
+
+#[test]
+fn golden_csv_numbers_compare_within_the_tolerance() {
+    let near = "id,region,total\n1,north,10.5000004\n2,south,20\n3,east,30.25\n";
+    let far = "id,region,total\n1,north,10.51\n2,south,20\n3,east,30.25\n";
+    let d = golden_project(", mode = \"csv\", tolerance = 1e-6");
+    export_prints(d.path(), near);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    export_prints(d.path(), far);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("row 1, column total: expected 10.5, got 10.51"),
+        "{out}"
+    );
+}
+
+#[test]
+fn golden_file_edited_by_the_worker_is_ignored() {
+    let wrong = "id,region,total\n1,north,99\n";
+    let d = golden_project(", mode = \"csv\"");
+    let p = d.path();
+    export_prints(p, wrong);
+    // The worker "updates" the reference to match its wrong output.
+    fs::write(p.join(".countercheck/golden/totals.csv"), wrong).unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(
+        r["protected_changes"][0]["path"],
+        ".countercheck/golden/totals.csv"
+    );
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("row count differs: expected 3, got 1"),
+        "{out}"
+    );
+}
+
+#[test]
+fn golden_text_mode_reports_the_first_differing_line() {
+    let d = golden_project("");
+    export_prints(
+        d.path(),
+        "id,region,total\n1,north,10.5\n2,SOUTH,20\n3,east,30.25\n",
+    );
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("line 3: expected \"2,south,20\", got \"2,SOUTH,20\""),
+        "{out}"
+    );
+    // Same content with CRLF line endings matches.
+    export_prints(d.path(), &EXPECTED_CSV.replace('\n', "\r\n"));
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+}
+
+/// A missing output fails plainly, and an output the worker committed doesn't count: only what
+/// the command writes is compared.
+#[test]
+fn golden_output_must_be_written_by_the_check() {
+    let d = project(
+        "[[check]]\nname = \"totals\"\nrun = \"true\"\n\
+         golden = { output = \"out/totals.csv\", expected = \".countercheck/golden/totals.csv\" }\n",
+    );
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/golden")).unwrap();
+    fs::write(p.join(".countercheck/golden/totals.csv"), EXPECTED_CSV).unwrap();
+    sh(p, "git add -A && git commit -qm golden");
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("the check did not write its output file out/totals.csv"),
+        "{out}"
+    );
+    // The worker commits a perfect copy as the "output": still not written by the check.
+    fs::create_dir_all(p.join("out")).unwrap();
+    fs::write(p.join("out/totals.csv"), EXPECTED_CSV).unwrap();
+    let (code, _) = countercheck(p, &[]);
+    assert_eq!(code, 2);
+}
+
+#[test]
+fn golden_works_with_a_matrix() {
+    let d = project(
+        "[[check]]\nname = \"tenant\"\nrun = \"mkdir -p out && sh src/export.sh {t} > out/{t}.csv\"\n\
+         matrix = { t = [\"a\", \"b\"] }\n\
+         golden = { output = \"out/{t}.csv\", expected = \".countercheck/golden/{t}.csv\", mode = \"csv\" }\n",
+    );
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/golden")).unwrap();
+    fs::write(p.join(".countercheck/golden/a.csv"), "t,n\na,1\n").unwrap();
+    fs::write(p.join(".countercheck/golden/b.csv"), "t,n\nb,2\n").unwrap();
+    sh(p, "git add -A && git commit -qm golden");
+    // Right for a, wrong for b.
+    fs::write(p.join("src/export.sh"), "printf 't,n\\n%s,1\\n' \"$1\"\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "tenant [t=a]")["passed"], true);
+    let b = check(&r, "tenant [t=b]");
+    assert_eq!(b["passed"], false);
+    let out = b["output_tail"].as_str().unwrap();
+    assert!(out.contains("row 1, column n: expected 2, got 1"), "{out}");
+}
+
+/// A project whose "bench" check runs the worker's `src/bench.sh` with a budget on `seconds`.
+fn budget_project(budget: &str, matrix: &str) -> tempfile::TempDir {
+    project(&format!(
+        "[[check]]\nname = \"bench\"\nrun = \"sh src/bench.sh{}\"\nbudget = {{ {budget} }}\n{matrix}",
+        if matrix.is_empty() { "" } else { " {n}" }
+    ))
+}
+
+#[test]
+fn budget_within_and_over_the_limit() {
+    let d = budget_project("metric = \"seconds\", max = 30", "");
+    let p = d.path();
+    fs::write(
+        p.join("src/bench.sh"),
+        "echo 'METRIC seconds=41'\necho 'METRIC seconds=12.4'\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.ends_with("budget: seconds = 12.4 (max 30; within the limit)"),
+        "{out}"
+    );
+
+    fs::write(p.join("src/bench.sh"), "echo 'METRIC seconds=31.5'\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.ends_with("budget: seconds = 31.5 (max 30; over the limit)"),
+        "{out}"
+    );
+    assert!(r["reasons"].to_string().contains("its output did not pass"));
+}
+
+#[test]
+fn budget_metric_missing_fails_and_early_lines_count() {
+    let d = budget_project("metric = \"seconds\", min = 1", "");
+    let p = d.path();
+    fs::write(p.join("src/bench.sh"), "echo done\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("the output has no \"METRIC seconds=<number>\" line"),
+        "{out}"
+    );
+    // The metric line is far before the last lines of output: still found.
+    fs::write(
+        p.join("src/bench.sh"),
+        "echo 'METRIC seconds=2'\ni=0; while [ $i -lt 5000 ]; do echo noise $i; i=$((i+1)); done\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+}
+
+#[test]
+fn budget_works_with_a_matrix() {
+    let d = budget_project(
+        "metric = \"seconds\", max = 10",
+        "matrix = { n = [\"5\", \"20\"] }\n",
+    );
+    fs::write(
+        d.path().join("src/bench.sh"),
+        "echo \"METRIC seconds=$1\"\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "bench [n=5]")["passed"], true);
+    assert_eq!(check(&r, "bench [n=20]")["passed"], false);
+}
+
+/// A project with a coverage entry over `sql/**/*.sql` for the procedures in a locked list.
+fn coverage_project() -> tempfile::TempDir {
+    let d = project(
+        "[[coverage]]\nname = \"every procedure converted\"\nitems = \".countercheck/inventory/procs.txt\"\n\
+         paths = [\"sql/**/*.sql\"]\npattern = 'CREATE\\s+OR\\s+REPLACE\\s+PROCEDURE\\s+{item}\\b'\ncase_insensitive = true\n",
+    );
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/inventory")).unwrap();
+    fs::write(
+        p.join(".countercheck/inventory/procs.txt"),
+        "# procedures to convert\nload_orders\nload_items\nclose_month\n",
+    )
+    .unwrap();
+    fs::create_dir_all(p.join("sql")).unwrap();
+    sh(p, "git add -A && git commit -qm inventory");
+    d
+}
+
+#[test]
+fn coverage_lists_missing_items() {
+    let d = coverage_project();
+    let p = d.path();
+    fs::write(
+        p.join("sql/orders.sql"),
+        "create or replace\n  procedure load_orders() as $$ $$;\nCREATE OR REPLACE PROCEDURE load_items_v2() AS $$ $$;\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let c = check(&r, "coverage: every procedure converted");
+    let out = c["output_tail"].as_str().unwrap();
+    assert!(
+        out.starts_with("2 of 3 item(s) missing; 1 file(s) scanned"),
+        "{out}"
+    );
+    assert!(
+        out.contains("missing: load_items\nmissing: close_month"),
+        "{out}"
+    );
+
+    fs::write(
+        p.join("sql/rest.sql"),
+        "CREATE OR REPLACE PROCEDURE load_items() AS $$ $$;\nCREATE OR REPLACE PROCEDURE close_month() AS $$ $$;\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(
+        r["checks"][0]["output_tail"],
+        "all 3 item(s) found in 2 file(s)"
+    );
+}
+
+#[test]
+fn coverage_list_edited_by_the_worker_is_ignored() {
+    let d = coverage_project();
+    let p = d.path();
+    fs::write(
+        p.join("sql/orders.sql"),
+        "CREATE OR REPLACE PROCEDURE load_orders() AS $$ $$;\n",
+    )
+    .unwrap();
+    // The worker trims the inventory to what it converted.
+    fs::write(p.join(".countercheck/inventory/procs.txt"), "load_orders\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.starts_with("2 of 3 item(s) missing"), "{out}");
 }
 
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).

@@ -9,8 +9,10 @@
 )]
 
 mod git;
+mod golden;
 mod hook;
 mod runner;
+mod scan;
 mod snapshot;
 mod verify;
 

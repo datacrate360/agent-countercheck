@@ -17,6 +17,11 @@ serde_json = { workspace = true, features = ["float_roundtrip"] }
 toml = { workspace = true }
 sha2 = { workspace = true }
 globset = { workspace = true }
+# Linear-time matching: forbid/coverage patterns come from a repository we don't control.
+regex = { workspace = true }
+# Golden csv comparison.
+csv = { workspace = true }
 
 [dev-dependencies]
 proptest = "1"
+regex = { workspace = true }

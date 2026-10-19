@@ -433,7 +433,7 @@ proptest! {
 
     #[test]
     fn always_protected_covers_the_check_file(pats in patterns(), p in rel_path()) {
-        let file = config::ChecksFile { protected: pats, checks: vec![], link: vec![] };
+        let file = config::ChecksFile { protected: pats, ..Default::default() };
         let set = Protected::new(&file.protected_patterns()).map_err(TestCaseError::fail)?;
         prop_assert!(set.matches(config::CHECKS_PATH));
         let inside = format!(".countercheck/{p}");
@@ -527,7 +527,7 @@ proptest! {
 
     #[test]
     fn protected_patterns_keep_the_file_patterns(pats in proptest::collection::vec("[a-z*/.]{0,8}", 0..5)) {
-        let file = config::ChecksFile { protected: pats.clone(), checks: vec![], link: vec![] };
+        let file = config::ChecksFile { protected: pats.clone(), ..Default::default() };
         let out = file.protected_patterns();
         prop_assert_eq!(&out[..pats.len()], &pats[..]);
         prop_assert!(out.iter().any(|p| p == ALWAYS_PROTECTED));
@@ -628,5 +628,191 @@ proptest! {
             let text = format!("{before} {p} {after}");
             prop_assert!(reports_blocker(&text), "{:?}", text);
         }
+    }
+}
+
+// ---- matrix ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(2048))]
+
+    /// A matrix value goes into `sh -c`: anything that passes validation is shell-inert.
+    #[test]
+    fn valid_matrix_values_have_no_shell_metacharacters(v in prop_oneof![any::<String>(), "[A-Za-z0-9_.;$`'\" |&-]{0,12}"]) {
+        use countercheck_core::matrix::valid_value;
+        if valid_value(&v) {
+            let meta = [' ', '\t', '\n', ';', '&', '|', '$', '`', '\'', '"', '\\', '(', ')', '<', '>', '*', '?', '[', ']', '{', '}', '~', '#', '!', '=', '/', '%'];
+            prop_assert!(!v.contains(meta), "{:?}", v);
+            prop_assert!(!v.is_empty() && v.len() <= 128);
+        }
+    }
+}
+
+proptest! {
+    // Big inputs: fewer cases.
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// Expansion never produces more than 1000 runs, and every run name is unique.
+    #[test]
+    fn matrix_plans_are_bounded_and_uniquely_named(
+        values in proptest::collection::vec("[A-Za-z0-9_.-]{1,6}", 0..1200),
+    ) {
+        let list = values.iter().map(|v| format!("\"{v}\"")).collect::<Vec<_>>().join(",");
+        let text = format!("[[check]]\nname = \"m\"\nrun = \"x {{k}}\"\nmatrix = {{ k = [{list}] }}\n");
+        if let Ok(f) = config::parse(&text) {
+            let plan = config::plan(&f, &Default::default()).map_err(TestCaseError::fail)?;
+            prop_assert_eq!(plan.len(), values.len());
+            prop_assert!(plan.len() <= 1000);
+            let names: std::collections::BTreeSet<_> = plan.iter().map(|p| p.name.clone()).collect();
+            prop_assert_eq!(names.len(), plan.len());
+        }
+    }
+}
+
+// ---- forbid ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// A literal pattern counts exactly the lines that contain it; at most 20 are shown, each cut.
+    #[test]
+    fn forbid_counts_matching_lines(
+        lines in proptest::collection::vec(prop_oneof!["[a-c ]{0,8}", any::<String>().prop_map(|s| s.chars().take(300).collect())], 0..60),
+        needle in "[a-c]{1,3}",
+    ) {
+        use countercheck_core::forbid::{ForbidSpec, Rule, Scan, MAX_HITS_SHOWN, MAX_LINE_CHARS};
+        let spec = ForbidSpec {
+            name: "n".into(),
+            pattern: regex::escape(&needle),
+            paths: vec!["**".into()],
+            message: None,
+            case_insensitive: false,
+        };
+        let rule = Rule::new(&spec).map_err(TestCaseError::fail)?;
+        let text = lines.join("\n");
+        prop_assume!(!text.contains('\0'));
+        let mut scan = Scan::default();
+        scan.add_file(&rule, "f", text.as_bytes());
+        let want = text.lines().filter(|l| l.contains(&needle)).count();
+        prop_assert_eq!(scan.total, want);
+        prop_assert!(scan.shown.len() <= MAX_HITS_SHOWN);
+        prop_assert_eq!(scan.shown.len(), want.min(MAX_HITS_SHOWN));
+        for s in &scan.shown {
+            prop_assert!(s.chars().count() <= "f:99: ".len() + MAX_LINE_CHARS + 3, "{}", s);
+        }
+        let (passed, _) = scan.report(&spec);
+        prop_assert_eq!(passed, want == 0);
+    }
+}
+
+// ---- golden ----
+
+fn csv_text() -> impl Strategy<Value = String> {
+    let cell = prop_oneof![
+        "[a-z]{0,3}",
+        "-?[0-9]{1,3}(\\.[0-9]{1,3})?",
+        Just("\"a,b\"".to_string())
+    ];
+    proptest::collection::vec(proptest::collection::vec(cell, 1..4), 1..8).prop_map(|rows| {
+        rows.iter()
+            .map(|r| r.join(","))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Any CSV equals itself, with or without sorting and tolerance.
+    #[test]
+    fn csv_compare_is_reflexive(a in csv_text(), sort in any::<bool>(), tol in prop_oneof![Just(0.0), 0.0f64..1.0]) {
+        let c = countercheck_core::golden::compare_csv(a.as_bytes(), a.as_bytes(), tol, sort);
+        prop_assert!(c.equal, "{}", c.report);
+        prop_assert!(c.report.is_empty());
+    }
+
+    /// Pass or fail doesn't depend on which side is the reference.
+    #[test]
+    fn csv_compare_is_symmetric(a in csv_text(), b in csv_text(), sort in any::<bool>(), tol in prop_oneof![Just(0.0), 0.0f64..1.0]) {
+        use countercheck_core::golden::compare_csv;
+        let ab = compare_csv(a.as_bytes(), b.as_bytes(), tol, sort);
+        let ba = compare_csv(b.as_bytes(), a.as_bytes(), tol, sort);
+        prop_assert_eq!(ab.equal, ba.equal);
+        if !ab.equal {
+            prop_assert!(!ab.report.is_empty());
+        }
+    }
+
+    /// Text compare: equal iff the line-ending-normalised texts are equal; never panics.
+    #[test]
+    fn text_compare_matches_normalised_equality(a in any::<String>(), b in any::<String>()) {
+        use countercheck_core::golden::compare_text;
+        let norm = |s: &str| s.replace("\r\n", "\n").replace('\r', "\n");
+        prop_assert!(compare_text(a.as_bytes(), a.as_bytes()).equal);
+        prop_assert_eq!(compare_text(a.as_bytes(), b.as_bytes()).equal, norm(&a) == norm(&b));
+    }
+}
+
+// ---- budget ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// The last METRIC line wins, and the verdict is exactly "within [min, max]".
+    #[test]
+    fn budget_takes_the_last_value_and_honours_the_limits(
+        values in proptest::collection::vec(-1000.0f64..1000.0, 1..6),
+        noise in "[a-z =]{0,20}",
+        min in proptest::option::of(-500.0f64..0.0),
+        max in proptest::option::of(0.0f64..500.0),
+    ) {
+        use countercheck_core::budget::{judge, last_metric, BudgetSpec};
+        let text: String = values.iter().map(|v| format!("METRIC t={v}\n{noise}\n")).collect();
+        let last = values.last().copied();
+        prop_assert_eq!(last_metric(&text, "t"), last);
+        prop_assume!(min.is_some() || max.is_some());
+        let spec = BudgetSpec { metric: "t".into(), min, max };
+        prop_assert!(spec.validate("c").is_ok());
+        let v = last.unwrap_or(0.0);
+        let want = min.is_none_or(|lo| v >= lo) && max.is_none_or(|hi| v <= hi);
+        prop_assert_eq!(judge(&spec, last).0, want);
+    }
+}
+
+// ---- coverage ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Items are matched literally (regex characters in an item mean themselves): an item is found
+    /// exactly when the file contains `<item>;`.
+    #[test]
+    fn coverage_items_match_literally(
+        items in proptest::collection::btree_set("[a-z.()*+?|\\[\\]^$\\\\]{1,6}", 1..8),
+        present in proptest::collection::vec(any::<bool>(), 8),
+    ) {
+        use countercheck_core::coverage::{Coverage, CoverageSpec};
+        let items: Vec<String> = items.into_iter().filter(|i| !i.starts_with('#')).collect();
+        prop_assume!(!items.is_empty());
+        let spec = CoverageSpec {
+            name: "c".into(),
+            items: ".countercheck/i.txt".into(),
+            paths: vec!["**".into()],
+            pattern: "item:{item};".into(),
+            case_insensitive: false,
+        };
+        let mut cov = Coverage::new(&spec, &items.join("\n")).map_err(TestCaseError::fail)?;
+        let text: String = items
+            .iter()
+            .zip(&present)
+            .filter(|(_, p)| **p)
+            .map(|(i, _)| format!("item:{i};\n"))
+            .collect();
+        cov.add_file("f", text.as_bytes());
+        let missing = items.iter().zip(&present).filter(|(i, p)| !**p && !text.contains(&format!("item:{i};"))).count();
+        let (ok, out) = cov.report();
+        prop_assert_eq!(ok, missing == 0, "{}", out);
     }
 }

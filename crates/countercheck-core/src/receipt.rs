@@ -127,7 +127,13 @@ pub fn decide(
                 reasons.push(format!("check \"{}\" timed out", r.name));
             } else {
                 let code = r.exit_code.map_or("killed".to_string(), |c| c.to_string());
-                reasons.push(format!("check \"{}\" failed (exit {code})", r.name));
+                // Exit 0 but not passed: the command ran fine, its output didn't (golden, budget).
+                let why = if r.exit_code == Some(0) {
+                    "; its output did not pass"
+                } else {
+                    ""
+                };
+                reasons.push(format!("check \"{}\" failed (exit {code}{why})", r.name));
             }
         }
         Verdict::Failed
@@ -374,6 +380,20 @@ mod tests {
         assert_eq!(decide(false, &[result(true)], &[]).0, Verdict::Unverified);
         assert_eq!(decide(true, &[], &[]).0, Verdict::Unverified);
         assert_eq!(decide(false, &[result(false)], &[]).0, Verdict::Failed);
+    }
+
+    #[test]
+    fn a_failed_output_check_says_so() {
+        let mut r = result(false);
+        r.exit_code = Some(0);
+        let (v, reasons) = decide(true, &[r], &[]);
+        assert_eq!(v, Verdict::Failed);
+        assert_eq!(
+            reasons,
+            vec!["check \"t\" failed (exit 0; its output did not pass)"]
+        );
+        let (_, reasons) = decide(true, &[result(false)], &[]);
+        assert_eq!(reasons, vec!["check \"t\" failed (exit 1)"]);
     }
 
     #[test]
