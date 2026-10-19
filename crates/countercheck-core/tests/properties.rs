@@ -704,3 +704,53 @@ proptest! {
         prop_assert_eq!(passed, want == 0);
     }
 }
+
+// ---- golden ----
+
+fn csv_text() -> impl Strategy<Value = String> {
+    let cell = prop_oneof![
+        "[a-z]{0,3}",
+        "-?[0-9]{1,3}(\\.[0-9]{1,3})?",
+        Just("\"a,b\"".to_string())
+    ];
+    proptest::collection::vec(proptest::collection::vec(cell, 1..4), 1..8).prop_map(|rows| {
+        rows.iter()
+            .map(|r| r.join(","))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Any CSV equals itself, with or without sorting and tolerance.
+    #[test]
+    fn csv_compare_is_reflexive(a in csv_text(), sort in any::<bool>(), tol in prop_oneof![Just(0.0), 0.0f64..1.0]) {
+        let c = countercheck_core::golden::compare_csv(a.as_bytes(), a.as_bytes(), tol, sort);
+        prop_assert!(c.equal, "{}", c.report);
+        prop_assert!(c.report.is_empty());
+    }
+
+    /// Pass or fail doesn't depend on which side is the reference.
+    #[test]
+    fn csv_compare_is_symmetric(a in csv_text(), b in csv_text(), sort in any::<bool>(), tol in prop_oneof![Just(0.0), 0.0f64..1.0]) {
+        use countercheck_core::golden::compare_csv;
+        let ab = compare_csv(a.as_bytes(), b.as_bytes(), tol, sort);
+        let ba = compare_csv(b.as_bytes(), a.as_bytes(), tol, sort);
+        prop_assert_eq!(ab.equal, ba.equal);
+        if !ab.equal {
+            prop_assert!(!ab.report.is_empty());
+        }
+    }
+
+    /// Text compare: equal iff the line-ending-normalised texts are equal; never panics.
+    #[test]
+    fn text_compare_matches_normalised_equality(a in any::<String>(), b in any::<String>()) {
+        use countercheck_core::golden::compare_text;
+        let norm = |s: &str| s.replace("\r\n", "\n").replace('\r', "\n");
+        prop_assert!(compare_text(a.as_bytes(), a.as_bytes()).equal);
+        prop_assert_eq!(compare_text(a.as_bytes(), b.as_bytes()).equal, norm(&a) == norm(&b));
+    }
+}

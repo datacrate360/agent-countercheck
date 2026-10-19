@@ -10,7 +10,8 @@
 //! ```
 //!
 //! A check can also run once per target (`matrix`, see [`crate::matrix`]); `[[forbid]]` entries
-//! list patterns that must not appear (see [`crate::forbid`]). docs/checks.md has every
+//! list patterns that must not appear (see [`crate::forbid`]); `golden` compares a check's output
+//! file with a locked reference (see [`crate::golden`]). docs/checks.md has every
 //! check type with an example.
 //!
 //! `link = ["node_modules", ".venv"]` makes git-ignored dependency folders visible in the clean
@@ -20,6 +21,7 @@
 //! cannot weaken the checks it is judged by.
 
 use crate::forbid::{self, ForbidSpec};
+use crate::golden::{self, GoldenSpec};
 use crate::matrix;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -61,6 +63,9 @@ pub struct CheckSpec {
     /// Like `matrix`, with the values in a file under `.countercheck/`: `{ schema = ".countercheck/x.txt" }`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub matrix_file: Option<BTreeMap<String, String>>,
+    /// After `run` passes, its output file must match a locked reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub golden: Option<GoldenSpec>,
 }
 
 /// One run of a check, after matrix expansion: what the runner executes.
@@ -73,6 +78,8 @@ pub struct PlannedCheck {
     pub timeout_secs: u64,
     /// Extra environment, e.g. `COUNTERCHECK_MATRIX_SCHEMA=CA1`.
     pub env: Vec<(String, String)>,
+    /// The golden comparison, with `{key}` replaced in its paths.
+    pub golden: Option<GoldenSpec>,
 }
 
 fn default_timeout() -> u64 {
@@ -213,6 +220,53 @@ fn one_key<'a>(
     }
 }
 
+/// The golden spec of one run, with `{key}` replaced and its paths checked.
+fn planned_golden(
+    c: &CheckSpec,
+    matrix_value: Option<(&String, &String)>,
+    protected: &crate::protect::Protected,
+) -> Result<Option<GoldenSpec>, String> {
+    let Some(g) = &c.golden else {
+        return Ok(None);
+    };
+    let name = &c.name;
+    let sub = |t: &str| match matrix_value {
+        Some((k, v)) => matrix::substitute(t, k, v),
+        None => t.to_string(),
+    };
+    let (output, expected) = (sub(&g.output), sub(&g.expected));
+    if !plain_path(&output) {
+        return Err(format!(
+            "check \"{name}\": golden output \"{output}\" must be a plain relative path"
+        ));
+    }
+    if !plain_path(&expected) {
+        return Err(format!(
+            "check \"{name}\": golden expected \"{expected}\" must be a plain relative path"
+        ));
+    }
+    if !expected.starts_with(".countercheck/") && !protected.matches(&expected) {
+        return Err(format!(
+            "check \"{name}\": golden expected \"{expected}\" must be under .countercheck/ or match a protected pattern, or the worker could edit it"
+        ));
+    }
+    if !g.tolerance.is_finite() || g.tolerance < 0.0 {
+        return Err(format!(
+            "check \"{name}\": golden tolerance must be a number of 0 or more"
+        ));
+    }
+    if g.mode == golden::Mode::Text && (g.sort_rows || g.tolerance != 0.0) {
+        return Err(format!(
+            "check \"{name}\": golden tolerance and sort_rows only apply to mode = \"csv\""
+        ));
+    }
+    Ok(Some(GoldenSpec {
+        output,
+        expected,
+        ..g.clone()
+    }))
+}
+
 /// Expand every check into the runs to do. `matrix_files` maps each path from
 /// [`ChecksFile::matrix_files`] to its text (read from the same revision as the check file).
 pub fn plan(
@@ -227,6 +281,7 @@ fn plan_inner(
     file: &ChecksFile,
     matrix_files: Option<&BTreeMap<String, String>>,
 ) -> Result<Vec<PlannedCheck>, String> {
+    let protected = crate::protect::Protected::new(&file.protected_patterns())?;
     let mut out: Vec<PlannedCheck> = Vec::new();
     for c in &file.checks {
         let values: Option<(&String, Vec<String>)> = match (&c.matrix, &c.matrix_file) {
@@ -248,6 +303,7 @@ fn plan_inner(
                 run: c.run.clone(),
                 timeout_secs: c.timeout_secs,
                 env: Vec::new(),
+                golden: planned_golden(c, None, &protected)?,
             });
             continue;
         };
@@ -271,6 +327,7 @@ fn plan_inner(
                 run: matrix::substitute(&c.run, key, v),
                 timeout_secs: c.timeout_secs,
                 env: vec![(matrix::env_name(key), v.clone())],
+                golden: planned_golden(c, Some((key, v)), &protected)?,
             });
             if out.len() > matrix::MAX_EXPANSIONS {
                 break; // refused just below; stop before building more
@@ -536,6 +593,98 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("two checks"), "{e}");
+    }
+
+    const G: &str = "[[check]]\nname = \"g\"\nrun = \"x\"\n";
+
+    #[test]
+    fn golden_parses_with_defaults_and_matrix() {
+        let f = parse(&format!(
+            "{G}golden = {{ output = \"out/t.csv\", expected = \".countercheck/golden/t.csv\" }}\n"
+        ))
+        .unwrap();
+        let p = plan(&f, &BTreeMap::new()).unwrap();
+        let g = p[0].golden.clone().unwrap();
+        assert_eq!(g.mode, golden::Mode::Text);
+        assert_eq!(g.output, "out/t.csv");
+        // `{key}` is replaced in both paths; a protected pattern also locks the reference.
+        let f = parse(&format!(
+            "protected = [\"golden/**\"]\n{G}matrix = {{ s = [\"A\", \"B\"] }}\n\
+             golden = {{ output = \"out/{{s}}.csv\", expected = \"golden/{{s}}.csv\", mode = \"csv\", tolerance = 0.01, sort_rows = true }}\n"
+        ))
+        .unwrap();
+        let p = plan(&f, &BTreeMap::new()).unwrap();
+        let g = p[1].golden.clone().unwrap();
+        assert_eq!(
+            (g.output.as_str(), g.expected.as_str()),
+            ("out/B.csv", "golden/B.csv")
+        );
+        assert!(g.sort_rows);
+        assert_eq!(g.tolerance, 0.01);
+        assert!(p.iter().all(|c| c.golden.is_some()));
+        // No golden: none planned.
+        assert!(
+            plan(&parse(G).unwrap(), &BTreeMap::new()).unwrap()[0]
+                .golden
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn golden_reference_must_be_protected() {
+        let e = parse(&format!(
+            "{G}golden = {{ output = \"out/t.csv\", expected = \"golden/t.csv\" }}\n"
+        ))
+        .unwrap_err();
+        assert!(
+            e.contains("must be under .countercheck/ or match a protected pattern"),
+            "{e}"
+        );
+        let cases = [
+            (
+                "output = \"/tmp/o\", expected = \".countercheck/e\"",
+                "plain relative path",
+            ),
+            (
+                "output = \"../o\", expected = \".countercheck/e\"",
+                "plain relative path",
+            ),
+            (
+                "output = \"o\", expected = \".countercheck/../e\"",
+                "plain relative path",
+            ),
+            (
+                "output = \"o\", expected = \".countercheck/e\", tolerance = -1.0",
+                "0 or more",
+            ),
+            (
+                "output = \"o\", expected = \".countercheck/e\", tolerance = nan",
+                "0 or more",
+            ),
+            (
+                "output = \"o\", expected = \".countercheck/e\", sort_rows = true",
+                "only apply to mode",
+            ),
+            (
+                "output = \"o\", expected = \".countercheck/e\", tolerance = 0.1",
+                "only apply to mode",
+            ),
+            (
+                "output = \"o\", expected = \".countercheck/e\", mode = \"xml\"",
+                "not valid",
+            ),
+            ("output = \"o\"", "not valid"),
+        ];
+        for (g, want) in cases {
+            let e = parse(&format!("{G}golden = {{ {g} }}\n")).unwrap_err();
+            assert!(e.contains(want), "{g}: {e}");
+        }
+        // A matrix value can't climb out of the protected folder either.
+        let e = parse(&format!(
+            "{G}matrix = {{ s = [\"..\"] }}\ngolden = {{ output = \"o\", expected = \".countercheck/{{s}}/e\" }}\n"
+        ))
+        .unwrap_err();
+        assert!(e.contains("plain relative path"), "{e}");
     }
 
     #[test]

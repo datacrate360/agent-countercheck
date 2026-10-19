@@ -1,6 +1,6 @@
 //! The verify flow: lock the checks, snapshot, restore protected files, run, decide, seal.
 
-use crate::{git, runner, scan, snapshot};
+use crate::{git, golden, runner, scan, snapshot};
 use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::protect::{Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
@@ -109,7 +109,38 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     };
     let mut results = Vec::new();
     for spec in &planned {
-        results.push(runner::run_check(spec, &work, &tmp, opts.sandbox)?);
+        let Some(g) = &spec.golden else {
+            results.push(runner::run_check(spec, &work, &tmp, opts.sandbox)?);
+            continue;
+        };
+        // The reference comes from the base revision (like the check file) when the checks are
+        // locked, so neither the worker nor a check command can change it.
+        let expected = if checks_locked {
+            match git::show(&root, &base_commit, &g.expected)? {
+                Some(bytes) => Ok(bytes),
+                None => Err(format!(
+                    "the expected file {} is not in the base revision",
+                    g.expected
+                )),
+            }
+        } else {
+            std::fs::read(work.join(&g.expected))
+                .map_err(|_| format!("the expected file {} was not found", g.expected))
+        };
+        let expected = expected.and_then(|b| {
+            if b.len() as u64 > countercheck_core::golden::MAX_FILE_BYTES {
+                Err(format!(
+                    "the expected file {} is larger than 64 MiB",
+                    g.expected
+                ))
+            } else {
+                Ok(b)
+            }
+        });
+        golden::clear_output(&work, g)?;
+        let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox)?;
+        golden::judge(&work, g, &expected, &mut result);
+        results.push(result);
     }
     results.extend(forbid_results);
 

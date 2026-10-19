@@ -12,6 +12,7 @@ the checks came from the base revision and all of them passed.
 | [Command](#command) | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
 | [Matrix](#matrix) | the same command must pass for many targets (tenants, schemas, levels, files) | `[[check]]` + `matrix` |
 | [Forbid](#forbid) | some text must not appear in the worker's files (leftover syntax, debug code, secrets) | `[[forbid]]` |
+| [Golden](#golden) | a command's output file must match a reference you keep (exports, reports, renders) | `[[check]]` + `golden` |
 
 ## Command
 
@@ -81,3 +82,28 @@ case_insensitive = true                            # optional, default false
 - Binary files and files over 5 MiB are skipped and listed as skipped.
 - When no file matches `paths`, the check passes and says "nothing to scan".
 - An invalid regex is refused when the check file is read.
+
+## Golden
+
+After the command passes, Countercheck compares the file it wrote with a reference file you committed.
+
+```toml
+[[check]]
+name = "monthly totals"
+run = "python3 scripts/export.py > out/totals.csv"
+golden = { output = "out/totals.csv", expected = ".countercheck/golden/totals.csv", mode = "csv", tolerance = 1e-6, sort_rows = true }
+```
+
+- `expected` must be under `.countercheck/` or match a `protected` pattern; anything else is refused, because the
+  worker could edit it. With locked checks it is read from the base revision.
+- Any `output` file already in the worker's tree is removed before the command runs, so only what the command
+  writes counts. A missing output fails with a plain message.
+- `mode = "text"` (the default): exact match after normalising line endings. A failure shows the first differing
+  line number with both lines.
+- `mode = "csv"`: the header must be the same; rows are compared cell by cell. Cells that are numbers on both sides
+  match within `tolerance` (absolute, default 0, so `20` and `20.0` match). `sort_rows = true` sorts both sides
+  first, for outputs whose row order means nothing. A failure shows the row count difference, then up to 20
+  differences as `row N, column C: expected X, got Y`.
+- Works with `matrix`: `{key}` may appear in `output` and `expected`, e.g.
+  `golden = { output = "out/{schema}.csv", expected = ".countercheck/golden/{schema}.csv", mode = "csv" }`.
+- The receipt's reason reads `failed (exit 0; its output did not pass)`: the command ran fine, its output didn't.

@@ -462,6 +462,169 @@ fn forbid_alone_skips_binary_files() {
     );
 }
 
+const EXPECTED_CSV: &str = "id,region,total\n1,north,10.5\n2,south,20\n3,east,30.25\n";
+
+/// A project whose check runs the worker's `src/export.sh` and compares `out/totals.csv` with a
+/// locked reference. `golden_extra` adds keys to the golden table (mode, tolerance, sort_rows).
+fn golden_project(golden_extra: &str) -> tempfile::TempDir {
+    let d = project(&format!(
+        "[[check]]\nname = \"totals\"\nrun = \"mkdir -p out && sh src/export.sh > out/totals.csv\"\n\
+         golden = {{ output = \"out/totals.csv\", expected = \".countercheck/golden/totals.csv\"{golden_extra} }}\n"
+    ));
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/golden")).unwrap();
+    fs::write(p.join(".countercheck/golden/totals.csv"), EXPECTED_CSV).unwrap();
+    fs::write(p.join("src/export.sh"), "echo not yet\n").unwrap();
+    sh(p, "git add -A && git commit -qm golden");
+    d
+}
+
+/// The worker's export prints `csv`.
+fn export_prints(d: &Path, csv: &str) {
+    fs::write(d.join("src/export.sh"), format!("cat <<'EOF'\n{csv}EOF\n")).unwrap();
+}
+
+#[test]
+fn golden_csv_rows_in_another_order_pass_only_with_sort_rows() {
+    let shuffled = "id,region,total\n3,east,30.25\n1,north,10.5\n2,south,20\n";
+    let d = golden_project(", mode = \"csv\", sort_rows = true");
+    export_prints(d.path(), shuffled);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert!(
+        r["checks"][0]["output_tail"]
+            .as_str()
+            .unwrap()
+            .ends_with("golden: out/totals.csv matches .countercheck/golden/totals.csv")
+    );
+
+    let d = golden_project(", mode = \"csv\"");
+    export_prints(d.path(), shuffled);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let c = &r["checks"][0];
+    assert_eq!(c["exit_code"], 0);
+    let out = c["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("golden: out/totals.csv does not match"),
+        "{out}"
+    );
+    assert!(out.contains("row 1, column id: expected 1, got 3"), "{out}");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("failed (exit 0; its output did not pass)")
+    );
+}
+
+#[test]
+fn golden_csv_numbers_compare_within_the_tolerance() {
+    let near = "id,region,total\n1,north,10.5000004\n2,south,20\n3,east,30.25\n";
+    let far = "id,region,total\n1,north,10.51\n2,south,20\n3,east,30.25\n";
+    let d = golden_project(", mode = \"csv\", tolerance = 1e-6");
+    export_prints(d.path(), near);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    export_prints(d.path(), far);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("row 1, column total: expected 10.5, got 10.51"),
+        "{out}"
+    );
+}
+
+#[test]
+fn golden_file_edited_by_the_worker_is_ignored() {
+    let wrong = "id,region,total\n1,north,99\n";
+    let d = golden_project(", mode = \"csv\"");
+    let p = d.path();
+    export_prints(p, wrong);
+    // The worker "updates" the reference to match its wrong output.
+    fs::write(p.join(".countercheck/golden/totals.csv"), wrong).unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(
+        r["protected_changes"][0]["path"],
+        ".countercheck/golden/totals.csv"
+    );
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("row count differs: expected 3, got 1"),
+        "{out}"
+    );
+}
+
+#[test]
+fn golden_text_mode_reports_the_first_differing_line() {
+    let d = golden_project("");
+    export_prints(
+        d.path(),
+        "id,region,total\n1,north,10.5\n2,SOUTH,20\n3,east,30.25\n",
+    );
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("line 3: expected \"2,south,20\", got \"2,SOUTH,20\""),
+        "{out}"
+    );
+    // Same content with CRLF line endings matches.
+    export_prints(d.path(), &EXPECTED_CSV.replace('\n', "\r\n"));
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+}
+
+/// A missing output fails plainly, and an output the worker committed doesn't count: only what
+/// the command writes is compared.
+#[test]
+fn golden_output_must_be_written_by_the_check() {
+    let d = project(
+        "[[check]]\nname = \"totals\"\nrun = \"true\"\n\
+         golden = { output = \"out/totals.csv\", expected = \".countercheck/golden/totals.csv\" }\n",
+    );
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/golden")).unwrap();
+    fs::write(p.join(".countercheck/golden/totals.csv"), EXPECTED_CSV).unwrap();
+    sh(p, "git add -A && git commit -qm golden");
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("the check did not write its output file out/totals.csv"),
+        "{out}"
+    );
+    // The worker commits a perfect copy as the "output": still not written by the check.
+    fs::create_dir_all(p.join("out")).unwrap();
+    fs::write(p.join("out/totals.csv"), EXPECTED_CSV).unwrap();
+    let (code, _) = countercheck(p, &[]);
+    assert_eq!(code, 2);
+}
+
+#[test]
+fn golden_works_with_a_matrix() {
+    let d = project(
+        "[[check]]\nname = \"tenant\"\nrun = \"mkdir -p out && sh src/export.sh {t} > out/{t}.csv\"\n\
+         matrix = { t = [\"a\", \"b\"] }\n\
+         golden = { output = \"out/{t}.csv\", expected = \".countercheck/golden/{t}.csv\", mode = \"csv\" }\n",
+    );
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/golden")).unwrap();
+    fs::write(p.join(".countercheck/golden/a.csv"), "t,n\na,1\n").unwrap();
+    fs::write(p.join(".countercheck/golden/b.csv"), "t,n\nb,2\n").unwrap();
+    sh(p, "git add -A && git commit -qm golden");
+    // Right for a, wrong for b.
+    fs::write(p.join("src/export.sh"), "printf 't,n\\n%s,1\\n' \"$1\"\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "tenant [t=a]")["passed"], true);
+    let b = check(&r, "tenant [t=b]");
+    assert_eq!(b["passed"], false);
+    let out = b["output_tail"].as_str().unwrap();
+    assert!(out.contains("row 1, column n: expected 2, got 1"), "{out}");
+}
+
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
 fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
     run_hook("hermes-pre-verify", input, envs)
