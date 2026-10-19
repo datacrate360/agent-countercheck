@@ -2,6 +2,7 @@ name: Release
 
 # Push a tag `vX.Y.Z` (matching the version in Cargo.toml) to build and publish a release:
 #   countercheck-X.Y.Z-macos-universal.tar.gz, -linux-x86_64, -linux-aarch64 (static musl builds),
+#   countercheck-X.Y.Z-windows-x86_64.zip (static C runtime, see .cargo/config.toml),
 #   Python wheels (pip / uv / uvx), the Homebrew formula, and SHA256SUMS.txt.
 # Run it by hand (Actions → Release → Run workflow) to build everything without publishing.
 
@@ -75,6 +76,46 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: "bin-${{ matrix.platform }}", path: "*.tar.gz" }
 
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add x86_64-pc-windows-msvc
+      - run: cargo test --workspace --release
+      - name: Binary
+        shell: pwsh
+        run: |
+          cargo build --release --locked -p countercheck --target x86_64-pc-windows-msvc
+          New-Item -ItemType Directory stage | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/countercheck.exe, LICENSE, README.md stage/
+          ./stage/countercheck.exe --version
+          Compress-Archive -Path stage/* -DestinationPath "countercheck-${{ needs.version.outputs.version }}-windows-x86_64.zip"
+      - uses: actions/upload-artifact@v4
+        with: { name: bin-windows-x86_64, path: "*.zip" }
+
+  install-windows:
+    # install.ps1 against the zip just built (checksum, unzip, --version), before anything is published.
+    needs: [version, windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: bin-windows-x86_64, path: out }
+      - name: Install script works against these files
+        shell: pwsh
+        run: |
+          Get-ChildItem out/*.zip | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
+            Set-Content out/SHA256SUMS.txt
+          $server = Start-Process python -ArgumentList '-m','http.server','18765','--bind','127.0.0.1','--directory','out' -PassThru
+          Start-Sleep -Seconds 2
+          $env:COUNTERCHECK_VERSION = '${{ needs.version.outputs.version }}'
+          $env:COUNTERCHECK_BASE_URL = 'http://127.0.0.1:18765'
+          $env:COUNTERCHECK_INSTALL_DIR = "$env:RUNNER_TEMP\bin"
+          ./install.ps1
+          & "$env:RUNNER_TEMP\bin\countercheck.exe" --version
+          Stop-Process -Id $server.Id
+
   wheels:
     needs: version
     strategy:
@@ -84,6 +125,7 @@ jobs:
           - { runner: ubuntu-latest, target: x86_64, manylinux: "2_17" }
           - { runner: ubuntu-24.04-arm, target: aarch64, manylinux: "2_17" }
           - { runner: ubuntu-latest, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2 }
+          - { runner: windows-latest, target: x64, manylinux: "off" }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -106,7 +148,7 @@ jobs:
         with: { name: sdist, path: dist/*.tar.gz }
 
   release:
-    needs: [version, macos, linux, wheels, sdist]
+    needs: [version, macos, linux, windows, install-windows, wheels, sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -117,7 +159,7 @@ jobs:
       - name: Checksums and Homebrew formula
         run: |
           cd out
-          sha256sum countercheck-*.tar.gz > SHA256SUMS.txt
+          sha256sum countercheck-*.tar.gz countercheck-*.zip > SHA256SUMS.txt
           cat SHA256SUMS.txt
           ../packaging/homebrew/formula.sh "${{ needs.version.outputs.version }}" SHA256SUMS.txt \
             "https://github.com/${{ github.repository }}/releases/download/v${{ needs.version.outputs.version }}" \
@@ -129,12 +171,13 @@ jobs:
           COUNTERCHECK_BASE_URL=http://127.0.0.1:18765 COUNTERCHECK_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
       - uses: actions/upload-artifact@v4
         with: { name: release-files, path: out/* }
+
       - name: Publish the GitHub release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" out/* install.sh \
+          gh release create "${GITHUB_REF_NAME}" out/* install.sh install.ps1 \
             --title "Countercheck ${GITHUB_REF_NAME}" --generate-notes --verify-tag
 
   pypi:

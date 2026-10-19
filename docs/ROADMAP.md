@@ -36,6 +36,9 @@ section. Ideas and use cases are welcome as issues.
    database.
 5. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
 6. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
+7. **Windows sandbox**: run checks in an AppContainer (or a restricted token + Job Object) with no internet and
+   writes only in the check folder, like the macOS one. Windows runs checks without a sandbox today.
+8. **winget and scoop** packages for Windows (today: `install.ps1`, `pip`/`uvx`, or the zip from Releases).
 
 ## Later
 
@@ -45,7 +48,8 @@ section. Ideas and use cases are welcome as issues.
   distinct counts, table hashes); capture golden outputs from the old system once.
 - **Blind spot: hard-coded answers.** Locked tests stop test edits, not code that copies the expected value.
   Ideas: flag diffs that add literals copied from protected tests; hidden checks the agent never sees.
-- **Linux sandbox** (bubblewrap / Landlock), and Windows guidance (WSL today).
+- **Linux sandbox** (bubblewrap / Landlock).
+- **Windows on ARM64** build (`aarch64-pc-windows-msvc`; the x86_64 build runs under emulation today).
 - **Receipt index**: a rebuildable local index (e.g. SQLite) over the JSON receipts for "which targets failed this
   week?" questions. JSON receipts stay the source of truth.
 - **Signed receipts** that third parties can verify.

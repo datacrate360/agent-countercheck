@@ -32,10 +32,15 @@ git clone https://github.com/datacrate360/countercheck && cd countercheck
 cargo build --release
 ```
 
-Rust 1.90+. macOS runs checks in its sandbox; Linux works and runs them without one (the receipt says so). Windows:
-use WSL.
+Rust 1.90+. macOS runs checks in its sandbox; Linux and Windows run them without one (the receipt says so).
 
-## The gate (CI runs the same on macOS and Linux)
+**Windows:** install [Rust](https://rustup.rs) (MSVC toolchain) and [Git for Windows](https://git-scm.com/download/win).
+The end-to-end tests and most checks use Git for Windows' `sh`; Countercheck finds it on `PATH` or next to `git.exe`.
+The repository's `.gitattributes` keeps LF line endings, so shell scripts run as they do on Unix. Run the gate below
+from PowerShell or Git Bash; the last line (`eval/validate.py`) needs the macOS sandbox, so on Windows and Linux CI
+runs the example instead: `sh examples/ml-eval-threshold/run-example.sh "$PWD/target/debug/countercheck.exe"`.
+
+## The gate (CI runs the same on macOS, Linux and Windows)
 
 ```sh
 cargo fmt --all --check
