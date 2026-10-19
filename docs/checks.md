@@ -20,7 +20,8 @@ hooks find it themselves with `countercheck hook session-start` (README "Agent h
 | [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
 | [Coverage](#coverage) | every item in a list you keep must show up in the worker's files (tables, procedures, levels, pages) | `[[coverage]]` |
 
-[examples/data-migration](../examples/data-migration) uses all of them on a small made-up migration.
+[examples/data-migration](../examples/data-migration) uses all of them on a small made-up migration. For a real
+Oracle → Snowflake setup with Cortex Code, see [guides/oracle-to-snowflake.md](guides/oracle-to-snowflake.md).
 
 ## Command
 

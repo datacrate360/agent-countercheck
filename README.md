@@ -76,6 +76,8 @@ The code behind each rule, one run step by step, and where new work plugs in: [d
 | Codex, Cursor, Copilot, Aider, your scripts | run `countercheck verify --claim "…"` when it says done (dedicated hooks planned) |
 | CI | `countercheck verify --base main`; fail the job on any exit code but `0` (GitHub Action planned) |
 
+Step-by-step guide for a real setup: [Oracle → Snowflake conversion with Cortex Code](docs/guides/oracle-to-snowflake.md).
+
 ## Does it work?
 
 We gave [Hermes Agent](https://github.com/NousResearch/hermes-agent) 29 small coding tasks, 3 times each, in four
