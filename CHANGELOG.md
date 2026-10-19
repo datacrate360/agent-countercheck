@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **`countercheck report`**: one self-contained HTML page of every saved run (verdict, the agent's claim, each check
+  and its output, protected changes, seal status, a targets × checks grid for matrix checks). No scripts and no
+  outside resources (enforced by a Content-Security-Policy); every value is escaped, because receipts carry text from
+  the agent's files. `--open` opens it in the browser.
+
 ## v0.2.1 (2026-10-19)
 
 **Upgrade note:** add the new `session-start` hook next to your existing stop hook (snippets in the README, "Agent

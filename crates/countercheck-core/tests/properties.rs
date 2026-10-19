@@ -819,3 +819,47 @@ proptest! {
         prop_assert_eq!(ok, missing == 0, "{}", out);
     }
 }
+
+// ---- report: receipt text can never become markup ----
+
+fn hostile() -> impl Strategy<Value = String> {
+    prop_oneof![
+        text(),
+        "[<>&\"'a-z/= ]{0,30}",
+        Just("<script>alert(1)</script>".to_string()),
+        Just("</pre></td><img src=x onerror=alert(1)>".to_string()),
+        Just("<!-- --><style>*{}</style>".to_string()),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Whatever text a worker puts in a claim, check name, command, output or reason, every `<`
+    /// in the page opens one of the report's own tags, and the page never contains a script.
+    #[test]
+    fn report_text_never_becomes_markup(
+        r in receipt(), claim in hostile(), name in hostile(), run in hostile(),
+        out in hostile(), reason in hostile(), file in hostile(), seal_ok in any::<bool>(),
+    ) {
+        use countercheck_core::report::{render_html, Entry};
+        let mut r = r;
+        r.claim = Some(claim);
+        r.reasons.push(reason);
+        if let Some(c) = r.checks.first_mut() {
+            c.name = name;
+            c.run = run;
+            c.output_tail = out;
+            c.passed = false;
+        }
+        let html = render_html(&[Entry { file, receipt: r, seal_ok }], "t", "now");
+        let tag = regex::Regex::new(
+            r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer)[ >]",
+        ).unwrap();
+        for (i, _) in html.match_indices('<') {
+            prop_assert!(tag.is_match(&html[i..]), "unexpected markup at {}: {}", i, html[i..].chars().take(40).collect::<String>());
+        }
+        prop_assert!(!html.to_lowercase().contains("<script"));
+        prop_assert_eq!(html.matches("<style>").count(), 1);
+    }
+}

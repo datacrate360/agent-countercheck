@@ -1006,6 +1006,74 @@ fn hermes_hook_uses_a_fixed_base_when_the_agent_commits() {
     assert!(out.contains("\"continue\""), "{out}");
 }
 
+/// `countercheck report` writes one page with every run, newest first, escaped, with no script.
+#[test]
+fn report_writes_a_page_of_every_run() {
+    let d = project(CHECKS);
+    let (code, first) = countercheck(d.path(), &["--claim", "fixed <b>it</b>"]);
+    assert_eq!(code, 2);
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, second) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0);
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let page = d.path().join(".countercheck/receipts/report.html");
+    let html = fs::read_to_string(&page).unwrap();
+    for r in [&first, &second] {
+        assert!(html.contains(r["id"].as_str().unwrap()), "{html}");
+    }
+    assert!(html.contains("fixed &lt;b&gt;it&lt;/b&gt;"));
+    assert!(html.contains("<b>2</b><span>runs</span>"));
+    assert!(!html.contains("<script"));
+    // The page sits with the receipts, so git ignores it.
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(d.path())
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&status.stdout).contains("report.html"));
+}
+
+/// A receipt edited after it was written shows as a broken seal; no receipts is a plain error.
+#[test]
+fn report_flags_an_edited_receipt_and_needs_receipts() {
+    let d = project(CHECKS);
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no receipts"));
+    let (_, r) = countercheck(d.path(), &[]);
+    let file = d
+        .path()
+        .join(".countercheck/receipts")
+        .join(format!("{}.json", r["id"].as_str().unwrap()));
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .replace("\"failed\"", "\"verified\"");
+    fs::write(&file, text).unwrap();
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
+    assert!(html.contains("SEAL BROKEN"), "{html}");
+}
+
 fn session_start(dir: &Path, session: &str) -> (i32, String) {
     let input = serde_json::json!({
         "session_id": session, "cwd": dir, "hook_event_name": "SessionStart", "source": "startup"

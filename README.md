@@ -146,6 +146,17 @@ and the runnable example in [examples/data-migration](examples/data-migration).
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
 locked in the base revision, or none ran) · `1` error · `4` (`countercheck show`) receipt was edited.
 
+## See every run: `countercheck report`
+
+```sh
+countercheck report --open
+```
+
+Writes one HTML page (`.countercheck/receipts/report.html`, git-ignored) with every saved run, newest first: the
+verdict, what the agent said, each check with its output, protected files it changed, whether the receipt's seal is
+intact, and for matrix checks a grid of targets × checks. It works offline, loads nothing from the internet and has no
+scripts, so it's safe to attach to a pull request or a CI run.
+
 ## Agent hooks
 
 - Hermes Agent: `countercheck hook hermes-pre-verify` keeps Hermes working while the checks fail. In the profile's

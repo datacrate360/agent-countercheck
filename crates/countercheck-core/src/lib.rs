@@ -29,6 +29,7 @@ pub mod golden;
 pub mod matrix;
 pub mod protect;
 pub mod receipt;
+pub mod report;
 
 /// Hex SHA-256 of some bytes.
 pub fn sha256_hex(bytes: &[u8]) -> String {

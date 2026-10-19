@@ -11,6 +11,7 @@
 mod git;
 mod golden;
 mod hook;
+mod report;
 mod runner;
 mod scan;
 mod snapshot;
@@ -79,6 +80,21 @@ enum Cmd {
     },
     /// Check that a saved receipt hasn't been edited, and print it.
     Show { receipt: PathBuf },
+    /// Write an HTML page of the saved receipts (newest first; no scripts, works offline).
+    Report {
+        /// Repository whose receipts to show (any folder inside it).
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+        /// Receipt folder (default: <repo>/.countercheck/receipts).
+        #[arg(long)]
+        receipts: Option<PathBuf>,
+        /// Where to write the page (default: <receipts>/report.html).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Open it in the browser.
+        #[arg(long)]
+        open: bool,
+    },
     /// Run as an agent hook (reads the agent's hook JSON on stdin).
     Hook {
         #[command(subcommand)]
@@ -193,6 +209,21 @@ fn run(cli: Cli) -> Result<u8, String> {
             if let Err(e) = result {
                 eprintln!("countercheck hook: {e}");
             }
+            Ok(0)
+        }
+        Cmd::Report {
+            repo,
+            receipts,
+            out,
+            open,
+        } => {
+            let (path, n) = report::run(&report::Options {
+                repo,
+                receipts,
+                out,
+                open,
+            })?;
+            println!("wrote {} ({n} run(s))", path.display());
             Ok(0)
         }
         Cmd::Show { receipt } => {
