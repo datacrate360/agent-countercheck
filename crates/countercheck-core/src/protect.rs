@@ -25,8 +25,25 @@ impl Protected {
         Ok(Self { set })
     }
 
+    /// Matches the path after resolving `.`, `..` and empty segments, so `./a/b` and `x/../a/b`
+    /// match like `a/b`. Absolute paths and paths that escape the repository never match.
     pub fn matches(&self, path: &str) -> bool {
-        self.set.is_match(path)
+        if path.starts_with('/') {
+            return false;
+        }
+        let mut parts: Vec<&str> = Vec::new();
+        for seg in path.split('/') {
+            match seg {
+                "" | "." => {}
+                ".." => {
+                    if parts.pop().is_none() {
+                        return false;
+                    }
+                }
+                s => parts.push(s),
+            }
+        }
+        self.set.is_match(parts.join("/"))
     }
 }
 
@@ -73,6 +90,20 @@ mod tests {
         assert!(p.matches("tests/unit/deep/x.rs"));
         assert!(p.matches(".countercheck/checks.toml"));
         assert!(!p.matches("src/tests_helper.py"));
+    }
+
+    #[test]
+    fn paths_are_resolved_before_matching() {
+        let p = Protected::new(&["tests/**".into(), ".countercheck/**".into()]).unwrap();
+        assert!(p.matches("./tests/a.py"));
+        assert!(p.matches("tests//a.py"));
+        assert!(p.matches("src/../.countercheck/checks.toml"));
+        assert!(!p.matches("tests/../src/a.py"));
+        let all = Protected::new(&["**".into()]).unwrap();
+        assert!(all.matches("a"));
+        assert!(!all.matches("../a"));
+        assert!(!all.matches("a/../../a"));
+        assert!(!all.matches("/etc/passwd"));
     }
 
     #[test]
