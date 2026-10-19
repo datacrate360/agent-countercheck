@@ -240,6 +240,73 @@ language); Rust won on stricter safety guarantees and its testing tools.
 **Where Rust is not the answer:** a future hosted team dashboard (logins, many repositories, rich views) is a web app
 and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md](docs/decisions/0001-stack.md).
 
+## FAQ
+
+**Does Countercheck limit what my agent can do?**
+No. The agent works with its full harness: web search, docs, tools, anything you allow. Countercheck only steps in
+when the agent says "done": it re-runs your locked checks on a clean copy of the result. Like an exam after open-book
+study: the grade has to reflect the work itself.
+
+| Phase | Who runs | Internet | Countercheck's sandbox |
+|---|---|---|---|
+| Doing the work | your agent, in its harness | whatever the harness allows | no |
+| Grading ("done") | Countercheck re-runs the locked checks | off, unless a check sets `network = true` | yes (macOS) |
+| FAILED | the agent gets the reasons and keeps working | whatever the harness allows | no |
+
+**Does Countercheck edit tests or search the web?**
+Never. It reads the checks from the base revision, runs them and writes a receipt. It makes no network connections of
+its own (no telemetry, no network library in the binary) and does not use an LLM: the verdict comes from your checks'
+exit codes and output.
+
+**What is the sandbox, and which OS has one?**
+A fence the operating system puts around the check while it runs, so the agent's code can't fetch the answer from the
+internet or write outside the check folder.
+
+| OS | Sandbox used for checks | Note |
+|---|---|---|
+| macOS | Seatbelt (`sandbox-exec`): no internet (localhost allowed), writes only in the check folder | `network = true` opens the internet for one check |
+| Linux | none yet (planned: namespaces + Landlock) | the receipt says `none`; use a container with `--network none` for isolation |
+| Windows | none yet (planned: AppContainer) | the receipt says `none (no sandbox on Windows yet)`; the Job Object only stops a check's processes |
+
+**So without a sandbox, can the agent cheat on Linux or Windows?**
+The common cheats are caught on every OS: edited tests are restored from the base revision, `checks.toml` is read
+from the locked base, committing edits doesn't move that base (the `session-start` hook), and every check is re-run
+in a clean copy. The sandbox adds protection against code written to misbehave *during* the check (fetching the
+expected answer online, leaving files outside the folder). Until Linux and Windows have one, run Countercheck in a
+container or VM with networking off when that matters.
+
+**Why does grading run offline?**
+So the same work always gets the same verdict, and nobody can fetch the answer at grading time. In the benchmark, the
+only false alarms came from checks that called a real website. If a check truly needs the internet, set
+`network = true` on it; the receipt then says "internet allowed".
+
+**Does an LLM judge the work?**
+No. The agent never grades itself, and Countercheck doesn't ask a model either. The checks you lock decide. The only
+text reading is a small, fixed list of phrases that tells whether the agent's final message already admits a blocker
+("this can't pass, because …"), so the hook doesn't push an honest agent to keep going.
+
+**Will it catch every wrong "done"?**
+Only what your checks test. In the benchmark, the false "done" claims left were cases the visible tests didn't cover.
+Stronger checks (golden files, coverage, budgets: [docs/checks.md](docs/checks.md)) catch more.
+
+**How much slower does it make my agent?**
+About 1 second on the median benchmark run; longer when your checks are slow, because it runs them for real.
+
+**Which agents does it work with?**
+Hermes Agent and Claude Code have hooks ([Agent hooks](#agent-hooks)). Snowflake's Cortex Code uses Claude Code's
+hook format, so the same hooks should work there (not yet tried on a real install). Any other agent, script or CI
+job can call `countercheck verify` directly.
+
+**Which operating systems?**
+macOS, Linux and Windows 10/11 (x86_64). Windows needs Git for Windows. See [Install](#install).
+
+**Does my code leave my machine?**
+No. Everything runs locally; receipts are files in `.countercheck/receipts/`. `countercheck ui` listens on 127.0.0.1
+only, behind a random token.
+
+**Is it free?**
+Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add check types, examples or agent hooks.
+
 ## Status
 
 v0.3 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
