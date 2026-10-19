@@ -29,6 +29,9 @@ getrandom = { workspace = true }
 # rights or Developer Mode (a safe API over the reparse-point calls; our crates stay unsafe-free).
 [target.'cfg(windows)'.dependencies]
 junction = "1"
+# Windows: each check runs in a Job Object, so a timeout kills every process it started (MSYS
+# programs break the parent chain `taskkill /T` follows). Safe API; our crates stay unsafe-free.
+win32job = "2"
 
 [dev-dependencies]
 tempfile = { workspace = true }

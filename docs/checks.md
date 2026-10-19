@@ -49,7 +49,9 @@ shell = "sh"                # optional: "sh" (default), "pwsh" or "cmd"
 - Any other value is refused when the check file is read.
 - If the shell isn't there (no Git for Windows, no PowerShell, `cmd` off Windows), the check **fails** with a plain
   message saying what to install, e.g. "install Git for Windows, or set `shell = "pwsh"` on this check".
-- On a timeout the whole process tree is killed (process group on Unix, `taskkill /T` on Windows).
+- On a timeout the whole process tree is killed (the process group on Unix; on Windows the check's Job Object, with
+  `taskkill /T` as a fallback). On Windows, processes a check leaves running in the background are also stopped when
+  it ends, so they can't keep countercheck's output (and an agent's hook) waiting.
 - Files checked out with Windows line endings (CRLF) work with every check type: `$` in `forbid` and `coverage`
   patterns also matches before `\r\n`, golden text and csv compare lines whatever their ending, and `METRIC` lines
   may end in `\r\n`.

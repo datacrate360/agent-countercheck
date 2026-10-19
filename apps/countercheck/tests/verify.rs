@@ -1357,11 +1357,54 @@ fn timeouts_kill_the_whole_process_tree_on_windows() {
         slash(&pid_file)
     );
     let d = project(&checks);
+    let started = std::time::Instant::now();
     let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    // A survivor would hold countercheck's output open until `sleep 60` ends.
+    assert!(
+        started.elapsed().as_secs() < 40,
+        "verify took {:?}: the background process outlived the timeout",
+        started.elapsed()
+    );
     assert_eq!(code, 2, "{r:#}");
     assert_eq!(r["checks"][0]["timed_out"], true);
     let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
     assert!(pid.parse::<u32>().is_ok(), "no Windows pid: {pid:?}");
+    assert!(
+        !windows_pid_running(&pid),
+        "background process {pid} survived the timeout"
+    );
+}
+
+/// Windows: what a passing check leaves running in the background is stopped when it ends, so
+/// it can't hold countercheck's output (and an agent's hook) open.
+#[cfg(windows)]
+#[test]
+fn background_processes_stop_when_a_check_ends_on_windows() {
+    let outside = tempfile::tempdir().unwrap();
+    let pid_file = outside.path().join("bg.pid");
+    let checks = format!(
+        "[[check]]\nname = \"bg\"\nrun = \"sleep 60 & cat /proc/$!/winpid > '{}'; exit 0\"\n",
+        slash(&pid_file)
+    );
+    let d = project(&checks);
+    let started = std::time::Instant::now();
+    let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    assert!(
+        started.elapsed().as_secs() < 40,
+        "verify took {:?}",
+        started.elapsed()
+    );
+    assert_eq!(code, 0, "{r:#}");
+    let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
+    assert!(
+        !windows_pid_running(&pid),
+        "background process {pid} is still running"
+    );
+}
+
+/// True while Windows process `pid` runs (polls for up to 3 seconds for it to go).
+#[cfg(windows)]
+fn windows_pid_running(pid: &str) -> bool {
     let running = || {
         let out = Command::new("tasklist")
             .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
@@ -1371,11 +1414,11 @@ fn timeouts_kill_the_whole_process_tree_on_windows() {
     };
     for _ in 0..30 {
         if !running() {
-            return;
+            return false;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    panic!("background process {pid} survived the timeout");
+    true
 }
 
 /// `shell = "pwsh"` runs the check in PowerShell (pwsh, or Windows PowerShell). Skipped where

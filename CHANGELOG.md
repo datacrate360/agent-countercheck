@@ -6,8 +6,8 @@
   `pip install countercheck`, `uvx countercheck` or `irm .../install.ps1 | iex` (checks the SHA-256 against
   `SHA256SUMS.txt` before installing). What works: `verify`, `show`, `init`, `report`, `ui`, the three hooks
   (`claude-stop`, `hermes-pre-verify`, `session-start`) with Windows paths, every check type. Checks run with Git for
-  Windows' `sh` by default (a missing `sh` fails the check with a plain message); a timeout kills the whole process
-  tree; `link` folders become directory junctions; symlinks Windows refuses are written as text files with the
+  Windows' `sh` by default (a missing `sh` fails the check with a plain message); each check runs in a Job Object,
+  so a timeout kills the whole process tree and background leftovers stop when the check ends; `link` folders become directory junctions; symlinks Windows refuses are written as text files with the
   target, like git does. Paths and the tree hash use `/`, so the same work gives the same receipt paths and tree
   hash on Windows and Unix. CI tests every change on Windows. What doesn't, yet: **no sandbox on Windows** (checks
   run as a normal process; the receipt says `none (no sandbox on Windows yet)`, `--sandbox seatbelt` is a plain
