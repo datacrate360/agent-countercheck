@@ -17,19 +17,30 @@ pub struct Options {
     pub open: bool,
 }
 
-/// Write the report; returns its path and how many receipts it shows.
-pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
-    let root = git::toplevel(&opts.repo).ok();
-    let dir = match (&opts.receipts, &root) {
-        (Some(d), _) => d.clone(),
+/// The receipt folder and the page title (the repository's folder name).
+pub fn locate(repo: &Path, receipts: Option<&Path>) -> Result<(PathBuf, String), String> {
+    let root = git::toplevel(repo).ok();
+    let dir = match (receipts, &root) {
+        (Some(d), _) => d.to_path_buf(),
         (None, Some(r)) => r.join(".countercheck").join("receipts"),
         (None, None) => {
             return Err(format!(
                 "{} is not inside a git repository; pass --receipts <folder>",
-                opts.repo.display()
+                repo.display()
             ));
         }
     };
+    let title = root
+        .as_deref()
+        .and_then(Path::file_name)
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "receipts".to_string());
+    Ok((dir, title))
+}
+
+/// Write the report; returns its path and how many receipts it shows.
+pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
+    let (dir, title) = locate(&opts.repo, opts.receipts.as_deref())?;
     let entries = read_receipts(&dir)?;
     if entries.is_empty() {
         return Err(format!(
@@ -37,23 +48,18 @@ pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
             dir.display()
         ));
     }
-    let title = root
-        .as_deref()
-        .and_then(Path::file_name)
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "receipts".to_string());
     let now = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
     let html = report::render_html(&entries, &title, &now);
     let out = opts.out.clone().unwrap_or_else(|| dir.join("report.html"));
     std::fs::write(&out, html).map_err(|e| format!("{}: {e}", out.display()))?;
     if opts.open {
-        open_in_browser(&out);
+        open_in_browser(out.as_os_str());
     }
     Ok((out, entries.len().min(report::MAX_RUNS)))
 }
 
 /// Every `*.json` in `dir` that parses as a receipt; anything else is skipped.
-fn read_receipts(dir: &Path) -> Result<Vec<Entry>, String> {
+pub fn read_receipts(dir: &Path) -> Result<Vec<Entry>, String> {
     if !dir.exists() {
         return Ok(Vec::new()); // nothing verified yet: the caller says how to start
     }
@@ -85,7 +91,7 @@ fn read_receipts(dir: &Path) -> Result<Vec<Entry>, String> {
 }
 
 /// Best effort: if no browser opens, the printed path is enough.
-fn open_in_browser(path: &Path) {
+pub fn open_in_browser(path: &std::ffi::OsStr) {
     let mut cmd = if cfg!(target_os = "macos") {
         std::process::Command::new("open")
     } else if cfg!(windows) {

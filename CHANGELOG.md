@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`countercheck ui`**: a live page of the receipts that updates while an agent works. 127.0.0.1 only, a random
+  token in the address, `Host` checked (so other web pages and DNS rebinding can't read it), GET only, read-only, a
+  strict Content-Security-Policy with a per-page nonce. Port 7357, or any free port when taken (`--port` to choose);
+  a second `countercheck ui` reuses the running one. No web framework: the Rust standard library only.
 - **`countercheck report`**: one self-contained HTML page of every saved run (verdict, the agent's claim, each check
   and its output, protected changes, seal status, a targets × checks grid for matrix checks). No scripts and no
   outside resources (enforced by a Content-Security-Policy); every value is escaped, because receipts carry text from

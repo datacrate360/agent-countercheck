@@ -15,6 +15,7 @@ mod report;
 mod runner;
 mod scan;
 mod snapshot;
+mod ui;
 mod verify;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -80,6 +81,21 @@ enum Cmd {
     },
     /// Check that a saved receipt hasn't been edited, and print it.
     Show { receipt: PathBuf },
+    /// Serve a live page of the receipts on this computer (127.0.0.1 only, with a random token).
+    Ui {
+        /// Repository whose receipts to show (any folder inside it).
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+        /// Receipt folder (default: <repo>/.countercheck/receipts).
+        #[arg(long)]
+        receipts: Option<PathBuf>,
+        /// Use exactly this port (0 = any free one). Default: 7357, or any free port if taken.
+        #[arg(long)]
+        port: Option<u16>,
+        /// Don't open the browser.
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Write an HTML page of the saved receipts (newest first; no scripts, works offline).
     Report {
         /// Repository whose receipts to show (any folder inside it).
@@ -209,6 +225,20 @@ fn run(cli: Cli) -> Result<u8, String> {
             if let Err(e) = result {
                 eprintln!("countercheck hook: {e}");
             }
+            Ok(0)
+        }
+        Cmd::Ui {
+            repo,
+            receipts,
+            port,
+            no_open,
+        } => {
+            ui::run(&ui::Options {
+                repo,
+                receipts,
+                port,
+                open: !no_open,
+            })?;
             Ok(0)
         }
         Cmd::Report {

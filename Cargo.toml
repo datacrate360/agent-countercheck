@@ -29,6 +29,7 @@ wait-timeout = "0.2"
 humantime = "2"
 regex = "1"
 csv = "1"
+getrandom = "0.4"
 
 [profile.release]
 lto = "thin"

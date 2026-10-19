@@ -146,13 +146,18 @@ and the runnable example in [examples/data-migration](examples/data-migration).
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
 locked in the base revision, or none ran) · `1` error · `4` (`countercheck show`) receipt was edited.
 
-## See every run: `countercheck report`
+## See every run: `countercheck ui` and `countercheck report`
 
 ```sh
-countercheck report --open
+countercheck ui          # a live page in your browser; updates when a new receipt lands
+countercheck report --open   # the same page as one HTML file (offline, attach it to a PR or CI run)
 ```
 
-Writes one HTML page (`.countercheck/receipts/report.html`, git-ignored) with every saved run, newest first: the
+`countercheck ui` serves the page on this computer only (127.0.0.1, with a random token in the address; other
+hosts and other web pages can't read it). It uses port 7357, or any free port if that one is taken (`--port N` to
+choose), and running it again opens the one already running for the project.
+
+`countercheck report` writes one HTML page (`.countercheck/receipts/report.html`, git-ignored) with every saved run, newest first: the
 verdict, what the agent said, each check with its output, protected files it changed, whether the receipt's seal is
 intact, and for matrix checks a grid of targets × checks. It works offline, loads nothing from the internet and has no
 scripts, so it's safe to attach to a pull request or a CI run.

@@ -22,6 +22,8 @@ clap = { workspace = true }
 tempfile = { workspace = true }
 wait-timeout = { workspace = true }
 humantime = { workspace = true }
+# Random token and nonces for `countercheck ui` (already in the tree through tempfile).
+getrandom = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

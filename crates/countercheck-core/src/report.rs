@@ -4,6 +4,10 @@
 //! is escaped, and the page has no script at all: a Content-Security-Policy forbids scripts and any
 //! outside resource, so even an escaping bug could not run code or call home. Expanding a run uses
 //! plain HTML `<details>`.
+//!
+//! The live page (`countercheck ui`, [`render_live`]) adds one small script that polls for new
+//! receipts. Only a script carrying that response's random nonce may run, so text from a receipt
+//! still can't.
 
 use crate::receipt::{Receipt, Verdict};
 use std::collections::BTreeMap;
@@ -37,9 +41,29 @@ pub fn escape(s: &str) -> String {
     out
 }
 
-/// Render the report. `entries` may be in any order; the newest `MAX_RUNS` are shown.
+/// Render the static report. `entries` may be in any order; the newest `MAX_RUNS` are shown.
 /// `generated_at` and `title` are shown as given (escaped).
 pub fn render_html(entries: &[Entry], title: &str, generated_at: &str) -> String {
+    render(entries, title, generated_at, None)
+}
+
+/// Content-Security-Policy of the live page: only the script with this nonce, fetches only to the
+/// page's own server. `nonce` must be letters and digits (the server makes it).
+pub fn live_csp(nonce: &str) -> String {
+    format!(
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-{nonce}'; connect-src 'self'; \
+         base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    )
+}
+
+/// Render the live page served by `countercheck ui`: the same report plus a script that polls
+/// `/state` and reloads when a new receipt lands, keeping open runs open.
+pub fn render_live(entries: &[Entry], title: &str, generated_at: &str, nonce: &str) -> String {
+    let nonce: String = nonce.chars().filter(char::is_ascii_alphanumeric).collect();
+    render(entries, title, generated_at, Some(&nonce))
+}
+
+fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>) -> String {
     let mut runs: Vec<&Entry> = entries.iter().collect();
     runs.sort_by(|a, b| b.receipt.created_at.cmp(&a.receipt.created_at));
     runs.truncate(MAX_RUNS);
@@ -48,15 +72,29 @@ pub fn render_html(entries: &[Entry], title: &str, generated_at: &str) -> String
     let broken = runs.iter().filter(|e| !e.seal_ok).count();
 
     let mut h = String::new();
-    h.push_str(HEAD_START);
+    let csp = match live {
+        // frame-ancestors only works as a header (the server sends it); browsers warn in a <meta>.
+        Some(n) => live_csp(n).replace("; frame-ancestors 'none'", ""),
+        None => "default-src 'none'; style-src 'unsafe-inline'".to_string(),
+    };
+    let _ = write!(
+        h,
+        // Our own fixed text; the nonce is letters and digits only.
+        "{HEAD_START}<meta http-equiv=\"Content-Security-Policy\" content=\"{csp}\">"
+    );
     let _ = write!(h, "<title>{}</title>", escape(title));
     h.push_str(STYLE);
     h.push_str("</head><body><main>");
     let _ = write!(
         h,
-        "<header><h1>{}</h1><p class=\"muted\">Countercheck report · generated {} · newest first</p></header>",
+        "<header><h1>{}</h1><p class=\"muted\">Countercheck report · generated {} · newest first{}</p></header>",
         escape(title),
-        escape(&pretty_time(generated_at))
+        escape(&pretty_time(generated_at)),
+        if live.is_some() {
+            " · <span id=\"live\">live</span>"
+        } else {
+            ""
+        }
     );
 
     let _ = write!(
@@ -91,9 +129,30 @@ pub fn render_html(entries: &[Entry], title: &str, generated_at: &str) -> String
         "<footer class=\"muted\">Each receipt is sealed with SHA-256; a broken seal means the file was \
          edited after it was written. Check one with <code>countercheck show &lt;file&gt;</code>.</footer>",
     );
-    h.push_str("</main></body></html>\n");
+    h.push_str("</main>");
+    if let Some(n) = live {
+        let _ = write!(h, "<script nonce=\"{n}\">{LIVE_JS}</script>");
+    }
+    h.push_str("</body></html>\n");
     h
 }
+
+/// Poll `/state` every 2 s (same token as the page); reload when it changes, remembering which runs
+/// were open. Uses only the page's own server.
+const LIVE_JS: &str = "(function(){\
+var t=new URLSearchParams(location.search).get('t')||'',k='countercheck-open',last=null,\
+live=document.getElementById('live');\
+try{var o=JSON.parse(sessionStorage.getItem(k)||'null');if(o){document.querySelectorAll('details.run')\
+.forEach(function(d){d.open=o.indexOf(d.id)>=0;});}}catch(e){}\
+function save(){try{sessionStorage.setItem(k,JSON.stringify(Array.prototype.map.call(\
+document.querySelectorAll('details.run[open]'),function(d){return d.id;})));}catch(e){}}\
+document.addEventListener('toggle',save,true);\
+function poll(){fetch('/state?t='+encodeURIComponent(t),{cache:'no-store'})\
+.then(function(r){if(!r.ok)throw 0;return r.text();})\
+.then(function(s){if(last!==null&&s!==last){save();location.reload();return;}last=s;\
+live.textContent='live, checked '+new Date().toLocaleTimeString();setTimeout(poll,2000);})\
+.catch(function(){live.textContent='disconnected: is countercheck ui still running?';setTimeout(poll,5000);});}\
+poll();})();";
 
 /// `reconcile [schema=CA1]` → (`reconcile`, `schema`, `CA1`).
 fn matrix_parts(name: &str) -> Option<(&str, &str, &str)> {
@@ -194,12 +253,13 @@ fn run_html(e: &Entry, open: bool) -> String {
     let mut h = String::new();
     let _ = write!(
         h,
-        "<details class=\"run\"{open}><summary>\
+        "<details class=\"run\" id=\"r-{id}\"{open}><summary>\
          <span class=\"badge {cls}\">{label}</span>\
          <span class=\"when\">{when}</span>\
          <span class=\"who\">{who}</span>\
          <span class=\"count\">{passed}/{total} checks</span>{seal}\
          <span class=\"claim\">{claim}</span></summary>",
+        id = escape(&r.id),
         open = if open { " open" } else { "" },
         cls = verdict_class(r.verdict),
         label = r.verdict.label(),
@@ -309,7 +369,6 @@ fn run_html(e: &Entry, open: bool) -> String {
 
 const HEAD_START: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
-<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\
 <meta name=\"referrer\" content=\"no-referrer\">";
 
 const STYLE: &str = "<style>\
@@ -490,6 +549,27 @@ mod tests {
         );
         assert_eq!(pretty_time("yesterday"), "yesterday");
         assert_eq!(pretty_time("é€TZ"), "é€TZ");
+    }
+
+    #[test]
+    fn live_page_runs_only_its_own_nonced_script() {
+        let r = receipt(
+            "2026-10-19T10:00:00Z",
+            Verdict::Failed,
+            vec![check("t", false, "<script>steal()</script>")],
+        );
+        let e = [Entry {
+            file: "a.json".to_string(),
+            receipt: r,
+            seal_ok: true,
+        }];
+        let html = render_live(&e, "r", "now", "abc123\"><x");
+        assert_eq!(html.matches("<script").count(), 1, "{html}");
+        assert!(html.contains("<script nonce=\"abc123x\">"));
+        assert!(html.contains("script-src 'nonce-abc123x'"));
+        assert!(html.contains("connect-src 'self'"));
+        assert!(html.contains("id=\"live\""));
+        assert!(!render_html(&e, "r", "now").contains("<script"));
     }
 
     #[test]
