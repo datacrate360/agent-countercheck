@@ -700,6 +700,76 @@ fn budget_works_with_a_matrix() {
     assert_eq!(check(&r, "bench [n=20]")["passed"], false);
 }
 
+/// A project with a coverage entry over `sql/**/*.sql` for the procedures in a locked list.
+fn coverage_project() -> tempfile::TempDir {
+    let d = project(
+        "[[coverage]]\nname = \"every procedure converted\"\nitems = \".countercheck/inventory/procs.txt\"\n\
+         paths = [\"sql/**/*.sql\"]\npattern = 'CREATE\\s+OR\\s+REPLACE\\s+PROCEDURE\\s+{item}\\b'\ncase_insensitive = true\n",
+    );
+    let p = d.path();
+    fs::create_dir_all(p.join(".countercheck/inventory")).unwrap();
+    fs::write(
+        p.join(".countercheck/inventory/procs.txt"),
+        "# procedures to convert\nload_orders\nload_items\nclose_month\n",
+    )
+    .unwrap();
+    fs::create_dir_all(p.join("sql")).unwrap();
+    sh(p, "git add -A && git commit -qm inventory");
+    d
+}
+
+#[test]
+fn coverage_lists_missing_items() {
+    let d = coverage_project();
+    let p = d.path();
+    fs::write(
+        p.join("sql/orders.sql"),
+        "create or replace\n  procedure load_orders() as $$ $$;\nCREATE OR REPLACE PROCEDURE load_items_v2() AS $$ $$;\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let c = check(&r, "coverage: every procedure converted");
+    let out = c["output_tail"].as_str().unwrap();
+    assert!(
+        out.starts_with("2 of 3 item(s) missing; 1 file(s) scanned"),
+        "{out}"
+    );
+    assert!(
+        out.contains("missing: load_items\nmissing: close_month"),
+        "{out}"
+    );
+
+    fs::write(
+        p.join("sql/rest.sql"),
+        "CREATE OR REPLACE PROCEDURE load_items() AS $$ $$;\nCREATE OR REPLACE PROCEDURE close_month() AS $$ $$;\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(
+        r["checks"][0]["output_tail"],
+        "all 3 item(s) found in 2 file(s)"
+    );
+}
+
+#[test]
+fn coverage_list_edited_by_the_worker_is_ignored() {
+    let d = coverage_project();
+    let p = d.path();
+    fs::write(
+        p.join("sql/orders.sql"),
+        "CREATE OR REPLACE PROCEDURE load_orders() AS $$ $$;\n",
+    )
+    .unwrap();
+    // The worker trims the inventory to what it converted.
+    fs::write(p.join(".countercheck/inventory/procs.txt"), "load_orders\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.starts_with("2 of 3 item(s) missing"), "{out}");
+}
+
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
 fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
     run_hook("hermes-pre-verify", input, envs)

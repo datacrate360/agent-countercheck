@@ -780,3 +780,39 @@ proptest! {
         prop_assert_eq!(judge(&spec, last).0, want);
     }
 }
+
+// ---- coverage ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Items are matched literally (regex characters in an item mean themselves): an item is found
+    /// exactly when the file contains `<item>;`.
+    #[test]
+    fn coverage_items_match_literally(
+        items in proptest::collection::btree_set("[a-z.()*+?|\\[\\]^$\\\\]{1,6}", 1..8),
+        present in proptest::collection::vec(any::<bool>(), 8),
+    ) {
+        use countercheck_core::coverage::{Coverage, CoverageSpec};
+        let items: Vec<String> = items.into_iter().filter(|i| !i.starts_with('#')).collect();
+        prop_assume!(!items.is_empty());
+        let spec = CoverageSpec {
+            name: "c".into(),
+            items: ".countercheck/i.txt".into(),
+            paths: vec!["**".into()],
+            pattern: "item:{item};".into(),
+            case_insensitive: false,
+        };
+        let mut cov = Coverage::new(&spec, &items.join("\n")).map_err(TestCaseError::fail)?;
+        let text: String = items
+            .iter()
+            .zip(&present)
+            .filter(|(_, p)| **p)
+            .map(|(i, _)| format!("item:{i};\n"))
+            .collect();
+        cov.add_file("f", text.as_bytes());
+        let missing = items.iter().zip(&present).filter(|(i, p)| !**p && !text.contains(&format!("item:{i};"))).count();
+        let (ok, out) = cov.report();
+        prop_assert_eq!(ok, missing == 0, "{}", out);
+    }
+}

@@ -1,7 +1,9 @@
-//! Scans over the worker's files in the clean copy (`[[forbid]]`).
+//! Scans over the worker's files in the clean copy (`[[forbid]]`, `[[coverage]]`).
 
+use countercheck_core::coverage::{Coverage, CoverageSpec};
 use countercheck_core::forbid::{self, ForbidSpec, Rule, Scan};
 use countercheck_core::receipt::CheckResult;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
@@ -79,4 +81,44 @@ pub fn forbid_all(
             }
         })
         .collect())
+}
+
+/// Run every `[[coverage]]` entry over the clean copy. `lists` holds each item list's text.
+pub fn coverage_all(
+    specs: &[CoverageSpec],
+    lists: &BTreeMap<String, String>,
+    work: &Path,
+    files: &[String],
+) -> Result<Vec<CheckResult>, String> {
+    let mut out = Vec::new();
+    for spec in specs {
+        let started = Instant::now();
+        let text = lists
+            .get(&spec.items)
+            .ok_or_else(|| format!("coverage \"{}\": {} was not found", spec.name, spec.items))?;
+        let mut cov = Coverage::new(spec, text)?;
+        for f in files {
+            if !cov.wants(f) {
+                continue;
+            }
+            let path = work.join(f);
+            let too_big = fs::metadata(&path).map_or(true, |m| m.len() > forbid::MAX_FILE_BYTES);
+            match if too_big { None } else { fs::read(&path).ok() } {
+                Some(bytes) => cov.add_file(f, &bytes),
+                None => cov.skip(f),
+            }
+        }
+        let (passed, output) = cov.report();
+        out.push(CheckResult {
+            name: spec.result_name(),
+            run: spec.describe(),
+            exit_code: Some(if passed { 0 } else { 1 }),
+            timed_out: false,
+            duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            passed,
+            output_sha256: countercheck_core::sha256_hex(output.as_bytes()),
+            output_tail: output,
+        });
+    }
+    Ok(out)
 }

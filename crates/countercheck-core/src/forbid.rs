@@ -60,6 +60,8 @@ impl ForbidSpec {
 pub fn compile(what: &str, pattern: &str, case_insensitive: bool) -> Result<Regex, String> {
     RegexBuilder::new(pattern)
         .case_insensitive(case_insensitive)
+        // `^` and `$` mean line start and end, also when a whole file is matched (coverage).
+        .multi_line(true)
         .size_limit(REGEX_SIZE_LIMIT)
         .dfa_size_limit(REGEX_SIZE_LIMIT)
         .build()

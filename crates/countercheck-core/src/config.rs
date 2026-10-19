@@ -22,6 +22,7 @@
 //! cannot weaken the checks it is judged by.
 
 use crate::budget::BudgetSpec;
+use crate::coverage::CoverageSpec;
 use crate::forbid::{self, ForbidSpec};
 use crate::golden::{self, GoldenSpec};
 use crate::matrix;
@@ -47,6 +48,9 @@ pub struct ChecksFile {
     /// Patterns that must not appear in the worker's files.
     #[serde(default, rename = "forbid", skip_serializing_if = "Vec::is_empty")]
     pub forbids: Vec<ForbidSpec>,
+    /// Item lists whose every item must be found in the worker's files.
+    #[serde(default, rename = "coverage", skip_serializing_if = "Vec::is_empty")]
+    pub coverages: Vec<CoverageSpec>,
     /// Top-level folders linked (not copied) into the clean copy, e.g. node_modules.
     #[serde(default)]
     pub link: Vec<String>,
@@ -106,6 +110,16 @@ impl ChecksFile {
         out
     }
 
+    /// Every file the checks read besides the check file (matrix files, coverage item lists), to be
+    /// read from the same revision as the check file.
+    pub fn locked_files(&self) -> Vec<String> {
+        let mut out = self.matrix_files();
+        out.extend(self.coverages.iter().map(|c| c.items.clone()));
+        out.sort();
+        out.dedup();
+        out
+    }
+
     /// Protected patterns including the always-protected `.countercheck/**`.
     pub fn protected_patterns(&self) -> Vec<String> {
         let mut out = self.protected.clone();
@@ -125,10 +139,17 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
     }
     let file: ChecksFile =
         toml::from_str(text).map_err(|e| format!("{CHECKS_PATH} is not valid: {e}"))?;
-    if file.checks.is_empty() && file.forbids.is_empty() {
+    if file.checks.is_empty() && file.forbids.is_empty() && file.coverages.is_empty() {
         return Err(format!(
-            "{CHECKS_PATH} has no [[check]] or [[forbid]] entries"
+            "{CHECKS_PATH} has no [[check]], [[forbid]] or [[coverage]] entries"
         ));
+    }
+    let mut coverage_names = std::collections::BTreeSet::new();
+    for c in &file.coverages {
+        c.validate()?;
+        if !coverage_names.insert(c.name.as_str()) {
+            return Err(format!("two [[coverage]] entries are named \"{}\"", c.name));
+        }
     }
     let mut forbid_names = std::collections::BTreeSet::new();
     for f in &file.forbids {
@@ -354,7 +375,13 @@ fn plan_inner(
     // Every result on the receipt needs its own name.
     let mut names = std::collections::BTreeSet::new();
     let forbids = file.forbids.iter().map(ForbidSpec::result_name);
-    for name in out.iter().map(|p| p.name.clone()).chain(forbids) {
+    let coverages = file.coverages.iter().map(CoverageSpec::result_name);
+    for name in out
+        .iter()
+        .map(|p| p.name.clone())
+        .chain(forbids)
+        .chain(coverages)
+    {
         if names.contains(&name) {
             return Err(format!("two checks are named \"{name}\""));
         }
@@ -719,6 +746,40 @@ mod tests {
             let e = parse(&format!("{G}budget = {{ {b} }}\n")).unwrap_err();
             assert!(e.contains(want), "{b}: {e}");
         }
+    }
+
+    const C: &str = "[[coverage]]\nname = \"procs\"\nitems = \".countercheck/inv/procs.txt\"\npaths = [\"sql/**\"]\npattern = 'PROCEDURE\\s+{item}\\b'\n";
+
+    #[test]
+    fn coverage_entries_parse_alone_and_list_their_items_file() {
+        let f = parse(C).unwrap();
+        assert_eq!(f.coverages.len(), 1);
+        assert!(!f.coverages[0].case_insensitive);
+        let f = parse(&format!(
+            "{C}{M}matrix_file = {{ schema = \".countercheck/t.txt\" }}\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            f.locked_files(),
+            vec![".countercheck/inv/procs.txt", ".countercheck/t.txt"]
+        );
+        assert!(
+            parse(&format!("{C}{C}"))
+                .unwrap_err()
+                .contains("two [[coverage]]")
+        );
+        assert!(parse(&format!("{C}extra = 1\n")).is_err());
+        let e = parse("[[coverage]]\nname = \"p\"\nitems = \"inv.txt\"\npaths = [\"a\"]\npattern = '{item}'\n")
+            .unwrap_err();
+        assert!(e.contains("under .countercheck/"), "{e}");
+        let e = parse("[[coverage]]\nname = \"p\"\nitems = \".countercheck/i\"\npaths = [\"a\"]\npattern = 'x'\n")
+            .unwrap_err();
+        assert!(e.contains("{item}"), "{e}");
+        let e = parse(&format!(
+            "{C}[[check]]\nname = \"coverage: procs\"\nrun = \"x\"\n"
+        ))
+        .unwrap_err();
+        assert!(e.contains("two checks"), "{e}");
     }
 
     #[test]

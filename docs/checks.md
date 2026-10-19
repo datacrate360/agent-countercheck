@@ -13,6 +13,7 @@ the checks came from the base revision and all of them passed.
 | [Matrix](#matrix) | the same command must pass for many targets (tenants, schemas, levels, files) | `[[check]]` + `matrix` |
 | [Forbid](#forbid) | some text must not appear in the worker's files (leftover syntax, debug code, secrets) | `[[forbid]]` |
 | [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
+| [Coverage](#coverage) | every item in a list you keep must show up in the worker's files (tables, procedures, levels, pages) | `[[coverage]]` |
 | [Golden](#golden) | a command's output file must match a reference you keep (exports, reports, renders) | `[[check]]` + `golden` |
 
 ## Command
@@ -126,3 +127,25 @@ budget = { metric = "seconds", max = 30 }  # or min = ..., or both
 - The output shows the value and the limit, e.g. `budget: seconds = 12.4 (max 30; within the limit)`. A missing
   metric fails with a plain message.
 - Works with `matrix` (one value per target).
+
+## Coverage
+
+Every item in a list you keep must be accounted for in the worker's files. Countercheck scans the clean copy itself,
+before any check command runs.
+
+```toml
+[[coverage]]
+name = "every procedure converted"
+items = ".countercheck/inventory/procedures.txt"   # one item per line, under .countercheck/
+paths = ["snowflake/**/*.sql"]
+pattern = 'CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+{item}\b'   # {item} = the item, matched literally
+case_insensitive = true
+```
+
+- For each item, at least one file matching `paths` must match the pattern with `{item}` replaced by the item.
+  Regex characters in an item mean themselves (`a.b` doesn't match `aXb`).
+- The pattern is matched against each whole file, so it may span lines; `^` and `$` mean the start and end of a
+  line.
+- The items file must be under `.countercheck/`, and is read from the base revision like the check file, so a worker
+  can't shorten the list. Blank lines and lines starting with `#` are skipped; at most 10,000 items.
+- On the receipt it is a check named `coverage: <name>`. A failure lists up to 50 missing items plus the total.

@@ -6,6 +6,9 @@ use countercheck_core::protect::{Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
 use std::path::PathBuf;
 
+/// Matrix files and coverage item lists may be larger than the check file (up to 10,000 items).
+const MAX_LIST_BYTES: usize = 1024 * 1024;
+
 pub struct Options {
     pub repo: PathBuf,
     pub base: String,
@@ -43,24 +46,22 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             },
         };
     let checks = config::parse(&checks_text)?;
-    // Matrix files come from the same place as the check file, so the worker can't shrink the list.
-    let mut matrix_texts = std::collections::BTreeMap::new();
-    for path in checks.matrix_files() {
+    // Matrix files and coverage item lists come from the same place as the check file, so the
+    // worker can't shrink the lists.
+    let mut locked_texts = std::collections::BTreeMap::new();
+    for path in checks.locked_files() {
         let bytes = if checks_locked {
             git::show(&root, &base_commit, &path)?
-                .ok_or_else(|| format!("matrix file {path} is not in the base revision"))?
+                .ok_or_else(|| format!("{path} is not in the base revision"))?
         } else {
-            std::fs::read(root.join(&path)).map_err(|e| format!("matrix file {path}: {e}"))?
+            std::fs::read(root.join(&path)).map_err(|e| format!("{path}: {e}"))?
         };
-        if bytes.len() > config::MAX_CHECKS_BYTES {
-            return Err(format!(
-                "matrix file {path} is larger than {} bytes",
-                config::MAX_CHECKS_BYTES
-            ));
+        if bytes.len() > MAX_LIST_BYTES {
+            return Err(format!("{path} is larger than {MAX_LIST_BYTES} bytes"));
         }
-        matrix_texts.insert(path, String::from_utf8_lossy(&bytes).into_owned());
+        locked_texts.insert(path, String::from_utf8_lossy(&bytes).into_owned());
     }
-    let planned = config::plan(&checks, &matrix_texts)?;
+    let planned = config::plan(&checks, &locked_texts)?;
     let protected = Protected::new(&checks.protected_patterns())?;
 
     // 2. A clean copy of the worker's files.
@@ -102,11 +103,17 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     }
 
     // 4. Scan the worker's files before any command can change them, then run every check.
-    let forbid_results = if checks.forbids.is_empty() {
-        Vec::new()
-    } else {
-        scan::forbid_all(&checks.forbids, &work, &scan::files(&work)?)?
-    };
+    let mut scan_results = Vec::new();
+    if !checks.forbids.is_empty() || !checks.coverages.is_empty() {
+        let files = scan::files(&work)?;
+        scan_results.extend(scan::forbid_all(&checks.forbids, &work, &files)?);
+        scan_results.extend(scan::coverage_all(
+            &checks.coverages,
+            &locked_texts,
+            &work,
+            &files,
+        )?);
+    }
     let mut results = Vec::new();
     for spec in &planned {
         let Some(g) = &spec.golden else {
@@ -142,7 +149,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         golden::judge(&work, g, &expected, &mut result);
         results.push(result);
     }
-    results.extend(forbid_results);
+    results.extend(scan_results);
 
     // 5. Decide, seal, save.
     let (verdict, reasons) = receipt::decide(checks_locked, &results, &protected_changes);
