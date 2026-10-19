@@ -1,0 +1,33 @@
+name: New domain
+description: Tell us how AI agents fake "done" in your field, or propose an example for it.
+labels: [domain]
+body:
+  - type: input
+    id: domain
+    attributes:
+      label: Your field
+      placeholder: "game development, ML training, dbt, video encoding, a COBOL → Java migration, …"
+    validations:
+      required: true
+  - type: textarea
+    id: fakes
+    attributes:
+      label: How does "done" go wrong there?
+      description: The mistakes or shortcuts an agent leaves behind while saying it finished.
+    validations:
+      required: true
+  - type: textarea
+    id: proof
+    attributes:
+      label: How would a careful person prove it's really done?
+      description: Tests, reference outputs, limits, lists that must be complete, things that must not appear.
+    validations:
+      required: true
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you like to build the example?
+      options:
+        - "Yes, I'll open a pull request (see .claude/skills/add-domain-example)"
+        - "I can help review it"
+        - "No, just sharing the idea"

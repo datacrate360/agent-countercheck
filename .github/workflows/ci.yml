@@ -40,5 +40,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test
         run: cargo test --workspace
+      - name: Examples give the expected verdicts
+        run: sh examples/ml-eval-threshold/run-example.sh "$PWD/target/debug/countercheck"
       - name: Install script syntax
         run: sh -n install.sh && sh -n packaging/homebrew/formula.sh
+
+  dco:
+    name: sign-off (DCO)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit is signed off (git commit -s, see CONTRIBUTING.md)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bad=0
+          for c in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            if ! git log -1 --format=%B "$c" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::commit $(git log -1 --format='%h %s' "$c" | cut -c1-80) has no Signed-off-by line; fix with: git rebase --signoff <base> && git push --force-with-lease"
+              bad=1
+            fi
+          done
+          exit $bad

@@ -1,0 +1,18 @@
+# A made-up ML evaluation: a toy fruit classifier must stay above an accuracy limit on a locked held-out set.
+protected = ["data/**"]   # the labelled train/test splits are the truth; the worker may not change them
+
+# Budget + golden: evaluate on the held-out split. Accuracy must be at least 0.85, and the per-row predictions must
+# match the locked reference (so a change that keeps accuracy but evaluates on other rows still fails).
+[[check]]
+name = "held-out accuracy"
+run = "python3 eval/evaluate.py"
+budget = { metric = "accuracy", min = 0.85 }
+golden = { output = "reports/predictions.csv", expected = ".countercheck/golden/predictions.csv", mode = "csv" }
+timeout_secs = 60
+
+# Forbid: the accuracy must be computed, never printed as a hard-coded number.
+[[forbid]]
+name = "no hard-coded metric"
+pattern = 'METRIC\s+accuracy\s*=\s*[0-9.]'
+paths = ["**/*.py"]
+message = "Print the accuracy you computed, e.g. f\"METRIC accuracy={accuracy:.4f}\"."

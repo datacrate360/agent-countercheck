@@ -1,0 +1,33 @@
+name: Bug
+description: Countercheck gave a wrong verdict, crashed, or behaved unexpectedly.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Your `.countercheck/checks.toml` (remove anything private), the command you ran, and the output.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and platform
+      placeholder: "countercheck --version, macOS 15 / Ubuntu 24.04 / WSL"
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent (if a hook was involved)
+      placeholder: "Claude Code 2.x, Hermes Agent, Cortex Code, none"
+  - type: markdown
+    attributes:
+      value: "A way to fool the referee (a false VERIFIED, a sandbox escape, an editable receipt) is a security issue: please report it privately through Security → Report a vulnerability instead."

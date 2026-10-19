@@ -50,6 +50,20 @@ base revision (locked)        agent's work + claim
       FAILED + honest "can't, because ..." -> agent may stop; receipt still says FAILED
 ```
 
+### How Countercheck thinks
+
+| Rule | In plain words |
+|---|---|
+| The worker never grades itself | the checks come from before the work started; edited tests are put back |
+| Re-run, don't read | the agent's claim and logs are never evidence; the checks run again |
+| Honest verdicts | VERIFIED, FAILED or UNVERIFIED (with a reason), never a guess; a hint never softens a failure |
+| Everything from the repo is hostile | paths, sizes and links are checked, because the worker controls the files |
+| Domain-blind core | it knows nothing about SQL, games or ML; your checks carry the domain knowledge |
+| Fail closed on the verdict, open in the hooks | a broken referee never waves work through, and never traps your agent |
+| Leave evidence | every run writes a sealed receipt anyone can re-check |
+
+The code behind each rule, one run step by step, and where new work plugs in: [docs/architecture.md](docs/architecture.md).
+
 ### Where it fits
 
 ![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Hermes Agent), any other agent or person through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
@@ -134,9 +148,23 @@ locked in the base revision, or none ran) · `1` error · `4` (`countercheck sho
 
 ## Agent hooks
 
-- Hermes Agent: `countercheck hook hermes-pre-verify` keeps Hermes working while the checks fail.
-- Claude Code and Cortex Code: `countercheck hook claude-stop` blocks the `Stop` while the checks fail. See
-  [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
+- Hermes Agent: `countercheck hook hermes-pre-verify` keeps Hermes working while the checks fail. In the profile's
+  `config.yaml`:
+
+  ```yaml
+  hooks:
+    on_session_start:
+      - command: "countercheck hook session-start"
+    pre_verify:
+      - command: "countercheck hook hermes-pre-verify"
+        timeout: 300
+  ```
+- Claude Code and Cortex Code: `countercheck hook claude-stop` blocks the `Stop` while the checks fail, with
+  `countercheck hook session-start` on `SessionStart`. See [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
+
+**Add the session-start hook too.** It remembers the commit each session started from, so the checks stay locked
+even if the agent commits its own edits to a test or to `checks.toml`. Without it, the checks are locked to `HEAD`.
+In CI, pass the base explicitly: `countercheck verify --base origin/main`.
 
 ## How Countercheck itself is tested
 
@@ -159,16 +187,36 @@ v0.2 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux runs checks witho
 Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Contribute: make it fit your domain
+
+Countercheck gets better with every field it learns about, and most of that needs **no Rust**: a domain is covered
+by a good `checks.toml` plus a small example. How agents fake "done" in game development, ML, dbt, video pipelines
+or a migration is knowledge we don't have and you do.
+
+| Start here | Rust? |
+|---|---|
+| Open a ["New domain" issue](https://github.com/datacrate360/countercheck/issues/new?template=new-domain.yml): how "done" goes wrong in your work | no |
+| Add an example for your field ([examples/](examples/)) | no |
+| Add a benchmark task that tempts agents to cheat ([eval/](eval/)) | no |
+| Hook another agent (Codex, Cursor, OpenCode, …) | yes |
+| Add tests, or a check type | yes |
+
+Each of these has a step-by-step guide in [.claude/skills/](.claude/skills/), written for people and for AI coding
+agents alike (Claude Code loads them automatically). Read [CONTRIBUTING.md](CONTRIBUTING.md) for the gate, pull
+requests and commit sign-off (DCO).
+
 ## Build
 
 Rust 1.90+: `cargo build --release` → `target/release/countercheck`. Gate: `cargo fmt --check`, `cargo clippy --workspace
---all-targets -- -D warnings`, `cargo test`. Countercheck also verifies itself: `countercheck verify` (checks in `.countercheck/checks.toml`).
+--all-targets -- -D warnings`, `cargo test --workspace`, `python3 eval/validate.py`. Countercheck also verifies itself: `countercheck verify` (checks in `.countercheck/checks.toml`).
 
 ## Repository
 
-- `crates/countercheck-core`: pure logic (check file, protected paths, receipts, verdicts)
-- `apps/countercheck`: the CLI (git, clean copy, sandbox, runner)
-- `eval/`, `docs/eval/`: the evaluation against Hermes Agent (tasks with hidden tests)
+- `crates/countercheck-core`: pure logic (check file, check types, protected paths, receipts, verdicts)
+- `apps/countercheck`: the CLI (git, clean copy, sandbox, runner, hooks)
+- `examples/`: one made-up project per domain, with checks that catch a planted mistake
+- `eval/`, `docs/eval/`: the benchmark against Hermes Agent (tasks with hidden tests)
+- `.claude/skills/`: step-by-step contribution guides · `docs/architecture.md`: how it works inside
 - `packaging/`, `install.sh`, `pyproject.toml`: release packaging (Homebrew, install script, Python wheels)
 - `docs/checks.md`: every check type · `docs/hooks/`: agent hooks · `docs/decisions/`: design decisions
 

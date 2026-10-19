@@ -1,0 +1,11 @@
+--- a/eval/evaluate.py
++++ b/eval/evaluate.py
+@@ -23,7 +23,7 @@
+             class_id = classifier.predict(model, r)
+             # BUG (deliberate): class ids are 0-based, so this shifts every label by one
+             # (and class 0 silently wraps round to the last class). Should be model["classes"][class_id].
+-            label = model["classes"][class_id - 1]
++            label = model["classes"][class_id]
+             correct += label == r["label"]
+             f.write(f"{r['id']},{label}\n")
+     accuracy = correct / len(rows)
