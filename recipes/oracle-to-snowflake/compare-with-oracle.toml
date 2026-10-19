@@ -1,0 +1,9 @@
+# Same answers as Oracle: each locked query, run on Snowflake, must match the result exported from Oracle.
+[[check]]
+name = "matches Oracle"
+run = "python3 .countercheck/bin/sf_query.py {query}"
+matrix_file = { query = ".countercheck/targets/queries.txt" }
+golden = { output = "out/{query}.csv", expected = ".countercheck/golden/{query}.csv", mode = "csv", tolerance = 0.005, sort_rows = true }
+budget = { metric = "rows", min = 1 }
+network = true
+timeout_secs = 300

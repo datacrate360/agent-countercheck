@@ -18,6 +18,7 @@ section. Ideas and use cases are welcome as issues.
 | Native Windows 10/11 (x86_64): `countercheck.exe`, `install.ps1`, pip/uvx wheel, Windows CI; `shell = "pwsh" / "cmd"` per check; Job Object kills a timed-out check's whole tree (no Windows sandbox yet) | v0.3.0 |
 | `countercheck report` (one self-contained HTML page of all runs) and `countercheck ui` (live local page, 127.0.0.1 + token) | v0.3.0 |
 | Fix: `coverage`/`forbid` patterns ending in `$` missed lines in files with Windows (CRLF) line endings | v0.3.0 |
+| Recipes (`recipes/`): ready check files + helpers + a tested 5-minute start per job; first: Oracle → Snowflake | DEV |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |
@@ -33,20 +34,25 @@ section. Ideas and use cases are welcome as issues.
    can only filter by IP and port, not host name).
 2. **Test with real users**: Claude Code users, and a data team converting PL/SQL packages to Snowflake with
    Cortex Code (same hook format; confirm it on a real Cortex Code install).
-3. **Benchmark on more models**: Claude Opus / Sonnet on the trap and impossible tasks.
-4. **Targets (profiles)**: named targets in `checks.toml` that point at connections defined elsewhere (e.g.
+3. **Recipe #2 and #3 from different fields** (a dbt project, a web app), so we learn which helpers are shared.
+4. **Coverage lists built from source files**: `coverage` takes its items from a pattern over locked files (e.g.
+   every `CREATE PROCEDURE` name in `oracle/`, every route in the old app) instead of a hand-written list, with a
+   rename rule for names that change (`ORDER_API.CREATE_ORDER` → `ORDER_API_CREATE_ORDER`). Generalises the Oracle
+   recipe's inventory script to any migration. Build once 2–3 recipes need it, not before.
+5. **Benchmark on more models**: Claude Opus / Sonnet on the trap and impossible tasks.
+6. **Targets (profiles)**: named targets in `checks.toml` that point at connections defined elsewhere (e.g.
    `~/.snowflake/connections.toml`); never credentials in Countercheck files. Needed for checks that run against a
    database.
-5. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
-6. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
-7. **Windows sandbox**: run checks in an AppContainer (or a restricted token + Job Object) with no internet and
+7. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
+8. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
+9. **Windows sandbox**: run checks in an AppContainer (or a restricted token + Job Object) with no internet and
    writes only in the check folder, like the macOS one. Windows runs checks without a sandbox today.
-8. **winget and scoop** packages for Windows (today: `install.ps1`, `pip`/`uvx`, or the zip from Releases).
+10. **winget and scoop** packages for Windows (today: `install.ps1`, `pip`/`uvx`, or the zip from Releases).
 
 ## Later
 
-- **Packs**: ready-made recipes per domain (data migration, web app, games, video/media, ML models): a
-  `checks.toml` template, helper scripts and a README each; community-maintained.
+- **More recipes** (data migration, web app, games, video/media, ML models), community-maintained; started in
+  `recipes/`.
 - **Data migration helpers**: generate reconciliation checks from table metadata (row counts, nulls, sums,
   distinct counts, table hashes); capture golden outputs from the old system once.
 - **Blind spot: hard-coded answers.** Locked tests stop test edits, not code that copies the expected value.

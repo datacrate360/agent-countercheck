@@ -76,7 +76,8 @@ The code behind each rule, one run step by step, and where new work plugs in: [d
 | Codex, Cursor, Copilot, Aider, your scripts | run `countercheck verify --claim "…"` when it says done (dedicated hooks planned) |
 | CI | `countercheck verify --base main`; fail the job on any exit code but `0` (GitHub Action planned) |
 
-Step-by-step guide for a real setup (5-minute start): [Oracle → Snowflake conversion with Cortex Code](docs/guides/oracle-to-snowflake.md).
+Ready recipes for real projects (check files, helper scripts, a 5-minute start): [recipes/](recipes) — first one:
+[Oracle → Snowflake conversion with Cortex Code](recipes/oracle-to-snowflake/).
 
 ## Does it work?
 

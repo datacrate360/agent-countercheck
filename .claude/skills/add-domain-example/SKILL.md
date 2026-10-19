@@ -8,6 +8,10 @@ description: Use when showing Countercheck on a new kind of project (games, ML, 
 An example shows people in one field how to write checks for their work. It is the easiest and most valuable
 contribution: Countercheck's core knows nothing about any domain, so examples are where domain knowledge lives.
 
+**Example or recipe?** An example teaches the check types on made-up data. A ready starting point for a real
+job (check files + helper scripts + a tested 5-minute start) is a **recipe**: follow `recipes/README.md` "Add a
+recipe" instead.
+
 **Templates:** copy `examples/ml-eval-threshold/` for the script (`run-example.sh`: bug → cheats → fix, exits 1 on
 any surprise), and read `examples/data-migration/` for more check types (matrix, coverage).
 

@@ -1,0 +1,18 @@
+# Oracle PL/SQL -> Snowflake: checks locked before the agent starts.
+protected = ["oracle/**"]   # the original Oracle code is the reference; the agent may not change it
+
+# Nothing skipped: every object in the inventory is created somewhere in the Snowflake code.
+[[coverage]]
+name = "every object converted"
+items = ".countercheck/inventory/objects.txt"
+paths = ["snowflake/**/*.sql"]
+pattern = 'CREATE\s+(OR\s+REPLACE\s+)?(SECURE\s+)?(PROCEDURE|FUNCTION|VIEW|TABLE)\s+(\w+\.)*{item}\b'
+case_insensitive = true
+
+# No PL/SQL-only constructs left in the Snowflake code (a starting list: add your team's rules).
+[[forbid]]
+name = "no PL/SQL-only syntax"
+pattern = '\bROWNUM\b|\bDBMS_\w+|\bUTL_\w+|\bBULK\s+COLLECT\b|\bFORALL\b|%ROWTYPE\b|%TYPE\b|\bPRAGMA\b'
+paths = ["snowflake/**/*.sql"]
+message = "Rewrite these for Snowflake."
+case_insensitive = true

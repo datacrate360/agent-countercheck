@@ -9,7 +9,7 @@ Usage:
   python3 oracle-inventory.py Oracle/SALES --package ORDER_API   # one package only (a good first pilot)
   python3 oracle-inventory.py Oracle/SALES --package-format "{package}.{routine}"
 
-Part of the Countercheck guide docs/guides/oracle-to-snowflake.md. Standard library only (Python 3.9+).
+Part of the Countercheck recipe recipes/oracle-to-snowflake. Standard library only (Python 3.9+).
 """
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ import re
 import sys
 from pathlib import Path
 
-CREATE = r"(?im)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?(?:FORCE\s+)?{kind}\s+"
+# Oracle writes the options in any order: CREATE OR REPLACE FORCE EDITIONABLE VIEW, NONEDITIONABLE PROCEDURE...
+CREATE = r"(?im)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+|(?:NO\s+)?FORCE\s+)*{kind}\s+"
 NAME = r'((?:"?\w+"?\.)?"?[\w$#]+"?)'
 ROUTINE = re.compile(r"(?im)^\s*(?:PROCEDURE|FUNCTION)\s+\"?([\w$#]+)\"?")
 
