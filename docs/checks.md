@@ -12,6 +12,7 @@ the checks came from the base revision and all of them passed.
 | [Command](#command) | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
 | [Matrix](#matrix) | the same command must pass for many targets (tenants, schemas, levels, files) | `[[check]]` + `matrix` |
 | [Forbid](#forbid) | some text must not appear in the worker's files (leftover syntax, debug code, secrets) | `[[forbid]]` |
+| [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
 | [Golden](#golden) | a command's output file must match a reference you keep (exports, reports, renders) | `[[check]]` + `golden` |
 
 ## Command
@@ -107,3 +108,21 @@ golden = { output = "out/totals.csv", expected = ".countercheck/golden/totals.cs
 - Works with `matrix`: `{key}` may appear in `output` and `expected`, e.g.
   `golden = { output = "out/{schema}.csv", expected = ".countercheck/golden/{schema}.csv", mode = "csv" }`.
 - The receipt's reason reads `failed (exit 0; its output did not pass)`: the command ran fine, its output didn't.
+
+## Budget
+
+After the command passes, a number it printed must be within a limit.
+
+```toml
+[[check]]
+name = "export speed"
+run = "python3 scripts/bench.py"          # prints a line like  METRIC seconds=12.4
+budget = { metric = "seconds", max = 30 }  # or min = ..., or both
+```
+
+- The command prints `METRIC <name>=<number>` on a line of its own; the last such line for the metric counts, wherever
+  it is in the output.
+- Limits are inclusive: `max = 30` passes 30 and fails 30.1.
+- The output shows the value and the limit, e.g. `budget: seconds = 12.4 (max 30; within the limit)`. A missing
+  metric fails with a plain message.
+- Works with `matrix` (one value per target).

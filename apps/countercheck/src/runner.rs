@@ -1,5 +1,6 @@
 //! Run one check command in the snapshot, optionally inside the macOS sandbox.
 
+use countercheck_core::budget;
 use countercheck_core::config::PlannedCheck;
 use countercheck_core::receipt::CheckResult;
 use std::fs::File;
@@ -122,8 +123,9 @@ pub fn run_check(
         }
     };
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let (output_sha256, output_tail) = read_output(log)?;
-    Ok(CheckResult {
+    let metric_name = spec.budget.as_ref().map(|b| b.metric.as_str());
+    let (output_sha256, output_tail, metric) = read_output(log, metric_name)?;
+    let mut result = CheckResult {
         name: spec.name.clone(),
         run: spec.run.clone(),
         exit_code,
@@ -132,23 +134,69 @@ pub fn run_check(
         passed: !timed_out && exit_code == Some(0),
         output_tail,
         output_sha256,
-    })
+    };
+    if let Some(b) = &spec.budget
+        && result.passed
+    {
+        let (ok, line) = budget::judge(b, metric);
+        result.passed = ok;
+        result.output_tail = if result.output_tail.is_empty() {
+            line
+        } else {
+            format!("{}\n{line}", result.output_tail)
+        };
+    }
+    Ok(result)
 }
 
-fn read_output(mut log: File) -> Result<(String, String), String> {
+/// Longest output line looked at for a `METRIC` value; longer lines are skipped.
+const MAX_METRIC_LINE: usize = 4096;
+
+/// Hash of the whole output, its last lines, and the last value of `metric` if asked for.
+fn read_output(
+    mut log: File,
+    metric: Option<&str>,
+) -> Result<(String, String, Option<f64>), String> {
     use sha2::{Digest, Sha256};
     log.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 64 * 1024];
     let mut total: u64 = 0;
+    // The metric can be anywhere in the output, not just the tail: scan every line.
+    let mut line: Vec<u8> = Vec::new();
+    let mut too_long = false;
+    let mut value = None;
+    let mut end_line = |line: &mut Vec<u8>, too_long: &mut bool| {
+        if let Some(name) = metric
+            && !*too_long
+            && let Some(v) = budget::metric_in_line(&String::from_utf8_lossy(line), name)
+        {
+            value = Some(v);
+        }
+        line.clear();
+        *too_long = false;
+    };
     loop {
         let n = log.read(&mut buf).map_err(|e| e.to_string())?;
         if n == 0 {
             break;
         }
-        hasher.update(buf.get(..n).unwrap_or(&[]));
+        let chunk = buf.get(..n).unwrap_or(&[]);
+        hasher.update(chunk);
         total = total.saturating_add(n as u64);
+        if metric.is_some() {
+            for &b in chunk {
+                if b == b'\n' {
+                    end_line(&mut line, &mut too_long);
+                } else if line.len() < MAX_METRIC_LINE {
+                    line.push(b);
+                } else {
+                    too_long = true;
+                }
+            }
+        }
     }
+    end_line(&mut line, &mut too_long);
     let hash: String = hasher
         .finalize()
         .iter()
@@ -162,5 +210,5 @@ fn read_output(mut log: File) -> Result<(String, String), String> {
     let text = String::from_utf8_lossy(&tail);
     let lines: Vec<&str> = text.lines().collect();
     let keep = lines.len().saturating_sub(TAIL_LINES);
-    Ok((hash, lines.get(keep..).unwrap_or(&[]).join("\n")))
+    Ok((hash, lines.get(keep..).unwrap_or(&[]).join("\n"), value))
 }

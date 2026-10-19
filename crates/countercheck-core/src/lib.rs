@@ -1,5 +1,6 @@
 //! countercheck core: the pure parts of "is it really done?".
 //!
+//! - [`budget`]: a number a check prints must stay within a limit.
 //! - [`claim`]: whether an agent's final message reports that the work is not done.
 //! - [`config`]: the check file (`.countercheck/checks.toml`) a project commits.
 //! - [`forbid`]: patterns that must not appear in the worker's files.
@@ -18,6 +19,7 @@
     clippy::unreachable
 )]
 
+pub mod budget;
 pub mod claim;
 pub mod config;
 pub mod forbid;

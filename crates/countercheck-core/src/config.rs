@@ -11,7 +11,8 @@
 //!
 //! A check can also run once per target (`matrix`, see [`crate::matrix`]); `[[forbid]]` entries
 //! list patterns that must not appear (see [`crate::forbid`]); `golden` compares a check's output
-//! file with a locked reference (see [`crate::golden`]). docs/checks.md has every
+//! file with a locked reference (see [`crate::golden`]); `budget` keeps a printed metric within
+//! limits (see [`crate::budget`]). docs/checks.md has every
 //! check type with an example.
 //!
 //! `link = ["node_modules", ".venv"]` makes git-ignored dependency folders visible in the clean
@@ -20,6 +21,7 @@
 //! countercheck reads this file from the **base** revision (before the worker's change), so a worker
 //! cannot weaken the checks it is judged by.
 
+use crate::budget::BudgetSpec;
 use crate::forbid::{self, ForbidSpec};
 use crate::golden::{self, GoldenSpec};
 use crate::matrix;
@@ -66,6 +68,9 @@ pub struct CheckSpec {
     /// After `run` passes, its output file must match a locked reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub golden: Option<GoldenSpec>,
+    /// After `run` passes, a `METRIC <name>=<number>` it printed must be within limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<BudgetSpec>,
 }
 
 /// One run of a check, after matrix expansion: what the runner executes.
@@ -80,6 +85,7 @@ pub struct PlannedCheck {
     pub env: Vec<(String, String)>,
     /// The golden comparison, with `{key}` replaced in its paths.
     pub golden: Option<GoldenSpec>,
+    pub budget: Option<BudgetSpec>,
 }
 
 fn default_timeout() -> u64 {
@@ -149,6 +155,9 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
             return Err(format!("two checks are named \"{}\"", c.name));
         }
         check_matrix_shape(c)?;
+        if let Some(b) = &c.budget {
+            b.validate(&c.name)?;
+        }
     }
     for l in &file.link {
         let bad = l.is_empty()
@@ -304,6 +313,7 @@ fn plan_inner(
                 timeout_secs: c.timeout_secs,
                 env: Vec::new(),
                 golden: planned_golden(c, None, &protected)?,
+                budget: c.budget.clone(),
             });
             continue;
         };
@@ -328,6 +338,7 @@ fn plan_inner(
                 timeout_secs: c.timeout_secs,
                 env: vec![(matrix::env_name(key), v.clone())],
                 golden: planned_golden(c, Some((key, v)), &protected)?,
+                budget: c.budget.clone(),
             });
             if out.len() > matrix::MAX_EXPANSIONS {
                 break; // refused just below; stop before building more
@@ -685,6 +696,29 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("plain relative path"), "{e}");
+    }
+
+    #[test]
+    fn budget_parses_and_is_checked() {
+        let f = parse(&format!(
+            "{G}budget = {{ metric = \"seconds\", max = 30 }}\nmatrix = {{ s = [\"a\", \"b\"] }}\n"
+        ))
+        .unwrap();
+        let p = plan(&f, &BTreeMap::new()).unwrap();
+        assert!(
+            p.iter()
+                .all(|c| c.budget.as_ref().is_some_and(|b| b.max == Some(30.0)))
+        );
+        for (b, want) in [
+            ("metric = \"s\"", "min, a max"),
+            ("metric = \"s\", min = 5, max = 1", "not be above"),
+            ("metric = \"a b\", max = 1", "budget metric"),
+            ("max = 1", "not valid"),
+            ("metric = \"s\", max = 1, extra = 2", "not valid"),
+        ] {
+            let e = parse(&format!("{G}budget = {{ {b} }}\n")).unwrap_err();
+            assert!(e.contains(want), "{b}: {e}");
+        }
     }
 
     #[test]

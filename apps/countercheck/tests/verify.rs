@@ -625,6 +625,81 @@ fn golden_works_with_a_matrix() {
     assert!(out.contains("row 1, column n: expected 2, got 1"), "{out}");
 }
 
+/// A project whose "bench" check runs the worker's `src/bench.sh` with a budget on `seconds`.
+fn budget_project(budget: &str, matrix: &str) -> tempfile::TempDir {
+    project(&format!(
+        "[[check]]\nname = \"bench\"\nrun = \"sh src/bench.sh{}\"\nbudget = {{ {budget} }}\n{matrix}",
+        if matrix.is_empty() { "" } else { " {n}" }
+    ))
+}
+
+#[test]
+fn budget_within_and_over_the_limit() {
+    let d = budget_project("metric = \"seconds\", max = 30", "");
+    let p = d.path();
+    fs::write(
+        p.join("src/bench.sh"),
+        "echo 'METRIC seconds=41'\necho 'METRIC seconds=12.4'\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.ends_with("budget: seconds = 12.4 (max 30; within the limit)"),
+        "{out}"
+    );
+
+    fs::write(p.join("src/bench.sh"), "echo 'METRIC seconds=31.5'\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.ends_with("budget: seconds = 31.5 (max 30; over the limit)"),
+        "{out}"
+    );
+    assert!(r["reasons"].to_string().contains("its output did not pass"));
+}
+
+#[test]
+fn budget_metric_missing_fails_and_early_lines_count() {
+    let d = budget_project("metric = \"seconds\", min = 1", "");
+    let p = d.path();
+    fs::write(p.join("src/bench.sh"), "echo done\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("the output has no \"METRIC seconds=<number>\" line"),
+        "{out}"
+    );
+    // The metric line is far before the last lines of output: still found.
+    fs::write(
+        p.join("src/bench.sh"),
+        "echo 'METRIC seconds=2'\ni=0; while [ $i -lt 5000 ]; do echo noise $i; i=$((i+1)); done\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+}
+
+#[test]
+fn budget_works_with_a_matrix() {
+    let d = budget_project(
+        "metric = \"seconds\", max = 10",
+        "matrix = { n = [\"5\", \"20\"] }\n",
+    );
+    fs::write(
+        d.path().join("src/bench.sh"),
+        "echo \"METRIC seconds=$1\"\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "bench [n=5]")["passed"], true);
+    assert_eq!(check(&r, "bench [n=20]")["passed"], false);
+}
+
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
 fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
     run_hook("hermes-pre-verify", input, envs)

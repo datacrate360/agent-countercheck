@@ -754,3 +754,29 @@ proptest! {
         prop_assert_eq!(compare_text(a.as_bytes(), b.as_bytes()).equal, norm(&a) == norm(&b));
     }
 }
+
+// ---- budget ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// The last METRIC line wins, and the verdict is exactly "within [min, max]".
+    #[test]
+    fn budget_takes_the_last_value_and_honours_the_limits(
+        values in proptest::collection::vec(-1000.0f64..1000.0, 1..6),
+        noise in "[a-z =]{0,20}",
+        min in proptest::option::of(-500.0f64..0.0),
+        max in proptest::option::of(0.0f64..500.0),
+    ) {
+        use countercheck_core::budget::{judge, last_metric, BudgetSpec};
+        let text: String = values.iter().map(|v| format!("METRIC t={v}\n{noise}\n")).collect();
+        let last = values.last().copied();
+        prop_assert_eq!(last_metric(&text, "t"), last);
+        prop_assume!(min.is_some() || max.is_some());
+        let spec = BudgetSpec { metric: "t".into(), min, max };
+        prop_assert!(spec.validate("c").is_ok());
+        let v = last.unwrap_or(0.0);
+        let want = min.is_none_or(|lo| v >= lo) && max.is_none_or(|hi| v <= hi);
+        prop_assert_eq!(judge(&spec, last).0, want);
+    }
+}
