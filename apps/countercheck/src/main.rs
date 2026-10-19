@@ -88,6 +88,8 @@ enum Cmd {
 enum HookCmd {
     /// Hermes `pre_verify` hook: keep Hermes working while the checks fail.
     HermesPreVerify,
+    /// Claude Code (and Cortex Code) `Stop` hook: block the stop while the checks fail.
+    ClaudeStop,
 }
 
 fn main() -> ExitCode {
@@ -176,11 +178,13 @@ fn run(cli: Cli) -> Result<u8, String> {
             );
             Ok(0)
         }
-        Cmd::Hook {
-            hook: HookCmd::HermesPreVerify,
-        } => {
+        Cmd::Hook { hook: which } => {
+            let result = match which {
+                HookCmd::HermesPreVerify => hook::hermes_pre_verify(),
+                HookCmd::ClaudeStop => hook::claude_stop(),
+            };
             // Fail open: a broken referee must never stop the agent.
-            if let Err(e) = hook::hermes_pre_verify() {
+            if let Err(e) = result {
                 eprintln!("countercheck hook: {e}");
             }
             Ok(0)

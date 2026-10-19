@@ -70,6 +70,12 @@ timeout_secs = 600
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
 locked in the base revision, or none ran) · `1` error · `4` (`countercheck show`) receipt was edited.
 
+## Agent hooks
+
+- Hermes Agent: `countercheck hook hermes-pre-verify` keeps Hermes working while the checks fail.
+- Claude Code and Cortex Code: `countercheck hook claude-stop` blocks the `Stop` while the checks fail. See
+  [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
+
 ## Status
 
 Early (v0.1, macOS first). Not yet: signed receipts (Ed25519), cost read from agent logs, read-back checks against real

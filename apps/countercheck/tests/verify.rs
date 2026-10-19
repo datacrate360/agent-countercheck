@@ -278,9 +278,14 @@ fn cache_files_are_not_reported() {
 
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
 fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
+    run_hook("hermes-pre-verify", input, envs)
+}
+
+/// Run `countercheck hook <name>` with `input` on stdin; returns (exit code, stdout).
+fn run_hook(name: &str, input: &str, envs: &[(&str, &str)]) -> (i32, String) {
     use std::io::Write;
     let mut cmd = Command::new(BIN);
-    cmd.args(["hook", "hermes-pre-verify"])
+    cmd.args(["hook", name])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -420,4 +425,169 @@ fn hermes_hook_uses_a_fixed_base_when_the_agent_commits() {
         &[("COUNTERCHECK_BASE", base.trim())],
     );
     assert!(out.contains("\"continue\""), "{out}");
+}
+
+/// Run `countercheck hook claude-stop` with `input` on stdin; returns (exit code, stdout).
+fn claude_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
+    run_hook("claude-stop", input, envs)
+}
+
+fn claude_payload(dir: &Path, session: &str, last_message: &str) -> String {
+    serde_json::json!({
+        "session_id": session,
+        "transcript_path": dir.join("no-such-transcript.jsonl"),
+        "cwd": dir,
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": last_message,
+    })
+    .to_string()
+}
+
+/// The reason in a Claude Code block, or panic.
+fn block_reason(out: &str) -> String {
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["decision"], "block", "{out}");
+    v["reason"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn claude_hook_lets_passing_work_stop() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, out) = claude_hook(&claude_payload(d.path(), "s1", "Done."), &[]);
+    assert_eq!((code, out.trim()), (0, ""));
+}
+
+#[test]
+fn claude_hook_blocks_a_false_success_claim() {
+    let d = project(CHECKS);
+    let log = d.path().join("hook.log");
+    let (code, out) = claude_hook(
+        &claude_payload(d.path(), "s1", "Fixed it, all tests pass."),
+        &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())],
+    );
+    assert_eq!(code, 0);
+    let reason = block_reason(&out);
+    assert!(
+        reason.contains("FAILED") && reason.contains("\"calc\""),
+        "{reason}"
+    );
+    let line: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+    assert_eq!(line["nudged"], true);
+    assert_eq!(line["gave_up"], false);
+    // The receipt names the agent.
+    let receipt: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(line["receipt"].as_str().unwrap()).unwrap())
+            .unwrap();
+    assert_eq!(receipt["worker"]["agent"], "claude-code");
+}
+
+#[test]
+fn claude_hook_lets_an_honest_blocker_report_stop() {
+    let d = project(CHECKS);
+    let said = "I fixed what I could, but test_export can't pass: it contradicts test_display.";
+    let (code, out) = claude_hook(&claude_payload(d.path(), "s1", said), &[]);
+    assert_eq!((code, out.trim()), (0, ""));
+}
+
+#[test]
+fn claude_hook_still_blocks_tampering_even_with_a_blocker_report() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    let said = "The test can't pass as written, so I adjusted it.";
+    let (code, out) = claude_hook(&claude_payload(d.path(), "s1", said), &[]);
+    assert_eq!(code, 0);
+    assert!(block_reason(&out).contains("fix the code instead"), "{out}");
+}
+
+/// Without `last_assistant_message`, the claim is the last assistant text in the transcript.
+#[test]
+fn claude_hook_reads_the_final_message_from_the_transcript() {
+    let d = project(CHECKS);
+    let transcript = d.path().join("transcript.jsonl");
+    let lines = [
+        serde_json::json!({"type": "user", "message": {"role": "user", "content": "fix calc"}}),
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "Fixed it, all tests pass."}]}}),
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "I can't make it pass: it contradicts the spec."}]}}),
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]}}),
+    ];
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    fs::write(&transcript, text + "not json\n").unwrap();
+    let input = serde_json::json!({
+        "session_id": "s1",
+        "transcript_path": transcript,
+        "cwd": d.path(),
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+    })
+    .to_string();
+    let log = d.path().join("hook.log");
+    let (code, out) = claude_hook(&input, &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())]);
+    // The last text says it is blocked, so the FAILED work may stop.
+    assert_eq!((code, out.trim()), (0, ""));
+    let line: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+    assert_eq!(line["agent_reported_blocker"], true);
+}
+
+#[test]
+fn claude_hook_treats_a_missing_transcript_as_no_claim() {
+    let d = project(CHECKS);
+    let input = serde_json::json!({
+        "session_id": "s1",
+        "transcript_path": d.path().join("gone.jsonl"),
+        "cwd": d.path(),
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+    })
+    .to_string();
+    let (code, out) = claude_hook(&input, &[]);
+    assert_eq!(code, 0);
+    assert!(block_reason(&out).contains("FAILED"), "{out}");
+}
+
+/// The loop guard: after COUNTERCHECK_MAX_NUDGES (default 3) push-backs, the agent may stop.
+#[test]
+fn claude_hook_gives_up_after_three_push_backs() {
+    let d = project(CHECKS);
+    let log = d.path().join("hook.log");
+    let envs = [("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())];
+    let payload = claude_payload(d.path(), "../odd/session id", "All tests pass.");
+    for _ in 0..3 {
+        let (code, out) = claude_hook(&payload, &envs);
+        assert_eq!(code, 0);
+        block_reason(&out);
+    }
+    let (code, out) = claude_hook(&payload, &envs);
+    assert_eq!((code, out.trim()), (0, ""));
+    let last: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().lines().last().unwrap()).unwrap();
+    assert_eq!(last["gave_up"], true);
+    // The session id was made safe, and the state stays inside the receipts folder.
+    assert!(
+        d.path()
+            .join(".countercheck/receipts/hook-state/oddsessionid.json")
+            .is_file()
+    );
+    // Another session starts its own count.
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s2", "Done."), &envs);
+    block_reason(&out);
+}
+
+#[test]
+fn claude_hook_can_be_switched_off_and_fails_open() {
+    let d = project(CHECKS);
+    let (code, out) = claude_hook(
+        &claude_payload(d.path(), "s1", "Done."),
+        &[("COUNTERCHECK_HOOK_DISABLED", "1")],
+    );
+    assert_eq!((code, out.trim()), (0, ""));
+    let (code, out) = claude_hook("not json", &[]);
+    assert_eq!((code, out.trim()), (0, ""));
 }
