@@ -27,6 +27,8 @@ clap = { version = "4", features = ["derive"] }
 tempfile = "3"
 wait-timeout = "0.2"
 humantime = "2"
+regex = "1"
+csv = "1"
 
 [profile.release]
 lto = "thin"

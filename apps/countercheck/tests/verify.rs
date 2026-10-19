@@ -276,6 +276,88 @@ fn cache_files_are_not_reported() {
     assert_eq!(r["protected_changes"].as_array().unwrap().len(), 0);
 }
 
+/// Names of the checks on a receipt, in order.
+fn check_names(r: &serde_json::Value) -> Vec<String> {
+    r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The receipt entry for the check called `name`.
+fn check<'a>(r: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
+    r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == name)
+        .unwrap_or_else(|| panic!("no check {name} in {r:#}"))
+}
+
+#[test]
+fn matrix_runs_once_per_target_and_names_the_failing_one() {
+    // Target 2 fails; the value is both in the command and in the environment.
+    let d = project(
+        "[[check]]\nname = \"target\"\nrun = \"[ \\\"$COUNTERCHECK_MATRIX_N\\\" = {n} ] && [ {n} != 2 ]\"\n\
+         matrix = { n = [\"1\", \"2\", \"3\"] }\n",
+    );
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(
+        check_names(&r),
+        vec!["target [n=1]", "target [n=2]", "target [n=3]"]
+    );
+    assert_eq!(check(&r, "target [n=1]")["passed"], true);
+    assert_eq!(check(&r, "target [n=2]")["passed"], false);
+    assert_eq!(
+        check(&r, "target [n=2]")["run"],
+        "[ \"$COUNTERCHECK_MATRIX_N\" = 2 ] && [ 2 != 2 ]"
+    );
+    assert_eq!(check(&r, "target [n=3]")["passed"], true);
+    let reasons = r["reasons"].to_string();
+    assert!(reasons.contains("target [n=2]"), "{reasons}");
+    assert!(!reasons.contains("target [n=1]"), "{reasons}");
+}
+
+#[test]
+fn matrix_file_edited_by_the_worker_is_ignored() {
+    let d = project(
+        "[[check]]\nname = \"target\"\nrun = \"[ {n} != 2 ]\"\n\
+         matrix_file = { n = \".countercheck/targets.txt\" }\n",
+    );
+    let p = d.path();
+    fs::write(p.join(".countercheck/targets.txt"), "# targets\n1\n2\n").unwrap();
+    sh(p, "git add -A && git commit -qm targets");
+    // The worker drops the failing target from the list.
+    fs::write(p.join(".countercheck/targets.txt"), "1\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check_names(&r), vec!["target [n=1]", "target [n=2]"]);
+    assert_eq!(check(&r, "target [n=2]")["passed"], false);
+    assert_eq!(
+        r["protected_changes"][0]["path"],
+        ".countercheck/targets.txt"
+    );
+}
+
+#[test]
+fn matrix_values_that_are_not_plain_are_refused() {
+    let d = project(
+        "[[check]]\nname = \"t\"\nrun = \"echo {n}\"\nmatrix = { n = [\"a;touch pwned\"] }\n",
+    );
+    let out = Command::new(BIN)
+        .args(["verify", "--sandbox", "none", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("not allowed"), "{err}");
+    assert!(!d.path().join("pwned").exists());
+}
+
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
 fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
     run_hook("hermes-pre-verify", input, envs)

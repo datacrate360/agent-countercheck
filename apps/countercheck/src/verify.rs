@@ -43,6 +43,24 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             },
         };
     let checks = config::parse(&checks_text)?;
+    // Matrix files come from the same place as the check file, so the worker can't shrink the list.
+    let mut matrix_texts = std::collections::BTreeMap::new();
+    for path in checks.matrix_files() {
+        let bytes = if checks_locked {
+            git::show(&root, &base_commit, &path)?
+                .ok_or_else(|| format!("matrix file {path} is not in the base revision"))?
+        } else {
+            std::fs::read(root.join(&path)).map_err(|e| format!("matrix file {path}: {e}"))?
+        };
+        if bytes.len() > config::MAX_CHECKS_BYTES {
+            return Err(format!(
+                "matrix file {path} is larger than {} bytes",
+                config::MAX_CHECKS_BYTES
+            ));
+        }
+        matrix_texts.insert(path, String::from_utf8_lossy(&bytes).into_owned());
+    }
+    let planned = config::plan(&checks, &matrix_texts)?;
     let protected = Protected::new(&checks.protected_patterns())?;
 
     // 2. A clean copy of the worker's files.
@@ -85,7 +103,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
     // 4. Run every check.
     let mut results = Vec::new();
-    for spec in &checks.checks {
+    for spec in &planned {
         results.push(runner::run_check(spec, &work, &tmp, opts.sandbox)?);
     }
 

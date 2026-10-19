@@ -433,7 +433,7 @@ proptest! {
 
     #[test]
     fn always_protected_covers_the_check_file(pats in patterns(), p in rel_path()) {
-        let file = config::ChecksFile { protected: pats, checks: vec![], link: vec![] };
+        let file = config::ChecksFile { protected: pats, ..Default::default() };
         let set = Protected::new(&file.protected_patterns()).map_err(TestCaseError::fail)?;
         prop_assert!(set.matches(config::CHECKS_PATH));
         let inside = format!(".countercheck/{p}");
@@ -527,7 +527,7 @@ proptest! {
 
     #[test]
     fn protected_patterns_keep_the_file_patterns(pats in proptest::collection::vec("[a-z*/.]{0,8}", 0..5)) {
-        let file = config::ChecksFile { protected: pats.clone(), checks: vec![], link: vec![] };
+        let file = config::ChecksFile { protected: pats.clone(), ..Default::default() };
         let out = file.protected_patterns();
         prop_assert_eq!(&out[..pats.len()], &pats[..]);
         prop_assert!(out.iter().any(|p| p == ALWAYS_PROTECTED));
@@ -627,6 +627,44 @@ proptest! {
             let p = if upper { p.to_uppercase() } else { p.to_string() };
             let text = format!("{before} {p} {after}");
             prop_assert!(reports_blocker(&text), "{:?}", text);
+        }
+    }
+}
+
+// ---- matrix ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(2048))]
+
+    /// A matrix value goes into `sh -c`: anything that passes validation is shell-inert.
+    #[test]
+    fn valid_matrix_values_have_no_shell_metacharacters(v in prop_oneof![any::<String>(), "[A-Za-z0-9_.;$`'\" |&-]{0,12}"]) {
+        use countercheck_core::matrix::valid_value;
+        if valid_value(&v) {
+            let meta = [' ', '\t', '\n', ';', '&', '|', '$', '`', '\'', '"', '\\', '(', ')', '<', '>', '*', '?', '[', ']', '{', '}', '~', '#', '!', '=', '/', '%'];
+            prop_assert!(!v.contains(meta), "{:?}", v);
+            prop_assert!(!v.is_empty() && v.len() <= 128);
+        }
+    }
+}
+
+proptest! {
+    // Big inputs: fewer cases.
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// Expansion never produces more than 1000 runs, and every run name is unique.
+    #[test]
+    fn matrix_plans_are_bounded_and_uniquely_named(
+        values in proptest::collection::vec("[A-Za-z0-9_.-]{1,6}", 0..1200),
+    ) {
+        let list = values.iter().map(|v| format!("\"{v}\"")).collect::<Vec<_>>().join(",");
+        let text = format!("[[check]]\nname = \"m\"\nrun = \"x {{k}}\"\nmatrix = {{ k = [{list}] }}\n");
+        if let Ok(f) = config::parse(&text) {
+            let plan = config::plan(&f, &Default::default()).map_err(TestCaseError::fail)?;
+            prop_assert_eq!(plan.len(), values.len());
+            prop_assert!(plan.len() <= 1000);
+            let names: std::collections::BTreeSet<_> = plan.iter().map(|p| p.name.clone()).collect();
+            prop_assert_eq!(names.len(), plan.len());
         }
     }
 }

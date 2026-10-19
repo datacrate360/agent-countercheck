@@ -1,6 +1,6 @@
 //! Run one check command in the snapshot, optionally inside the macOS sandbox.
 
-use countercheck_core::config::CheckSpec;
+use countercheck_core::config::PlannedCheck;
 use countercheck_core::receipt::CheckResult;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -66,7 +66,7 @@ fn seatbelt_profile(workdir: &Path, tmp: &Path) -> String {
 }
 
 pub fn run_check(
-    spec: &CheckSpec,
+    spec: &PlannedCheck,
     workdir: &Path,
     tmp: &Path,
     sandbox: Sandbox,
@@ -88,6 +88,7 @@ pub fn run_check(
         .current_dir(workdir)
         .env("COUNTERCHECK", "1")
         .env("TMPDIR", tmp)
+        .envs(spec.env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::null())
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(err));
