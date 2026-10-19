@@ -13,20 +13,18 @@ section. Ideas and use cases are welcome as issues.
 | Hermes Agent hook (`hook hermes-pre-verify`) | v0.1.0 |
 | Hook lets an agent stop when it honestly reports a blocker; still pushes back on success claims and test edits | DEV |
 | Claude Code `Stop` hook (`hook claude-stop`), loop guard (max push-backs per session) | DEV |
+| Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | DEV |
+| Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | DEV |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | DEV |
 
 ## In progress
 
-- **New check types** (`docs/checks.md` when merged): **matrix** (one check over many targets), **forbid**
-  (patterns that must not appear), **golden** (output must match a locked reference: text, or CSV with numeric
-  tolerance and row sorting), **budget** (a metric within limits), **coverage** (every item in a locked list is
-  accounted for). Plus a made-up data-migration example.
 - **Benchmark vs Hermes `verify_on_stop`** (`eval/`, plan in `docs/eval/hermes-eval-plan.md`): 29 tasks × 4 setups ×
   3 repeats on DeepSeek V4 Pro and GPT 6.1. Pilot results: `docs/eval/pilot-results.md`.
 
 ## Next
 
-1. **Release v0.2.0**: everything on DEV above (after the benchmark finishes, so all its runs used one build).
+1. **Release v0.2.0**: everything on DEV above. Urgent because of the Linux timeout fix (v0.1.0 is affected).
 2. **Publish the benchmark**: method, per-model results, every impossible-task answer, known blind spots.
 3. **Test with real users**: Claude Code users, and a data team converting PL/SQL packages to Snowflake with
    Cortex Code (same hook format; confirm it on a real Cortex Code install).
@@ -50,6 +48,7 @@ section. Ideas and use cases are welcome as issues.
   week?" questions. JSON receipts stay the source of truth.
 - **Signed receipts** that third parties can verify.
 - Mutation testing for `hook.rs`.
+- Kill process groups with a system call (e.g. `rustix`) instead of the `kill` program, so it doesn't depend on which `kill` a system ships.
 
 ## Not planned
 
