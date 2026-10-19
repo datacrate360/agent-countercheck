@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 (2026-10-19)
 
 - **Native Windows support** (Windows 10/11, x86_64): `countercheck.exe` runs without WSL. Install with
   `pip install countercheck`, `uvx countercheck` or `irm .../install.ps1 | iex` (checks the SHA-256 against
@@ -16,7 +16,6 @@
   (Windows). Validated when the check file is read.
 - **Fixed: Windows line endings.** A `$` at the end of a `coverage` (or `forbid`) pattern now also matches before
   `\r\n`; before, `coverage` reported items in CRLF files as missing.
-
 - **`countercheck ui`**: a live page of the receipts that updates while an agent works. 127.0.0.1 only, a random
   token in the address, `Host` checked (so other web pages and DNS rebinding can't read it), GET only, read-only, a
   strict Content-Security-Policy with a per-page nonce. Port 7357, or any free port when taken (`--port` to choose);
