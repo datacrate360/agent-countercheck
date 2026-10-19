@@ -2,3 +2,6 @@
 # `sh` can't run scripts with CRLF (the examples, eval tasks and test fixtures are shell scripts and
 # exact text). Countercheck itself handles CRLF in projects it checks (see the CRLF tests).
 * text=auto eol=lf
+
+# Oracle extract fixtures keep their Windows line endings: the recipe test checks they are handled.
+recipes/oracle-to-snowflake/test/project/oracle/** -text
