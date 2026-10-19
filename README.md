@@ -50,6 +50,18 @@ base revision (locked)        agent's work + claim
       FAILED + honest "can't, because ..." -> agent may stop; receipt still says FAILED
 ```
 
+### Where it fits
+
+![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Hermes Agent), any other agent or person through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
+
+| You use | How Countercheck plugs in |
+|---|---|
+| Claude Code | `Stop` hook: `countercheck hook claude-stop` ([docs/hooks/](docs/hooks)) |
+| Cortex Code (Snowflake) | same hook format as Claude Code (not yet tried on a real install) |
+| Hermes Agent | `pre_verify` hook: `countercheck hook hermes-pre-verify` |
+| Codex, Cursor, Copilot, Aider, your scripts | run `countercheck verify --claim "…"` when it says done (dedicated hooks planned) |
+| CI | `countercheck verify --base main`; fail the job on any exit code but `0` (GitHub Action planned) |
+
 ## Does it work?
 
 We gave [Hermes Agent](https://github.com/NousResearch/hermes-agent) 29 small coding tasks, 3 times each, in four

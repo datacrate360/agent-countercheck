@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Where Countercheck fits</title>
+  <desc>On the left, who does the work: agents with a built-in hook (Claude Code, Cortex Code, Hermes Agent), any other agent or person through the CLI (Codex, Cursor, Copilot, Aider, scripts), and CI. In the middle, Countercheck locks the checks, makes a clean copy, runs the checks in a sandbox and seals a receipt, using six check types. On the right, what it checks for different kinds of projects: web apps, data and analytics, code migrations, games and media, and machine learning. At the bottom, where results go: back to the agent, to you as a receipt, and to CI as an exit code.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="960" height="600" rx="16" fill="#FFFFFF"/>
+
+  <text x="150" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">WHO DOES THE WORK</text>
+  <text x="480" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">THE REFEREE</text>
+  <text x="815" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">WHAT YOUR CHECKS COVER</text>
+
+  <!-- Left: agents -->
+  <rect x="20" y="52" width="260" height="138" rx="12" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.5"/>
+  <text x="36" y="76" font-size="14" font-weight="700" fill="#0F172A">Agents with a built-in hook</text>
+  <text x="36" y="94" font-size="11.5" fill="#0F766E" font-weight="700">can't say "done" until the checks pass</text>
+  <g font-size="13" fill="#334155">
+    <text x="36" y="118"><tspan font-weight="700" fill="#0F172A">Claude Code</tspan>  hook claude-stop</text>
+    <text x="36" y="140"><tspan font-weight="700" fill="#0F172A">Cortex Code</tspan>  same hook format*</text>
+    <text x="36" y="162"><tspan font-weight="700" fill="#0F172A">Hermes Agent</tspan>  hook hermes-pre-verify</text>
+  </g>
+  <text x="36" y="182" font-size="11" fill="#64748B">* not yet tried on a real install</text>
+
+  <rect x="20" y="206" width="260" height="128" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="36" y="230" font-size="14" font-weight="700" fill="#0F172A">Any other agent or person</text>
+  <text x="36" y="252" font-size="13" fill="#334155">Codex, Cursor, Copilot, Aider,</text>
+  <text x="36" y="270" font-size="13" fill="#334155">your own scripts, a teammate</text>
+  <text x="36" y="294" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#0F172A">countercheck verify \</text>
+  <text x="36" y="312" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#0F172A">  --claim "what it said"</text>
+  <text x="36" y="328" font-size="11" fill="#64748B">dedicated hooks: planned</text>
+
+  <rect x="20" y="350" width="260" height="92" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="36" y="374" font-size="14" font-weight="700" fill="#0F172A">CI on every pull request</text>
+  <text x="36" y="396" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#0F172A">countercheck verify --base main</text>
+  <text x="36" y="416" font-size="13" fill="#334155">in any CI runner today</text>
+  <text x="36" y="434" font-size="11" fill="#64748B">GitHub Action: planned</text>
+
+  <line x1="280" y1="121" x2="336" y2="170" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="280" y1="270" x2="336" y2="250" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="280" y1="396" x2="336" y2="330" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- Middle: referee -->
+  <rect x="338" y="52" width="284" height="390" rx="14" fill="#0F766E"/>
+  <text x="480" y="80" text-anchor="middle" font-size="17" font-weight="700" fill="#FFFFFF">Countercheck</text>
+  <text x="480" y="100" text-anchor="middle" font-size="12" fill="#CCFBF1">the agent never grades itself</text>
+  <g font-size="13" fill="#0F172A">
+    <rect x="354" y="114" width="252" height="132" rx="10" fill="#FFFFFF"/>
+    <text x="368" y="138"><tspan font-weight="700">1</tspan>  lock the checks (base revision)</text>
+    <text x="368" y="164"><tspan font-weight="700">2</tspan>  clean copy, edited tests put back</text>
+    <text x="368" y="190"><tspan font-weight="700">3</tspan>  run in a sandbox</text>
+    <text x="368" y="216"><tspan font-weight="700">4</tspan>  verdict + sealed receipt</text>
+    <text x="368" y="236" font-size="11" fill="#64748B">macOS sandbox; Linux runs without one</text>
+  </g>
+  <text x="480" y="272" text-anchor="middle" font-size="12" font-weight="700" fill="#CCFBF1" letter-spacing="0.5">CHECK TYPES (checks.toml)</text>
+  <g font-size="12.5" font-weight="700" text-anchor="middle">
+    <rect x="354" y="284" width="122" height="30" rx="15" fill="#FFFFFF"/><text x="415" y="304" fill="#0F766E">command</text>
+    <rect x="484" y="284" width="122" height="30" rx="15" fill="#FFFFFF"/><text x="545" y="304" fill="#0F766E">matrix</text>
+    <rect x="354" y="322" width="122" height="30" rx="15" fill="#FFFFFF"/><text x="415" y="342" fill="#0F766E">forbid</text>
+    <rect x="484" y="322" width="122" height="30" rx="15" fill="#FFFFFF"/><text x="545" y="342" fill="#0F766E">golden</text>
+    <rect x="354" y="360" width="122" height="30" rx="15" fill="#FFFFFF"/><text x="415" y="380" fill="#0F766E">budget</text>
+    <rect x="484" y="360" width="122" height="30" rx="15" fill="#FFFFFF"/><text x="545" y="380" fill="#0F766E">coverage</text>
+  </g>
+  <text x="480" y="420" text-anchor="middle" font-size="11.5" fill="#CCFBF1">any language, any test tool: a check is a command</text>
+
+  <line x1="622" y1="240" x2="676" y2="240" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- Right: domains -->
+  <g font-size="12.5" fill="#334155">
+    <rect x="680" y="52" width="260" height="72" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="696" y="74" font-size="14" font-weight="700" fill="#0F172A">Web apps and APIs</text>
+    <text x="696" y="94">pytest, Jest, Playwright on localhost</text>
+    <text x="696" y="112">command · budget (response time)</text>
+
+    <rect x="680" y="132" width="260" height="72" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="696" y="154" font-size="14" font-weight="700" fill="#0F172A">Data and analytics</text>
+    <text x="696" y="174">dbt tests, SQL reconcile per schema</text>
+    <text x="696" y="192">matrix · golden (CSV with tolerance)</text>
+
+    <rect x="680" y="212" width="260" height="72" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="696" y="234" font-size="14" font-weight="700" fill="#0F172A">Code migrations</text>
+    <text x="696" y="254">e.g. Oracle PL/SQL → Snowflake</text>
+    <text x="696" y="272">forbid (old syntax) · coverage</text>
+
+    <rect x="680" y="292" width="260" height="72" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="696" y="314" font-size="14" font-weight="700" fill="#0F172A">Games, video, media</text>
+    <text x="696" y="334">golden files per platform or codec</text>
+    <text x="696" y="352">matrix · budget (frame time)</text>
+
+    <rect x="680" y="372" width="260" height="70" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="696" y="394" font-size="14" font-weight="700" fill="#0F172A">Machine learning</text>
+    <text x="696" y="414">eval scripts on a locked dataset</text>
+    <text x="696" y="432">budget (accuracy ≥ limit) · golden</text>
+  </g>
+
+  <!-- Bottom: where results go -->
+  <line x1="480" y1="442" x2="480" y2="474" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="480" y="496" text-anchor="middle" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">WHERE RESULTS GO</text>
+  <g font-size="12.5" fill="#334155">
+    <rect x="20" y="510" width="296" height="72" rx="12" fill="#FFF7ED" stroke="#C2410C" stroke-width="1.5"/>
+    <text x="36" y="534" font-size="14" font-weight="700" fill="#C2410C">Back to the agent</text>
+    <text x="36" y="554">FAILED: the failing check's output,</text>
+    <text x="36" y="572">"fix the code, not the tests" (max 3×)</text>
+
+    <rect x="332" y="510" width="296" height="72" rx="12" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.5"/>
+    <text x="348" y="534" font-size="14" font-weight="700" fill="#0F766E">To you: a sealed receipt</text>
+    <text x="348" y="554">.countercheck/receipts/&lt;id&gt;.json</text>
+    <text x="348" y="572">what ran, what changed, the verdict</text>
+
+    <rect x="644" y="510" width="296" height="72" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+    <text x="660" y="534" font-size="14" font-weight="700" fill="#0F172A">To CI: an exit code</text>
+    <text x="660" y="554">0 verified · 2 failed · 3 unverified</text>
+    <text x="660" y="572">block the merge on anything but 0</text>
+  </g>
+</svg>
