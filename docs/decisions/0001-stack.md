@@ -49,3 +49,17 @@ notarized binary is the better first impression. OpenAI rewrote the Codex CLI in
 - **Apple Developer Program** (paid yearly) is required for signing and notarization; until then, ad-hoc signed builds
   show a Gatekeeper warning.
 - **Sandbox on macOS** is the least proven part. Spike it before promising isolation in public copy.
+
+## Update (2026-10-19): the local UI
+
+The local UI shipped as `countercheck report` (one HTML file) and `countercheck ui` (a live page on 127.0.0.1), built
+into the binary: HTML from Rust (every receipt value escaped), CSS and one small script as files in
+`crates/countercheck-core/assets/` embedded with `include_str!`, a server on the Rust standard library. Not Tauri +
+React, because for a read-only view of receipts:
+
+- installs stay one file through brew, pip, uvx and curl, with no Node toolchain in the release pipeline;
+- no npm packages inside a security tool (enterprise reviews count every dependency);
+- the static report has no script at all, and the live page runs only its own nonced script.
+
+React (or Tauri) remains the choice for the hosted team dashboard, which needs logins, many repositories and rich
+views. Measured: the release binary is about 3.4 MB and starts in under 10 ms.
