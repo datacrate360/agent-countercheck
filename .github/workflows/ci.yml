@@ -45,6 +45,62 @@ jobs:
       - name: Install script syntax
         run: sh -n install.sh && sh -n packaging/homebrew/formula.sh
 
+  windows:
+    name: test (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup show; rustup component add clippy
+      # Tests run from PowerShell with the runner's usual PATH; countercheck finds Git for Windows' sh.
+      - name: Which sh
+        run: where.exe sh; where.exe git; git --exec-path
+        continue-on-error: true
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      # The example's check runs `python3`; Windows' Python is `python`, so give sh a python3 if needed.
+      - name: python3 for the example
+        shell: bash
+        run: |
+          if ! python3 -c "print(1)" >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/shim"
+            printf '#!/bin/sh\nexec python "$@"\n' > "$RUNNER_TEMP/shim/python3"
+            chmod +x "$RUNNER_TEMP/shim/python3"
+            echo "$RUNNER_TEMP/shim" >> "$GITHUB_PATH"
+          fi
+      - name: Examples give the expected verdicts
+        shell: bash
+        run: sh examples/ml-eval-threshold/run-example.sh "$PWD/target/debug/countercheck.exe"
+      - name: Install script syntax
+        run: pwsh -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw install.ps1)) | Out-Null"
+      # install.ps1 end to end against a zip of this build: installs when the checksum matches,
+      # installs nothing when it doesn't.
+      - name: Install script works
+        run: |
+          $out = New-Item -ItemType Directory "$env:RUNNER_TEMP/dl" -Force
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/stage" -Force | Out-Null
+          Copy-Item target/debug/countercheck.exe, LICENSE, README.md "$env:RUNNER_TEMP/stage/"
+          Compress-Archive -Path "$env:RUNNER_TEMP/stage/*" -DestinationPath "$out/countercheck-0.0.0-windows-x86_64.zip"
+          $hash = (Get-FileHash "$out/countercheck-0.0.0-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  countercheck-0.0.0-windows-x86_64.zip" | Set-Content "$out/SHA256SUMS.txt"
+          $server = Start-Process python -ArgumentList '-m','http.server','18765','--bind','127.0.0.1','--directory',"$out" -PassThru
+          Start-Sleep -Seconds 2
+          $env:COUNTERCHECK_VERSION = '0.0.0'
+          $env:COUNTERCHECK_BASE_URL = 'http://127.0.0.1:18765'
+          $env:COUNTERCHECK_INSTALL_DIR = "$env:RUNNER_TEMP/bin"
+          ./install.ps1
+          & "$env:RUNNER_TEMP/bin/countercheck.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'installed binary does not run' }
+          ("0" * 64) + "  countercheck-0.0.0-windows-x86_64.zip" | Set-Content "$out/SHA256SUMS.txt"
+          $env:COUNTERCHECK_INSTALL_DIR = "$env:RUNNER_TEMP/bin2"
+          $failed = $false
+          try { ./install.ps1 } catch { $failed = $_.Exception.Message -like '*checksum mismatch*' }
+          Stop-Process -Id $server.Id
+          if (-not $failed) { throw 'a bad checksum must stop the install' }
+          if (Test-Path "$env:RUNNER_TEMP/bin2/countercheck.exe") { throw 'installed despite a bad checksum' }
+
   dco:
     name: sign-off (DCO)
     if: github.event_name == 'pull_request'

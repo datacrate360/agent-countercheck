@@ -104,16 +104,30 @@ Full method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/result
 | Python (pip, a `.venv`, uv) | `pip install countercheck` · `uv tool install countercheck` · or run without installing: `uvx countercheck verify` |
 | macOS or Linux, Homebrew | `brew install datacrate360/tap/countercheck` |
 | macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.sh \| sh` |
+| Windows 10/11, PowerShell | `irm https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.ps1 \| iex` (or `pip install countercheck` / `uvx countercheck`) |
 | Rust | `cargo install --git https://github.com/datacrate360/countercheck countercheck` |
 | Direct download | [Releases](https://github.com/datacrate360/countercheck/releases): one file per platform + `SHA256SUMS.txt` |
 
-Builds: macOS (Apple silicon and Intel, one universal binary) and Linux (x86_64, arm64; static). The install
-script checks every download against `SHA256SUMS.txt` before installing. Windows is planned; use WSL for now.
+Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, arm64; static) and Windows (x86_64,
+`countercheck.exe`, no runtime to install). Both install scripts check every download against `SHA256SUMS.txt`
+before installing. `install.ps1` puts `countercheck.exe` in `%LOCALAPPDATA%\Programs\countercheck` and tells you how
+to add that folder to `PATH`.
+
+**Windows needs [Git for Windows](https://git-scm.com/download/win)** (Countercheck calls `git`, and checks run with
+its `sh`, so the same `checks.toml` works on every OS). A check can use PowerShell or cmd instead:
+`shell = "pwsh"` or `shell = "cmd"` ([docs/checks.md](docs/checks.md#command)).
 
 **Sandbox by platform.** On macOS, checks run in the system sandbox (no internet, localhost allowed, writes only in
 the check folder; `network = true` lets a single check use the internet).
-On Linux there is no sandbox yet: checks run as a normal process and the receipt says so; run Countercheck inside
-a container with networking off when you need isolation.
+On Linux and Windows there is no sandbox yet: checks run as a normal process and the receipt says so (on Windows:
+`none (no sandbox on Windows yet)`); run Countercheck inside a container or VM with networking off when you need
+isolation.
+
+| Platform | Checks run in | Internet during checks | Writes outside the check folder |
+|---|---|---|---|
+| macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` | blocked |
+| Linux | a normal process | allowed | allowed |
+| Windows | a normal process | allowed | allowed |
 
 What's shipped, in progress and next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -182,6 +196,12 @@ scripts, so it's safe to attach to a pull request or a CI run.
 even if the agent commits its own edits to a test or to `checks.toml`. Without it, the checks are locked to `HEAD`.
 In CI, pass the base explicitly: `countercheck verify --base origin/main`.
 
+**On Windows** the hooks work the same (Claude Code runs natively there): use the same settings with
+`countercheck.exe` on `PATH`, or give its full path with forward slashes, e.g.
+`"command": "C:/Users/you/AppData/Local/Programs/countercheck/countercheck.exe hook claude-stop"`. Paths in the hook
+input may be `C:\...` or `C:/...`; a transcript under `~\` is found through `USERPROFILE`. See
+[docs/hooks/claude-code.md](docs/hooks/claude-code.md#windows).
+
 ## How Countercheck itself is tested
 
 A referee has to be right, so Countercheck is tested harder than most tools its size:
@@ -222,8 +242,8 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 ## Status
 
-v0.2 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux runs checks without one (the receipt says so).
-Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
+v0.2 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
+so). Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Contribute: make it fit your domain
@@ -256,7 +276,7 @@ Rust 1.90+: `cargo build --release` → `target/release/countercheck`. Gate: `ca
 - `examples/`: one made-up project per domain, with checks that catch a planted mistake
 - `eval/`, `docs/eval/`: the benchmark against Hermes Agent (tasks with hidden tests)
 - `.claude/skills/`: step-by-step contribution guides · `docs/architecture.md`: how it works inside
-- `packaging/`, `install.sh`, `pyproject.toml`: release packaging (Homebrew, install script, Python wheels)
+- `packaging/`, `install.sh`, `install.ps1`, `pyproject.toml`: release packaging (Homebrew, install scripts, Python wheels)
 - `docs/checks.md`: every check type · `docs/hooks/`: agent hooks · `docs/decisions/`: design decisions
 
 MIT licensed.

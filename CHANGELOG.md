@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Native Windows support** (Windows 10/11, x86_64): `countercheck.exe` runs without WSL. Install with
+  `pip install countercheck`, `uvx countercheck` or `irm .../install.ps1 | iex` (checks the SHA-256 against
+  `SHA256SUMS.txt` before installing). What works: `verify`, `show`, `init`, `report`, `ui`, the three hooks
+  (`claude-stop`, `hermes-pre-verify`, `session-start`) with Windows paths, every check type. Checks run with Git for
+  Windows' `sh` by default (a missing `sh` fails the check with a plain message); each check runs in a Job Object,
+  so a timeout kills the whole process tree and background leftovers stop when the check ends; `link` folders become directory junctions; symlinks Windows refuses are written as text files with the
+  target, like git does. Paths and the tree hash use `/`, so the same work gives the same receipt paths and tree
+  hash on Windows and Unix. CI tests every change on Windows. What doesn't, yet: **no sandbox on Windows** (checks
+  run as a normal process; the receipt says `none (no sandbox on Windows yet)`, `--sandbox seatbelt` is a plain
+  error); no ARM64 build (the x86_64 one runs under emulation); no winget or scoop.
+- **`shell` option on a check**: `"sh"` (default), `"pwsh"` (PowerShell 7, or Windows PowerShell) or `"cmd"`
+  (Windows). Validated when the check file is read.
+- **Fixed: Windows line endings.** A `$` at the end of a `coverage` (or `forbid`) pattern now also matches before
+  `\r\n`; before, `coverage` reported items in CRLF files as missing.
+
 - **`countercheck ui`**: a live page of the receipts that updates while an agent works. 127.0.0.1 only, a random
   token in the address, `Host` checked (so other web pages and DNS rebinding can't read it), GET only, read-only, a
   strict Content-Security-Policy with a per-page nonce. Port 7357, or any free port when taken (`--port` to choose);

@@ -41,7 +41,7 @@ case "$(uname -s)" in
       aarch64 | arm64) platform="linux-aarch64" ;;
       *) die "no build for Linux on $(uname -m) yet" ;;
     esac ;;
-  MINGW* | MSYS* | CYGWIN*) die "Windows isn't supported yet; use WSL, or see https://github.com/$REPO" ;;
+  MINGW* | MSYS* | CYGWIN*) die "on Windows, install from PowerShell: irm https://raw.githubusercontent.com/$REPO/PROD/install.ps1 | iex (or: pip install countercheck)" ;;
   *) die "no build for $(uname -s) yet" ;;
 esac
 

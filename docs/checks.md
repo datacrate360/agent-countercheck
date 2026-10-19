@@ -33,7 +33,28 @@ protected = ["tests/**"]
 name = "unit tests"
 run = "pytest -q"
 timeout_secs = 600          # optional, default 600, max 7200
+shell = "sh"                # optional: "sh" (default), "pwsh" or "cmd"
 ```
+
+### Which shell
+
+| `shell` | Runs | Where |
+|---|---|---|
+| `"sh"` (default) | `sh -c <run>` | everywhere; on Windows, Git for Windows' `sh.exe` (found on `PATH`, else next to `git.exe`, else in `C:\Program Files\Git`) |
+| `"pwsh"` | `pwsh -NoProfile -NonInteractive -Command <run>` | wherever PowerShell 7 is installed; on Windows it falls back to Windows PowerShell (`powershell.exe`) |
+| `"cmd"` | `cmd /D /S /C "<run>"` (the command line exactly as written) | Windows only |
+
+- Keep the default `sh` when the project is worked on from several OSes: the same check file then runs the same way
+  on macOS, Linux and Windows.
+- Any other value is refused when the check file is read.
+- If the shell isn't there (no Git for Windows, no PowerShell, `cmd` off Windows), the check **fails** with a plain
+  message saying what to install, e.g. "install Git for Windows, or set `shell = "pwsh"` on this check".
+- On a timeout the whole process tree is killed (the process group on Unix; on Windows the check's Job Object, with
+  `taskkill /T` as a fallback). On Windows, processes a check leaves running in the background are also stopped when
+  it ends, so they can't keep countercheck's output (and an agent's hook) waiting.
+- Files checked out with Windows line endings (CRLF) work with every check type: `$` in `forbid` and `coverage`
+  patterns also matches before `\r\n`, golden text and csv compare lines whatever their ending, and `METRIC` lines
+  may end in `\r\n`.
 
 ### Checks that need the internet
 
@@ -55,7 +76,7 @@ network = true
   FAILED: a failure that might be caused by the missing internet is still a failure until the check file says the
   check may use it.
 - The hint only appears when the output looks like a connection error (blocked, can't resolve, unreachable).
-- On Linux there is no sandbox yet, so checks always have the internet there.
+- On Linux and Windows there is no sandbox yet, so checks always have the internet there, and the hint never shows.
 
 ## Matrix
 

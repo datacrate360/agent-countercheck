@@ -54,7 +54,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             git::show(&root, &base_commit, &path)?
                 .ok_or_else(|| format!("{path} is not in the base revision"))?
         } else {
-            std::fs::read(root.join(&path)).map_err(|e| format!("{path}: {e}"))?
+            std::fs::read(root.join(snapshot::safe_rel(&path)?))
+                .map_err(|e| format!("{path}: {e}"))?
         };
         if bytes.len() > MAX_LIST_BYTES {
             return Err(format!("{path} is larger than {MAX_LIST_BYTES} bytes"));
@@ -69,15 +70,12 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         .prefix("countercheck-")
         .tempdir()
         .map_err(|e| format!("temp dir: {e}"))?;
-    let scratch_root = scratch
-        .path()
-        .canonicalize()
-        .map_err(|e| format!("temp dir: {e}"))?;
+    let scratch_root = snapshot::canonical(scratch.path()).map_err(|e| format!("temp dir: {e}"))?;
     let work = scratch_root.join("work");
     let tmp = scratch_root.join("tmp");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
-    snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
+    let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
 
     // 3. Protected files the worker changed go back to their base version.
     let mut protected_changes = Vec::new();
@@ -117,7 +115,9 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let mut results = Vec::new();
     for spec in &planned {
         let Some(g) = &spec.golden else {
-            results.push(runner::run_check(spec, &work, &tmp, opts.sandbox)?);
+            let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox)?;
+            note_links_as_text(&mut result, &links_as_text);
+            results.push(result);
             continue;
         };
         // The reference comes from the base revision (like the check file) when the checks are
@@ -131,7 +131,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
                 )),
             }
         } else {
-            std::fs::read(work.join(&g.expected))
+            snapshot::safe_rel(&g.expected)
+                .and_then(|rel| std::fs::read(work.join(rel)).map_err(|e| e.to_string()))
                 .map_err(|_| format!("the expected file {} was not found", g.expected))
         };
         let expected = expected.and_then(|b| {
@@ -147,6 +148,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         golden::clear_output(&work, g)?;
         let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox)?;
         golden::judge(&work, g, &expected, &mut result);
+        note_links_as_text(&mut result, &links_as_text);
         results.push(result);
     }
     results.extend(scan_results);
@@ -191,6 +193,27 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let text = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((receipt, path))
+}
+
+/// Say on a check's output when symlinks in its clean copy are text files (Windows refused them).
+fn note_links_as_text(result: &mut receipt::CheckResult, paths: &[String]) {
+    if paths.is_empty() {
+        return;
+    }
+    let mut shown = paths.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+    if paths.len() > 5 {
+        shown.push_str(", ...");
+    }
+    let note = format!(
+        "[countercheck] Windows refused to create symlinks, so {} symlink(s) in the clean copy are text \
+         files holding the link target, like git's core.symlinks=false (Developer Mode allows symlinks): {shown}",
+        paths.len()
+    );
+    if result.output_tail.is_empty() {
+        result.output_tail = note;
+    } else {
+        result.output_tail = format!("{}\n{note}", result.output_tail);
+    }
 }
 
 /// Receipts inside the repo get a .gitignore so they never show up as worker changes.

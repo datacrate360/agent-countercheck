@@ -4,10 +4,12 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_countercheck");
 
 fn sh(dir: &Path, cmd: &str) {
-    let ok = Command::new("sh")
+    let ok = Command::new(common::sh_program())
         .arg("-c")
         .arg(cmd)
         .current_dir(dir)
@@ -20,10 +22,7 @@ fn sh(dir: &Path, cmd: &str) {
 fn project(checks: &str) -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     let p = d.path();
-    sh(
-        p,
-        "git init -q -b main && git config user.email t@t && git config user.name t",
-    );
+    sh(p, common::GIT_INIT);
     fs::create_dir_all(p.join("src")).unwrap();
     fs::create_dir_all(p.join("tests")).unwrap();
     fs::create_dir_all(p.join(".countercheck")).unwrap();
@@ -120,7 +119,10 @@ fn checks_missing_from_base_are_unverified() {
     let p = d.path();
     sh(
         p,
-        "git init -q -b main && git config user.email t@t && git config user.name t && echo x > a && git add a && git commit -qm base",
+        &format!(
+            "{} && echo x > a && git add a && git commit -qm base",
+            common::GIT_INIT
+        ),
     );
     fs::create_dir_all(p.join(".countercheck")).unwrap();
     fs::write(
@@ -143,6 +145,8 @@ fn timeouts_fail() {
 }
 
 /// A timed-out check's background children die with it (the whole process group is killed).
+/// Unix only: it reads the child's state with `ps`; Windows has its own test below.
+#[cfg(unix)]
 #[test]
 fn timeouts_kill_the_whole_process_group() {
     let outside = tempfile::tempdir().unwrap();
@@ -1322,4 +1326,339 @@ fn claude_hook_can_be_switched_off_and_fails_open() {
     assert_eq!((code, out.trim()), (0, ""));
     let (code, out) = claude_hook("not json", &[]);
     assert_eq!((code, out.trim()), (0, ""));
+}
+
+/// A path for a check file string and `sh`: forward slashes (TOML strings treat `\` as an escape).
+#[cfg(windows)]
+fn slash(p: &Path) -> String {
+    p.to_string_lossy().replace('\\', "/")
+}
+
+/// True when `program` is on PATH (`.exe` added on Windows).
+fn on_path(program: &str) -> bool {
+    let name = if cfg!(windows) {
+        format!("{program}.exe")
+    } else {
+        program.to_string()
+    };
+    std::env::var_os("PATH")
+        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(&name).is_file()))
+}
+
+/// Windows: a timed-out check's background children die with it (`taskkill /T` kills the tree).
+/// `$!` is an MSYS process id there, so the test reads the Windows one from `/proc`.
+#[cfg(windows)]
+#[test]
+fn timeouts_kill_the_whole_process_tree_on_windows() {
+    let outside = tempfile::tempdir().unwrap();
+    let pid_file = outside.path().join("bg.pid");
+    let checks = format!(
+        "[[check]]\nname = \"bg\"\nrun = \"sleep 60 & cat /proc/$!/winpid > '{}'; wait\"\ntimeout_secs = 5\n",
+        slash(&pid_file)
+    );
+    let d = project(&checks);
+    let started = std::time::Instant::now();
+    let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    // A survivor would hold countercheck's output open until `sleep 60` ends.
+    assert!(
+        started.elapsed().as_secs() < 40,
+        "verify took {:?}: the background process outlived the timeout",
+        started.elapsed()
+    );
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["timed_out"], true);
+    let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
+    assert!(pid.parse::<u32>().is_ok(), "no Windows pid: {pid:?}");
+    assert!(
+        !windows_pid_running(&pid),
+        "background process {pid} survived the timeout"
+    );
+}
+
+/// Windows: what a passing check leaves running in the background is stopped when it ends, so
+/// it can't hold countercheck's output (and an agent's hook) open.
+#[cfg(windows)]
+#[test]
+fn background_processes_stop_when_a_check_ends_on_windows() {
+    let outside = tempfile::tempdir().unwrap();
+    let pid_file = outside.path().join("bg.pid");
+    let checks = format!(
+        "[[check]]\nname = \"bg\"\nrun = \"sleep 60 & cat /proc/$!/winpid > '{}'; exit 0\"\n",
+        slash(&pid_file)
+    );
+    let d = project(&checks);
+    let started = std::time::Instant::now();
+    let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    assert!(
+        started.elapsed().as_secs() < 40,
+        "verify took {:?}",
+        started.elapsed()
+    );
+    assert_eq!(code, 0, "{r:#}");
+    let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
+    assert!(
+        !windows_pid_running(&pid),
+        "background process {pid} is still running"
+    );
+}
+
+/// True while Windows process `pid` runs (polls for up to 3 seconds for it to go).
+#[cfg(windows)]
+fn windows_pid_running(pid: &str) -> bool {
+    let running = || {
+        let out = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).contains(&format!("\"{pid}\""))
+    };
+    for _ in 0..30 {
+        if !running() {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    true
+}
+
+/// `shell = "pwsh"` runs the check in PowerShell (pwsh, or Windows PowerShell). Skipped where
+/// PowerShell isn't installed.
+#[test]
+fn pwsh_checks_run_in_powershell() {
+    if !cfg!(windows) && !on_path("pwsh") {
+        return;
+    }
+    let checks = r#"[[check]]
+name = "ps"
+shell = "pwsh"
+run = 'if ((Get-Content src/calc.sh -Raw) -match "\+") { Write-Output "adds"; exit 0 } else { Write-Output "still subtracts"; exit 4 }'
+"#;
+    let d = project(checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["exit_code"], 4, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.contains("still subtracts"), "{out}");
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert!(
+        r["checks"][0]["output_tail"]
+            .as_str()
+            .unwrap()
+            .contains("adds")
+    );
+}
+
+/// `shell = "cmd"` runs the command line as written (quotes, `&&`, `||` and `>NUL` intact).
+#[cfg(windows)]
+#[test]
+fn cmd_checks_run_in_cmd_with_their_quotes() {
+    let checks = r#"[[check]]
+name = "cmd"
+shell = "cmd"
+run = 'findstr /C:"+ $2" src\calc.sh >NUL && echo found "a b" || exit /b 5'
+"#;
+    let d = project(checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["exit_code"], 5, "{r:#}");
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.contains("found \"a b\""), "{out}");
+}
+
+/// Off Windows, a `cmd` check can't run: it fails with a plain reason instead of stopping countercheck.
+#[cfg(not(windows))]
+#[test]
+fn cmd_checks_fail_plainly_off_windows() {
+    let d = project("[[check]]\nname = \"cmd\"\nshell = \"cmd\"\nrun = \"dir\"\n");
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["passed"], false);
+    assert_eq!(r["checks"][0]["exit_code"], serde_json::Value::Null);
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.contains("needs Windows"), "{out}");
+}
+
+/// An unknown shell is refused when the check file is read.
+#[test]
+fn unknown_shells_are_refused() {
+    let d = project("[[check]]\nname = \"x\"\nshell = \"bash\"\nrun = \"true\"\n");
+    let out = Command::new(BIN)
+        .args(["verify", "--sandbox", "none", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("bash") && err.contains("pwsh"), "{err}");
+}
+
+/// The same files give the same tree hash and the same `/` paths on every OS (the constant was
+/// computed on Linux; CI checks it on macOS and Windows too).
+#[test]
+fn tree_hash_and_paths_are_the_same_on_every_os() {
+    let d = project(&format!(
+        "{CHECKS}[[forbid]]\nname = \"no todo\"\npattern = 'TODO'\npaths = [\"src/**/*.txt\"]\n"
+    ));
+    let p = d.path();
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    fs::create_dir_all(p.join("src/deep/er")).unwrap();
+    fs::write(p.join("src/deep/er/notes.txt"), "TODO: tidy\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let out = check(&r, "forbid: no todo")["output_tail"]
+        .as_str()
+        .unwrap();
+    assert!(out.contains("src/deep/er/notes.txt:1: TODO: tidy"), "{out}");
+    assert_eq!(r["tree_sha256"], TREE_SHA256, "{r:#}");
+}
+
+const TREE_SHA256: &str = "7fd45a5b3c4c4630b8b921e748979b53fd49e101cd678bcc12be666c641137e2";
+
+/// A symlink in the worker's tree is recreated in the clean copy (on Windows, as a symlink when
+/// allowed, else as a text file with the target, and the check output says so).
+#[test]
+fn symlinks_in_the_tree_reach_the_clean_copy() {
+    let d = project("[[check]]\nname = \"link\"\nrun = \"cat link.txt\"\n");
+    let p = d.path();
+    fs::write(p.join("real.txt"), "hi\n").unwrap();
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink("real.txt", p.join("link.txt")).is_ok();
+    #[cfg(windows)]
+    let made = std::os::windows::fs::symlink_file("real.txt", p.join("link.txt")).is_ok();
+    if !made {
+        return; // this system can't make symlinks at all; the fallback has a unit test
+    }
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    if out.contains("Windows refused to create symlinks") {
+        // The text-file fallback: `cat` prints the link target.
+        assert!(
+            out.contains("real.txt") && out.contains("link.txt"),
+            "{out}"
+        );
+    } else {
+        assert!(out.starts_with("hi"), "{out}");
+    }
+}
+
+/// Files checked out with Windows line endings (CRLF) give the same results: the check file,
+/// matrix file, coverage list, forbid and coverage scans, golden text and csv, and METRIC lines.
+#[test]
+fn windows_line_endings_do_not_change_the_results() {
+    let checks = "protected = [\"tests/**\"]\n\
+        [[check]]\nname = \"bench\"\nrun = \"sh src/bench.sh {t}\"\nmatrix_file = { t = \".countercheck/targets.txt\" }\nbudget = { metric = \"seconds\", max = 5 }\n\
+        [[check]]\nname = \"csv\"\nrun = \"sh src/csv.sh > out.csv\"\ngolden = { output = \"out.csv\", expected = \".countercheck/expected.csv\", mode = \"csv\" }\n\
+        [[check]]\nname = \"text\"\nrun = \"printf 'a\\\\r\\\\nb\\\\r\\\\n' > out.txt\"\ngolden = { output = \"out.txt\", expected = \".countercheck/expected.txt\" }\n\
+        [[forbid]]\nname = \"no todo\"\npattern = 'TODO$'\npaths = [\"src/**\"]\n\
+        [[coverage]]\nname = \"funcs\"\nitems = \".countercheck/items.txt\"\npaths = [\"src/**\"]\npattern = '^# fn {item}$'\n";
+    let crlf = |t: &str| t.replace('\n', "\r\n");
+    let d = project(&crlf(checks));
+    let p = d.path();
+    fs::write(
+        p.join(".countercheck/targets.txt"),
+        crlf("# targets\nfast\nslow\n"),
+    )
+    .unwrap();
+    fs::write(
+        p.join(".countercheck/expected.csv"),
+        crlf("id,total\n1,10\n2,20\n"),
+    )
+    .unwrap();
+    fs::write(p.join(".countercheck/expected.txt"), "a\nb\n").unwrap();
+    fs::write(p.join(".countercheck/items.txt"), crlf("alpha\nbeta\n")).unwrap();
+    sh(p, "git add -A && git commit -qm crlf");
+    // Comment lines with CRLF (read by coverage); the shell code itself with LF, as sh needs.
+    fs::write(
+        p.join("src/bench.sh"),
+        "# fn alpha\r\n# fn beta\r\nif [ \"$1\" = slow ]; then printf 'METRIC seconds=9\\r\\n'; else printf 'METRIC seconds=1\\r\\n'; fi\n",
+    )
+    .unwrap();
+    fs::write(
+        p.join("src/csv.sh"),
+        "printf 'id,total\\r\\n1,10\\r\\n2,20\\r\\n'\n",
+    )
+    .unwrap();
+    fs::write(p.join("src/notes.md"), crlf("done\nTODO\n")).unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "bench [t=fast]")["passed"], true, "{r:#}");
+    assert_eq!(check(&r, "bench [t=slow]")["passed"], false, "{r:#}");
+    assert_eq!(check(&r, "csv")["passed"], true, "{r:#}");
+    assert_eq!(check(&r, "text")["passed"], true, "{r:#}");
+    let forbid = check(&r, "forbid: no todo")["output_tail"]
+        .as_str()
+        .unwrap();
+    assert!(forbid.contains("src/notes.md:2: TODO"), "{forbid}");
+    assert_eq!(check(&r, "coverage: funcs")["passed"], true, "{r:#}");
+}
+
+/// Windows payloads: Claude Code and Hermes give `C:\...` paths (sometimes `C:/...`) and a
+/// transcript under `~\` with no HOME set. The session's start commit must still be found, so an
+/// agent that commits an edited test is still caught, and the claim is read from the transcript.
+#[cfg(windows)]
+#[test]
+fn hooks_work_with_windows_payloads() {
+    use std::io::Write;
+    let d = project(CHECKS);
+    let back = d.path().to_string_lossy().replace('/', "\\");
+    let fwd = back.replace('\\', "/");
+    let start = serde_json::json!({
+        "session_id": "w1", "cwd": fwd, "hook_event_name": "SessionStart", "source": "startup"
+    });
+    assert_eq!(
+        run_hook("session-start", &start.to_string(), &[]),
+        (0, String::new())
+    );
+    sh(
+        d.path(),
+        "echo 'exit 0' > tests/check.sh && git commit -qam 'fix the tests'",
+    );
+    let line = serde_json::json!({"type": "assistant", "message": {"role": "assistant", "content": [
+        {"type": "text", "text": "Fixed it, all tests pass."}]}});
+    fs::write(d.path().join("t.jsonl"), format!("{line}\n")).unwrap();
+    let stop = serde_json::json!({
+        "session_id": "w1",
+        "transcript_path": "~\\t.jsonl",
+        "cwd": back,
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+    });
+    let log = d.path().join("hook.log");
+    let mut child = Command::new(BIN)
+        .args(["hook", "claude-stop"])
+        .env_remove("HOME")
+        .env("USERPROFILE", d.path())
+        .env("COUNTERCHECK_HOOK_LOG", &log)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stop.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let out = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(block_reason(&out).contains("FAILED"), "{out}");
+    let logged: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+    let receipt: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(logged["receipt"].as_str().unwrap()).unwrap())
+            .unwrap();
+    assert_eq!(receipt["claim"], "Fixed it, all tests pass.", "{receipt:#}");
+    assert_eq!(receipt["sandbox"], "none (no sandbox on Windows yet)");
+    let hermes = serde_json::json!({
+        "hook_event_name": "pre_verify", "cwd": fwd, "session_id": "w1",
+        "extra": { "final_response": "Fixed it, all tests pass." }
+    });
+    let (_, out) = hermes_hook(&hermes.to_string(), &[]);
+    assert!(out.contains("\"continue\""), "{out}");
 }

@@ -48,6 +48,18 @@ your files). The Stop hook then locks the checks to that commit. Without it the 
 agent that **commits** an edit to a test or to `checks.toml` would move the "locked" rules with it. A resumed session
 keeps its first start.
 
+## Windows
+
+Claude Code runs natively on Windows, and so do these hooks. Use the same settings; `countercheck.exe` must be on
+`PATH` (`install.ps1` tells you how), or give its full path with forward slashes:
+`"command": "C:/Users/you/AppData/Local/Programs/countercheck/countercheck.exe hook claude-stop"`.
+
+- The `cwd` and `transcript_path` in the hook input may use `\` or `/`; a transcript path starting with `~\` is read
+  from `USERPROFILE` when `HOME` isn't set.
+- Checks run with Git for Windows' `sh` (Claude Code on Windows needs Git for Windows too), or with
+  `shell = "pwsh"`/`"cmd"` per check.
+- There is no sandbox on Windows yet; the receipt says `none (no sandbox on Windows yet)`.
+
 ## Environment
 
 | Variable | Effect |

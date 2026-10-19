@@ -62,6 +62,9 @@ pub fn compile(what: &str, pattern: &str, case_insensitive: bool) -> Result<Rege
         .case_insensitive(case_insensitive)
         // `^` and `$` mean line start and end, also when a whole file is matched (coverage).
         .multi_line(true)
+        // ...and `$` also matches before `\r\n`, so files checked out with Windows line endings
+        // match the same as with `\n`.
+        .crlf(true)
         .size_limit(REGEX_SIZE_LIMIT)
         .dfa_size_limit(REGEX_SIZE_LIMIT)
         .build()
@@ -241,6 +244,19 @@ mod tests {
             message: Some("Convert these.".into()),
             case_insensitive: false,
         }
+    }
+
+    #[test]
+    fn windows_line_endings_give_the_same_hits() {
+        let rule = Rule::new(&spec(r"NVL\(\w+\)$")).unwrap();
+        let lf = b"select 1\nselect NVL(a)\nok\n";
+        let crlf = b"select 1\r\nselect NVL(a)\r\nok\r\n";
+        let (mut a, mut b) = (Scan::default(), Scan::default());
+        a.add_file(&rule, "sql/a.sql", lf);
+        b.add_file(&rule, "sql/a.sql", crlf);
+        assert_eq!(b.total, 1);
+        assert_eq!(a.shown, b.shown);
+        assert_eq!(b.shown, vec!["sql/a.sql:2: select NVL(a)"]);
     }
 
     #[test]

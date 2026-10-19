@@ -224,6 +224,19 @@ mod tests {
     }
 
     #[test]
+    fn windows_line_endings_in_the_list_and_the_files_are_found() {
+        let mut s = spec();
+        s.pattern = r"^CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+{item}$".into();
+        let mut cov = Coverage::new(&s, "# procs\r\np_one\r\np_two\r\n\r\n").unwrap();
+        cov.add_file(
+            "sql/a.sql",
+            b"CREATE OR REPLACE PROCEDURE p_one\r\nAS\r\nCREATE OR REPLACE PROCEDURE p_two\r\n",
+        );
+        let (passed, out) = cov.report();
+        assert!(passed, "{out}");
+    }
+
+    #[test]
     fn every_item_must_be_found() {
         let mut c = Coverage::new(&spec(), "# procedures\nload_a\nload_b\nload_c\n").unwrap();
         assert!(c.wants("sql/x/y.sql"));

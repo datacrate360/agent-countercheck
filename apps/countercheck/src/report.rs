@@ -95,15 +95,30 @@ pub fn open_in_browser(path: &std::ffi::OsStr) {
     let mut cmd = if cfg!(target_os = "macos") {
         std::process::Command::new("open")
     } else if cfg!(windows) {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", ""]);
-        c
+        std::process::Command::new("cmd")
     } else {
         std::process::Command::new("xdg-open")
     };
+    add_target(&mut cmd, path);
     let _ = cmd
-        .arg(path)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
+}
+
+/// Windows: `cmd /D /C start "" "<path or url>"`, written out as is. The usual argument quoting
+/// leaves a path without spaces unquoted, and cmd would then split it at `&` or `^`. Windows paths
+/// and our URLs never contain `"`.
+#[cfg(windows)]
+fn add_target(cmd: &mut std::process::Command, path: &std::ffi::OsStr) {
+    use std::os::windows::process::CommandExt;
+    cmd.args(["/D", "/C", "start"]).raw_arg(format!(
+        "\"\" \"{}\"",
+        path.to_string_lossy().replace('"', "")
+    ));
+}
+
+#[cfg(not(windows))]
+fn add_target(cmd: &mut std::process::Command, path: &std::ffi::OsStr) {
+    cmd.arg(path);
 }

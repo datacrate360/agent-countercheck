@@ -7,6 +7,7 @@
 //! name = "unit tests"
 //! run = "pytest -q"             # run by `sh -c` in a clean copy of the project
 //! timeout_secs = 600            # optional, default 600, max 7200
+//! shell = "sh"                  # optional: "sh" (default), "pwsh" or "cmd"
 //! ```
 //!
 //! A check can also run once per target (`matrix`, see [`crate::matrix`]); `[[forbid]]` entries
@@ -79,6 +80,29 @@ pub struct CheckSpec {
     /// locked check file, so a worker can't grant itself the internet.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub network: bool,
+    /// Which shell runs `run`: `sh` (default, every OS; Git for Windows' `sh` on Windows), `pwsh`
+    /// or `cmd`.
+    #[serde(default, skip_serializing_if = "Shell::is_default")]
+    pub shell: Shell,
+}
+
+/// The shell a check's `run` is given to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Shell {
+    /// `sh -c <run>`.
+    #[default]
+    Sh,
+    /// `pwsh -NoProfile -NonInteractive -Command <run>` (Windows PowerShell if pwsh is missing).
+    Pwsh,
+    /// `cmd /C <run>`.
+    Cmd,
+}
+
+impl Shell {
+    fn is_default(&self) -> bool {
+        *self == Shell::Sh
+    }
 }
 
 /// One run of a check, after matrix expansion: what the runner executes.
@@ -96,6 +120,7 @@ pub struct PlannedCheck {
     pub budget: Option<BudgetSpec>,
     /// Internet allowed for this run (`network = true` on the check).
     pub network: bool,
+    pub shell: Shell,
 }
 
 fn default_timeout() -> u64 {
@@ -342,6 +367,7 @@ fn plan_inner(
                 golden: planned_golden(c, None, &protected)?,
                 budget: c.budget.clone(),
                 network: c.network,
+                shell: c.shell,
             });
             continue;
         };
@@ -368,6 +394,7 @@ fn plan_inner(
                 golden: planned_golden(c, Some((key, v)), &protected)?,
                 budget: c.budget.clone(),
                 network: c.network,
+                shell: c.shell,
             });
             if out.len() > matrix::MAX_EXPANSIONS {
                 break; // refused just below; stop before building more
@@ -433,6 +460,46 @@ mod tests {
         assert!(!f.checks[0].network);
         assert!(f.checks[1].network);
         assert!(parse("[[check]]\nname = \"a\"\nrun = \"true\"\nnetwork = \"yes\"\n").is_err());
+    }
+
+    #[test]
+    fn shell_defaults_to_sh_and_only_known_shells_parse() {
+        let f = parse(
+            "[[check]]\nname = \"a\"\nrun = \"true\"\n[[check]]\nname = \"b\"\nrun = \"dir\"\nshell = \"cmd\"\n[[check]]\nname = \"c\"\nrun = \"1\"\nshell = \"pwsh\"\n",
+        )
+        .unwrap();
+        let shells: Vec<Shell> = f.checks.iter().map(|c| c.shell).collect();
+        assert_eq!(shells, vec![Shell::Sh, Shell::Cmd, Shell::Pwsh]);
+        let p = plan(&f, &BTreeMap::new()).unwrap();
+        assert_eq!(p[1].shell, Shell::Cmd);
+        for bad in ["bash", "SH", "", "powershell"] {
+            let e = parse(&format!(
+                "[[check]]\nname = \"a\"\nrun = \"true\"\nshell = \"{bad}\"\n"
+            ))
+            .unwrap_err();
+            assert!(e.contains("shell") || e.contains("variant"), "{bad}: {e}");
+        }
+        // A check file that doesn't name a shell serializes as before.
+        assert!(!toml::to_string(&f.checks[0]).unwrap().contains("shell"));
+    }
+
+    #[test]
+    fn a_check_file_with_windows_line_endings_parses_the_same() {
+        let lf = "protected = [\"tests/**\"]\n[[check]]\nname = \"a\"\nrun = \"sh t.sh\"\nmatrix_file = { s = \".countercheck/s.txt\" }\n";
+        let crlf = lf.replace('\n', "\r\n");
+        assert_eq!(parse(lf).unwrap(), parse(&crlf).unwrap());
+        let mut texts = BTreeMap::new();
+        texts.insert(
+            ".countercheck/s.txt".to_string(),
+            "# targets\r\nCA1\r\nNY2 # comment\r\n\r\n".to_string(),
+        );
+        let p = plan(&parse(&crlf).unwrap(), &texts).unwrap();
+        let names: Vec<&str> = p.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["a [s=CA1]", "a [s=NY2]"]);
+        assert_eq!(
+            p[0].env,
+            vec![("COUNTERCHECK_MATRIX_S".to_string(), "CA1".to_string())]
+        );
     }
 
     #[test]
