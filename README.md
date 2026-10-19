@@ -197,6 +197,29 @@ A referee has to be right, so Countercheck is tested harder than most tools its 
   and the benchmark task validator. Countercheck also verifies itself with its own `.countercheck/checks.toml`.
 - **The benchmark** above, with hidden tests as ground truth.
 
+## Why Rust?
+
+Countercheck is a referee that runs inside other people's projects: Python, JavaScript, Java, SQL, anything. So it
+has to be one dependency-free file that starts instantly, can't crash, and behaves the same on every operating system.
+Rust gives exactly that, which is also why tools like [uv](https://github.com/astral-sh/uv),
+[ruff](https://github.com/astral-sh/ruff) and OpenAI's [Codex CLI](https://github.com/openai/codex) are written in it.
+
+| What a referee needs | Why it matters here | What Rust gives |
+|---|---|---|
+| **Nothing to install** | It runs inside your project, so it must never clash with your Python version, virtualenv or `node_modules` | One file of about 3–4 MB with no runtime; `pip install countercheck` ships that same binary in a wheel, like ruff |
+| **Instant start** | An agent hook runs it every time the agent tries to finish | Starts in under 10 ms (a Python CLI often needs 100–300 ms just to import) |
+| **No crashes, no memory bugs** | A bug in a referee is a wrong verdict | Memory safety from the compiler; on top, this project forbids `unsafe` and `unwrap`/`panic!` outside tests |
+| **Same everywhere** | Teams mix macOS, Linux and Windows | One codebase, cross-compiled; static Linux builds |
+| **A strict gate for AI-written code** | Much of this code is written with coding agents | The compiler and `clippy -D warnings` reject whole classes of mistakes before review; property and mutation testing are first-class |
+
+**The costs, honestly:** fewer people know Rust than Python, and it is slower to write. That's why most contributions
+need no Rust at all: domain examples, check files and benchmark tasks are plain files, scripts and Python, and checks
+run your project's own commands in any language. Go would also have been a reasonable choice (single binary, simpler
+language); Rust won on stricter safety guarantees and its testing tools.
+
+**Where Rust is not the answer:** a future hosted team dashboard (logins, many repositories, rich views) is a web app
+and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md](docs/decisions/0001-stack.md).
+
 ## Status
 
 v0.2 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux runs checks without one (the receipt says so).
