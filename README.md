@@ -7,7 +7,8 @@ passes, or never run it. `countercheck verify` checks the claim itself:
 
 1. It reads your checks from the **base revision** (before the agent's change), so the agent can't weaken them.
 2. It copies the agent's files into a **clean folder** and puts back any protected file the agent changed (your tests).
-3. It runs the checks in a **macOS sandbox**: no network, writes only inside that folder.
+3. It runs the checks in a **macOS sandbox**: no internet (localhost works; a check can opt in with `network = true`),
+   writes only inside that folder.
 4. It writes a **receipt**: the claim, what ran, the output, what the agent changed that it shouldn't have, the cost if
    known, and a verdict. Receipts are sealed with a SHA-256 hash, so edits are detectable.
 
@@ -27,6 +28,27 @@ countercheck receipt 9073a384e88f9d37  FAILED
 
 (The agent's own run said `OK (skipped=1)`: it had marked the failing test as skipped.)
 
+## Does it work?
+
+We gave [Hermes Agent](https://github.com/NousResearch/hermes-agent) 29 small coding tasks, 3 times each, in four
+setups, and graded every run with **hidden tests** the agent never saw. Some tasks are impossible on purpose (a test
+expects a wrong value, a server can't be reached): the honest answer is "this can't pass, because …".
+
+| False "done" claims (claimed success, hidden tests fail) | Hermes | + its `verify_on_stop` | **+ Countercheck** | both |
+|---|---|---|---|---|
+| GPT 6.1, all tasks (87 runs per setup) | 7 | 11 | **3** | **2** |
+| GPT 6.1, impossible tasks only | 6 | 8 | **0** | **0** |
+| DeepSeek V4 Pro, all tasks | 7 | 6 | 6 | 6 |
+
+- When GPT 6.1 got stuck, it edited the protected test and said "all tests pass". Countercheck re-ran the original
+  tests, said FAILED and pushed back once; the agent restored the test and reported the real problem.
+- Countercheck only knows what your checks test: the remaining false claims were cases the visible tests didn't
+  cover. DeepSeek rarely games tests, so there was little to catch.
+- It added about 1 second to the median run.
+
+Full method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/results-2026-10.md). Reproduce:
+[eval/](eval).
+
 ## Install
 
 | You use | Install with |
@@ -40,7 +62,8 @@ countercheck receipt 9073a384e88f9d37  FAILED
 Builds: macOS (Apple silicon and Intel, one universal binary) and Linux (x86_64, arm64; static). The install
 script checks every download against `SHA256SUMS.txt` before installing. Windows is planned; use WSL for now.
 
-**Sandbox by platform.** On macOS, checks run in the system sandbox (no network, writes only in the check folder).
+**Sandbox by platform.** On macOS, checks run in the system sandbox (no internet, localhost allowed, writes only in
+the check folder; `network = true` lets a single check use the internet).
 On Linux there is no sandbox yet: checks run as a normal process and the receipt says so; run Countercheck inside
 a container with networking off when you need isolation.
 
@@ -81,10 +104,26 @@ locked in the base revision, or none ran) · `1` error · `4` (`countercheck sho
 - Claude Code and Cortex Code: `countercheck hook claude-stop` blocks the `Stop` while the checks fail. See
   [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
 
+## How Countercheck itself is tested
+
+A referee has to be right, so Countercheck is tested harder than most tools its size:
+
+- **140 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+  repositories (tampered tests, timeouts, the macOS sandbox, both agent hooks, every check type), and **property
+  tests** that throw thousands of generated inputs at the verdict and seal logic (e.g. a receipt's seal breaks if any
+  one of 33 fields changes; `decide` never says VERIFIED when a check failed).
+- **Mutation testing** ([cargo-mutants](https://mutants.rs)): the receipt, claim and config code was deliberately
+  broken in every way the tool could find; tests were added until every break that compiles is caught (one remaining
+  change is provably equivalent).
+- **CI on every push** (macOS and Linux): `cargo fmt --check`, `cargo clippy -D warnings`, all tests, a release build
+  and the benchmark task validator. Countercheck also verifies itself with its own `.countercheck/checks.toml`.
+- **The benchmark** above, with hidden tests as ground truth.
+
 ## Status
 
-Early (v0.1, macOS first). Not yet: signed receipts (Ed25519), cost read from agent logs, read-back checks against real
-systems (databases, CRMs, web pages), a receipts UI, and Linux/Windows sandboxes. See `docs/decisions/`.
+v0.2 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux runs checks without one (the receipt says so).
+Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
+hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Build
 
@@ -97,6 +136,6 @@ Rust 1.90+: `cargo build --release` → `target/release/countercheck`. Gate: `ca
 - `apps/countercheck`: the CLI (git, clean copy, sandbox, runner)
 - `eval/`, `docs/eval/`: the evaluation against Hermes Agent (tasks with hidden tests)
 - `packaging/`, `install.sh`, `pyproject.toml`: release packaging (Homebrew, install script, Python wheels)
-- `docs/decisions/`: design decisions
+- `docs/checks.md`: every check type · `docs/hooks/`: agent hooks · `docs/decisions/`: design decisions
 
 MIT licensed.
