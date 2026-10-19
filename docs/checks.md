@@ -11,6 +11,7 @@ the checks came from the base revision and all of them passed.
 |---|---|---|
 | [Command](#command) | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
 | [Matrix](#matrix) | the same command must pass for many targets (tenants, schemas, levels, files) | `[[check]]` + `matrix` |
+| [Forbid](#forbid) | some text must not appear in the worker's files (leftover syntax, debug code, secrets) | `[[forbid]]` |
 
 ## Command
 
@@ -57,3 +58,26 @@ matrix_file = { schema = ".countercheck/targets/schemas.txt" }
 
 The file must be under `.countercheck/`. Like the check file, it is read from the base revision, so a worker can't
 make the list shorter.
+
+## Forbid
+
+Fails when a pattern appears in the worker's files. Countercheck scans the clean copy itself, before any check
+command runs, so no command is needed.
+
+```toml
+[[forbid]]
+name = "no Oracle-only syntax left"
+pattern = '\(\+\)|\bDECODE\s*\(|\bROWNUM\b'     # a regex
+paths = ["snowflake/**/*.sql"]                     # globs, same matcher as `protected`
+message = "Convert these to Snowflake syntax."    # optional, shown to the agent on failure
+case_insensitive = true                            # optional, default false
+```
+
+- On the receipt it is a check named `forbid: <name>`.
+- The pattern is matched line by line ([regex syntax](https://docs.rs/regex/latest/regex/#syntax); it always runs
+  in linear time). Use single quotes in TOML so backslashes stay as written.
+- A failure lists up to 20 hits as `path:line: text` (lines cut to 200 characters) and the total count, then the
+  `message`.
+- Binary files and files over 5 MiB are skipped and listed as skipped.
+- When no file matches `paths`, the check passes and says "nothing to scan".
+- An invalid regex is refused when the check file is read.

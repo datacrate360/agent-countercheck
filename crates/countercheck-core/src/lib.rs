@@ -2,6 +2,7 @@
 //!
 //! - [`claim`]: whether an agent's final message reports that the work is not done.
 //! - [`config`]: the check file (`.countercheck/checks.toml`) a project commits.
+//! - [`forbid`]: patterns that must not appear in the worker's files.
 //! - [`matrix`]: running one check once per target value.
 //! - [`protect`]: which paths a worker may not change (tests, the check file itself).
 //! - [`receipt`]: the record of one verification and how its verdict is decided.
@@ -18,6 +19,7 @@
 
 pub mod claim;
 pub mod config;
+pub mod forbid;
 pub mod matrix;
 pub mod protect;
 pub mod receipt;

@@ -668,3 +668,39 @@ proptest! {
         }
     }
 }
+
+// ---- forbid ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// A literal pattern counts exactly the lines that contain it; at most 20 are shown, each cut.
+    #[test]
+    fn forbid_counts_matching_lines(
+        lines in proptest::collection::vec(prop_oneof!["[a-c ]{0,8}", any::<String>().prop_map(|s| s.chars().take(300).collect())], 0..60),
+        needle in "[a-c]{1,3}",
+    ) {
+        use countercheck_core::forbid::{ForbidSpec, Rule, Scan, MAX_HITS_SHOWN, MAX_LINE_CHARS};
+        let spec = ForbidSpec {
+            name: "n".into(),
+            pattern: regex::escape(&needle),
+            paths: vec!["**".into()],
+            message: None,
+            case_insensitive: false,
+        };
+        let rule = Rule::new(&spec).map_err(TestCaseError::fail)?;
+        let text = lines.join("\n");
+        prop_assume!(!text.contains('\0'));
+        let mut scan = Scan::default();
+        scan.add_file(&rule, "f", text.as_bytes());
+        let want = text.lines().filter(|l| l.contains(&needle)).count();
+        prop_assert_eq!(scan.total, want);
+        prop_assert!(scan.shown.len() <= MAX_HITS_SHOWN);
+        prop_assert_eq!(scan.shown.len(), want.min(MAX_HITS_SHOWN));
+        for s in &scan.shown {
+            prop_assert!(s.chars().count() <= "f:99: ".len() + MAX_LINE_CHARS + 3, "{}", s);
+        }
+        let (passed, _) = scan.report(&spec);
+        prop_assert_eq!(passed, want == 0);
+    }
+}

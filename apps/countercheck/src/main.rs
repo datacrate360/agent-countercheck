@@ -11,6 +11,7 @@
 mod git;
 mod hook;
 mod runner;
+mod scan;
 mod snapshot;
 mod verify;
 

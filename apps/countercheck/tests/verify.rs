@@ -358,6 +358,78 @@ fn matrix_values_that_are_not_plain_are_refused() {
     assert!(!d.path().join("pwned").exists());
 }
 
+const FORBID: &str = "[[forbid]]\nname = \"no oracle syntax\"\npattern = '\\(\\+\\)|\\bDECODE\\s*\\('\n\
+                      paths = [\"sql/**/*.sql\"]\nmessage = \"Convert these to the new syntax.\"\ncase_insensitive = true\n";
+
+#[test]
+fn forbid_hit_fails_with_path_and_line() {
+    let d = project(&format!("{CHECKS}{FORBID}"));
+    let p = d.path();
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    fs::create_dir_all(p.join("sql/sales")).unwrap();
+    fs::write(
+        p.join("sql/sales/q.sql"),
+        "select 1\nfrom a, b where a.id = b.id(+)\n",
+    )
+    .unwrap();
+    fs::write(p.join("sql/ok.sql"), "select coalesce(x, 0) from t\n").unwrap();
+    // Outside `paths`: not scanned.
+    fs::write(p.join("src/old.sql"), "select decode(x, 1, 2) from t\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(check(&r, "calc")["passed"], true);
+    let f = check(&r, "forbid: no oracle syntax");
+    assert_eq!(f["passed"], false);
+    let out = f["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("sql/sales/q.sql:2: from a, b where a.id = b.id(+)"),
+        "{out}"
+    );
+    assert!(
+        out.starts_with("1 forbidden line(s) in 1 file(s); 2 file(s) scanned"),
+        "{out}"
+    );
+    assert!(out.ends_with("Convert these to the new syntax."), "{out}");
+    assert!(!out.contains("src/old.sql"), "{out}");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("forbid: no oracle syntax")
+    );
+}
+
+#[test]
+fn forbid_with_no_matching_files_passes_and_says_so() {
+    let d = project(&format!("{CHECKS}{FORBID}"));
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let f = check(&r, "forbid: no oracle syntax");
+    assert_eq!(f["passed"], true);
+    assert_eq!(
+        f["output_tail"],
+        "no files match sql/**/*.sql; nothing to scan"
+    );
+}
+
+/// A file that is only `[[forbid]]` works, and a binary file is listed as skipped, not scanned.
+#[test]
+fn forbid_alone_skips_binary_files() {
+    let d = project(FORBID);
+    let p = d.path();
+    fs::create_dir_all(p.join("sql")).unwrap();
+    fs::write(p.join("sql/a.sql"), "select 1\n").unwrap();
+    fs::write(p.join("sql/blob.sql"), b"decode(\0\x01").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let out = r["checks"][0]["output_tail"].as_str().unwrap();
+    assert!(out.contains("no forbidden lines in 1 file(s)"), "{out}");
+    assert!(
+        out.contains("skipped 1 file(s) (binary or over 5 MiB): sql/blob.sql"),
+        "{out}"
+    );
+}
+
 /// Run `countercheck hook hermes-pre-verify` with `input` on stdin; returns (exit code, stdout).
 fn hermes_hook(input: &str, envs: &[(&str, &str)]) -> (i32, String) {
     run_hook("hermes-pre-verify", input, envs)

@@ -1,6 +1,6 @@
 //! The verify flow: lock the checks, snapshot, restore protected files, run, decide, seal.
 
-use crate::{git, runner, snapshot};
+use crate::{git, runner, scan, snapshot};
 use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::protect::{Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
@@ -101,11 +101,17 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         }
     }
 
-    // 4. Run every check.
+    // 4. Scan the worker's files before any command can change them, then run every check.
+    let forbid_results = if checks.forbids.is_empty() {
+        Vec::new()
+    } else {
+        scan::forbid_all(&checks.forbids, &work, &scan::files(&work)?)?
+    };
     let mut results = Vec::new();
     for spec in &planned {
         results.push(runner::run_check(spec, &work, &tmp, opts.sandbox)?);
     }
+    results.extend(forbid_results);
 
     // 5. Decide, seal, save.
     let (verdict, reasons) = receipt::decide(checks_locked, &results, &protected_changes);

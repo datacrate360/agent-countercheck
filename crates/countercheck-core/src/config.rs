@@ -9,7 +9,8 @@
 //! timeout_secs = 600            # optional, default 600, max 7200
 //! ```
 //!
-//! A check can also run once per target (`matrix`, see [`crate::matrix`]). docs/checks.md has every
+//! A check can also run once per target (`matrix`, see [`crate::matrix`]); `[[forbid]]` entries
+//! list patterns that must not appear (see [`crate::forbid`]). docs/checks.md has every
 //! check type with an example.
 //!
 //! `link = ["node_modules", ".venv"]` makes git-ignored dependency folders visible in the clean
@@ -18,6 +19,7 @@
 //! countercheck reads this file from the **base** revision (before the worker's change), so a worker
 //! cannot weaken the checks it is judged by.
 
+use crate::forbid::{self, ForbidSpec};
 use crate::matrix;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -38,6 +40,9 @@ pub struct ChecksFile {
     pub protected: Vec<String>,
     #[serde(default, rename = "check")]
     pub checks: Vec<CheckSpec>,
+    /// Patterns that must not appear in the worker's files.
+    #[serde(default, rename = "forbid", skip_serializing_if = "Vec::is_empty")]
+    pub forbids: Vec<ForbidSpec>,
     /// Top-level folders linked (not copied) into the clean copy, e.g. node_modules.
     #[serde(default)]
     pub link: Vec<String>,
@@ -107,8 +112,17 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
     }
     let file: ChecksFile =
         toml::from_str(text).map_err(|e| format!("{CHECKS_PATH} is not valid: {e}"))?;
-    if file.checks.is_empty() {
-        return Err(format!("{CHECKS_PATH} has no [[check]] entries"));
+    if file.checks.is_empty() && file.forbids.is_empty() {
+        return Err(format!(
+            "{CHECKS_PATH} has no [[check]] or [[forbid]] entries"
+        ));
+    }
+    let mut forbid_names = std::collections::BTreeSet::new();
+    for f in &file.forbids {
+        forbid::Rule::new(f)?;
+        if !forbid_names.insert(f.name.as_str()) {
+            return Err(format!("two [[forbid]] entries are named \"{}\"", f.name));
+        }
     }
     let mut seen = std::collections::BTreeSet::new();
     for c in &file.checks {
@@ -269,11 +283,14 @@ fn plan_inner(
             matrix::MAX_EXPANSIONS
         ));
     }
+    // Every result on the receipt needs its own name.
     let mut names = std::collections::BTreeSet::new();
-    for p in &out {
-        if !names.insert(p.name.as_str()) {
-            return Err(format!("two checks are named \"{}\"", p.name));
+    let forbids = file.forbids.iter().map(ForbidSpec::result_name);
+    for name in out.iter().map(|p| p.name.clone()).chain(forbids) {
+        if names.contains(&name) {
+            return Err(format!("two checks are named \"{name}\""));
         }
+        names.insert(name);
     }
     Ok(out)
 }
@@ -477,6 +494,48 @@ mod tests {
             "{M}matrix = {{ schema = [\"A\"] }}\n[[check]]\nname = \"rec [schema=A]\"\nrun = \"x\"\n"
         );
         assert!(parse(&t).unwrap_err().contains("two checks"));
+    }
+
+    const F: &str = "[[forbid]]\nname = \"no todo\"\npattern = 'TODO'\npaths = [\"src/**\"]\n";
+
+    #[test]
+    fn forbid_entries_parse_and_old_files_still_do() {
+        let f = parse(F).unwrap();
+        assert!(f.checks.is_empty());
+        assert_eq!(f.forbids[0].name, "no todo");
+        assert!(!f.forbids[0].case_insensitive);
+        assert_eq!(f.forbids[0].message, None);
+        let f = parse(&format!(
+            "{F}message = \"Finish it.\"\ncase_insensitive = true\n[[check]]\nname = \"t\"\nrun = \"x\"\n"
+        ))
+        .unwrap();
+        assert!(f.forbids[0].case_insensitive);
+        assert_eq!(f.checks.len(), 1);
+        // A file without [[forbid]] is unchanged: no forbids.
+        assert!(
+            parse("[[check]]\nname=\"a\"\nrun=\"x\"\n")
+                .unwrap()
+                .forbids
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn bad_forbid_entries_are_refused() {
+        let e =
+            parse("[[forbid]]\nname = \"r\"\npattern = '(oops'\npaths = [\"a\"]\n").unwrap_err();
+        assert!(e.contains("not a valid regex"), "{e}");
+        let e = parse(&format!("{F}{F}")).unwrap_err();
+        assert!(e.contains("two [[forbid]]"), "{e}");
+        assert!(parse(&format!("{F}extra = 1\n")).is_err());
+        assert!(parse("[[forbid]]\nname = \"r\"\npattern = 'x'\n").is_err());
+        let e = parse("[[forbid]]\nname = \"r\"\npattern = 'x'\npaths = []\n").unwrap_err();
+        assert!(e.contains("paths is empty"), "{e}");
+        let e = parse(&format!(
+            "{F}[[check]]\nname = \"forbid: no todo\"\nrun = \"x\"\n"
+        ))
+        .unwrap_err();
+        assert!(e.contains("two checks"), "{e}");
     }
 
     #[test]

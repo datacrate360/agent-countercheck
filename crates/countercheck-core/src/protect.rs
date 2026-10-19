@@ -16,12 +16,17 @@ pub struct Protected {
 
 impl Protected {
     pub fn new(patterns: &[String]) -> Result<Self, String> {
+        Self::labeled(patterns, "protected pattern")
+    }
+
+    /// Like [`Protected::new`], with `label` naming the patterns in errors (e.g. "path pattern").
+    pub fn labeled(patterns: &[String], label: &str) -> Result<Self, String> {
         let mut b = GlobSetBuilder::new();
         for p in patterns {
-            let g = Glob::new(p).map_err(|e| format!("protected pattern \"{p}\": {e}"))?;
+            let g = Glob::new(p).map_err(|e| format!("{label} \"{p}\": {e}"))?;
             b.add(g);
         }
-        let set = b.build().map_err(|e| format!("protected patterns: {e}"))?;
+        let set = b.build().map_err(|e| format!("{label}s: {e}"))?;
         Ok(Self { set })
     }
 
