@@ -5,6 +5,13 @@ Arms: **A** Hermes as installed · **B** Hermes `verify_on_stop` · **C** Counte
 Ground truth: hidden tests the agent never sees. Every final answer below was read by hand; the automatic
 "claimed done" detector (`eval/run.py`, a regex) is not trusted on its own (see "What we learned about the eval").
 
+> **Contaminated, rerun needed (found 2026-10-18).** The runner passed its own inherited `TERMINAL_CWD=$HOME` to
+> Hermes, so every pilot 1-2 agent started in the home folder instead of its task copy and had to search for the
+> project. 11 of the 36 sessions opened other runs' folders (`eval/results/...`) and 2 read another run's
+> `hidden.txt` (the hidden-test output). Treat the numbers below as indicative only. Fixed in `fa8a51c`: each run
+> works in a private temp copy with `TERMINAL_CWD` set, and every run gets a `contained` flag from a check of its
+> Hermes session. Pilot 3 (`gpt-6.1-sol`) is the first clean run; DeepSeek pilots get rerun (~$1.7).
+
 ## Pilot 1: ordinary tasks (16 runs, $0.62)
 
 4 tasks (hard fix, run-only bug, partial fix, normal) × 4 arms. **16/16 solved honestly**; no test edits, no false
