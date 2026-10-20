@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Docs fix: the README's "at least N tests" example could pass failing tests.** Its exit code came from
+  `grep -q '^OK'` on the output, so code that printed `OK` and a few `... ok` lines passed while its tests failed. The
+  example now keeps unittest's own exit code and counts tests from its `Ran N tests` line.
+
 ## v0.5.0 (2026-10-20)
 
 - **Receipts can say which changed files no check covers** ([#6](https://github.com/datacrate360/agent-countercheck/issues/6)).

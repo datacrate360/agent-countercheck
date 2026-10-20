@@ -419,9 +419,12 @@ require a minimum with a [budget](docs/checks.md#budget):
 ```toml
 [[check]]
 name = "tests (at least 40)"
-run = "python3 -m unittest -v 2>&1 | tee .out; echo METRIC tests=$(grep -c ' ok$' .out); grep -q '^OK' .out"
+run = "python3 -m unittest -v > .out 2>&1; status=$?; cat .out; echo METRIC tests=$(grep -o '^Ran [0-9]*' .out | tail -n 1 | cut -d ' ' -f 2); exit $status"
 budget = { metric = "tests", min = 40 }
 ```
+
+Keep the test runner's own exit code (`exit $status`): a check that ends with a `grep` on the output passes whenever
+the code under test prints the right words, even when tests fail.
 
 **Does the agent have to say "done"?**
 No. Countercheck doesn't look for any word. The hooks run when the agent *tries to finish* (Claude Code's `Stop`,
