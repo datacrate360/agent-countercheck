@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="330" viewBox="0 0 960 330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>You own the tests; the agent being graded never writes its own</title>
+  <desc>Step 1: an agent may draft tests. Step 2: you check the expected answers. Step 3: you commit them, and from now on they are locked. Step 4: the agent's task is graded against those tests. checks.toml only points at commands you already run, such as pytest, ruff and npm run build. Countercheck never writes tests.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="arrowCoral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0F766E"/></marker>
+  </defs>
+  <rect width="960" height="330" rx="16" fill="#FFFFFF"/>
+  <rect x="20" y="40" width="212" height="150" rx="14" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="38" y="74" font-size="26" fill="#0F766E" font-weight="800">1</text>
+  <text x="68" y="72" font-size="15" fill="#0F172A" font-weight="700">Agent drafts tests</text>
+  <text x="38" y="108" font-size="14" fill="#334155">optional: "write tests</text>
+  <text x="38" y="128" font-size="14" fill="#334155">for billing"</text>
+  <text x="38" y="172" font-size="12" fill="#64748B" font-weight="800" letter-spacing="1">not counted yet</text>
+  <line x1="234" y1="115" x2="254" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="256" y="40" width="212" height="150" rx="14" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="274" y="74" font-size="26" fill="#0F766E" font-weight="800">2</text>
+  <text x="304" y="72" font-size="15" fill="#0F172A" font-weight="700">You check them</text>
+  <text x="274" y="108" font-size="14" fill="#334155">are the expected</text>
+  <text x="274" y="128" font-size="14" fill="#334155">answers right?</text>
+  <text x="274" y="172" font-size="12" fill="#64748B" font-weight="800" letter-spacing="1">not counted yet</text>
+  <line x1="470" y1="115" x2="490" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="492" y="40" width="212" height="150" rx="14" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.5"/>
+  <text x="510" y="74" font-size="26" fill="#0F766E" font-weight="800">3</text>
+  <text x="540" y="72" font-size="15" fill="#0F172A" font-weight="700">You commit them</text>
+  <text x="510" y="108" font-size="14" fill="#334155">now they're in the</text>
+  <text x="510" y="128" font-size="14" fill="#334155">base revision</text>
+  <text x="510" y="172" font-size="12" fill="#0F766E" font-weight="800" letter-spacing="1">LOCKED</text>
+  <line x1="706" y1="115" x2="726" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="728" y="40" width="212" height="150" rx="14" fill="#0F766E"/>
+  <text x="746" y="74" font-size="26" fill="#FFFFFF" font-weight="800">4</text>
+  <text x="776" y="72" font-size="15" fill="#FFFFFF" font-weight="700">Agent does the task</text>
+  <text x="746" y="108" font-size="14" fill="#FFFFFF">graded against the</text>
+  <text x="746" y="128" font-size="14" fill="#FFFFFF">tests from step 3</text>
+  <text x="746" y="172" font-size="12" fill="#FFFFFF" font-weight="800" letter-spacing="1">GRADED</text>
+  <rect x="20" y="214" width="920" height="96" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="40" y="240" font-size="13" fill="#64748B" font-weight="700" letter-spacing="1">checks.toml ONLY POINTS AT COMMANDS YOU ALREADY RUN</text>
+  <text x="40" y="272" font-size="14" fill="#134E4A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">run = "pytest -q"</text>
+  <text x="40" y="294" font-size="13" fill="#64748B">your tests</text>
+  <text x="340" y="272" font-size="14" fill="#134E4A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">run = "ruff check ."</text>
+  <text x="340" y="294" font-size="13" fill="#64748B">your linter</text>
+  <text x="640" y="272" font-size="14" fill="#134E4A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">run = "npm run build"</text>
+  <text x="640" y="294" font-size="13" fill="#64748B">your build</text>
+</svg>

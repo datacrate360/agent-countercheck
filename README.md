@@ -280,6 +280,48 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 ## FAQ
 
+**Is Countercheck another AI agent?**
+No. It's a plain program, like `git` or `pytest`, with no AI model inside. The agent (Claude Code, Hermes, Cursor…)
+does the work; Countercheck runs *your* commands on rules locked before the agent started, and writes down what
+happened. Same input, same verdict, every time: nothing to persuade or fool.
+
+![Left: the AI agent does the work; it thinks, writes code and says done, and can be wrong or take a shortcut (skip a test, edit it, never run it). Right: Countercheck is a plain program with no AI model; it runs your own commands from the locked check file and writes a sealed receipt. Like an exam: the agent is the student, your tests are the exam, Countercheck is the teacher marking it, and the student can't rewrite the questions.](docs/img/faq-referee.svg)
+
+**Do I write the tests, or does the agent write them?**
+You own them; Countercheck never writes tests. An agent that writes both the code and the test that grades it is a
+student writing their own exam. Most projects already have what's needed: `checks.toml` only points at commands you
+already run (`pytest -q`, `ruff check .`, `npm run build`; copy them from your CI, or start from `countercheck init`).
+An agent *can* help draft tests as a separate step: you check the expected answers, commit them, and from then on
+they're locked and grade later work. New test files an agent adds during a task are kept (they run if your test
+command picks them up), but they can't replace or weaken the locked ones.
+
+![Step 1: an agent may draft tests (not counted yet). Step 2: you check the expected answers (not counted yet). Step 3: you commit them; now they're in the base revision and locked. Step 4: the agent's task is graded against those tests. checks.toml only points at commands you already run: pytest -q, ruff check ., npm run build.](docs/img/faq-who-writes-tests.svg)
+
+**How does it know which version of my tests is "before" and which is "after"?**
+From git, which keeps every committed version. *Before* is the base commit: the one recorded when the agent session
+started (the `session-start` hook), `HEAD` by default, or `--base origin/main`. *After* is the files on disk when the
+agent says done. `git diff` lists what changed; files matching `protected = ["tests/**"]` (and everything under
+`.countercheck/`) are taken from the base commit, everything else from the agent, in a clean copy. The agent's own
+folder is never touched. So commit your tests before the agent starts: if they aren't in git, there's no "before".
+
+![Git timeline: before is the base commit (session start, HEAD or --base); after is the files on disk when the agent says done. The base commit holds the original tests/test_pricing.py and the locked checks.toml; the agent's folder has an edited test (@unittest.skip) and its fix in src/pricing.py. The clean copy takes the test from the base (put back) and src/pricing.py from the agent. You say which files are tests with protected = ["tests/**"]; .countercheck/ is always protected.](docs/img/faq-before-after.svg)
+
+**What if my project has no tests?**
+It never says VERIFIED without proof:
+
+![No tests: no checks.toml gives an error and agent hooks skip the project; checks.toml not in the base commit gives UNVERIFIED; an empty checks.toml gives an error; no check ran gives UNVERIFIED; pytest with 0 tests gives FAILED. The one gap: unittest before Python 3.12 prints OK and exits 0 with zero tests, which looks like a pass; fix it with pytest or a budget minimum on the test count.](docs/img/faq-no-tests.svg)
+
+The one gap: Countercheck trusts exit codes, so a test command that runs *nothing* and still exits 0 looks like a
+pass (`python -m unittest` does this before Python 3.12). Use a runner that fails on zero tests, like pytest, or
+require a minimum with a [budget](docs/checks.md#budget):
+
+```toml
+[[check]]
+name = "tests (at least 40)"
+run = "python3 -m unittest -v 2>&1 | tee .out; echo METRIC tests=$(grep -c ' ok$' .out); grep -q '^OK' .out"
+budget = { metric = "tests", min = 40 }
+```
+
 **Does Countercheck limit what my agent can do?**
 No. The agent works with its full harness: web search, docs, tools, anything you allow. Countercheck only steps in
 when the agent says "done": it re-runs your locked checks on a clean copy of the result. Like an exam after open-book
