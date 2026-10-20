@@ -77,6 +77,12 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
 /// Hermes `pre_verify`: stdin is Hermes's hook JSON; stdout is `{"action":"continue",...}` or
 /// nothing. Env: `COUNTERCHECK_BASE` (default: the commit the session started from, else HEAD), `COUNTERCHECK_HOOK_DISABLED=1` (no-op),
 /// `COUNTERCHECK_HOOK_LOG` (append one JSON line per call), `COUNTERCHECK_SANDBOX=none`.
+///
+/// Which project: Hermes sends its own working directory as `cwd`, and the desktop app and gateway
+/// run from the home folder, not the project. So when Hermes lists the files the turn changed
+/// (`changed_paths`), the projects are the git repositories holding those files that have a
+/// `.countercheck/checks.toml`; each is checked. Changed files outside any such project mean there
+/// is nothing to check (silent). Without `changed_paths`, `cwd` is used as before.
 pub fn hermes_pre_verify() -> Result<(), String> {
     let Some(payload) = read_payload()? else {
         return Ok(());
@@ -86,30 +92,104 @@ pub fn hermes_pre_verify() -> Result<(), String> {
             .get(key)
             .or_else(|| payload.get("extra").and_then(|e| e.get(key)))
     };
-    let input = HookInput {
-        cwd: field("cwd")
-            .and_then(|v| v.as_str())
-            .map(PathBuf::from)
-            .or_else(|| std::env::current_dir().ok())
-            .ok_or("no working directory in hook input")?,
-        claim: field("final_response")
-            .and_then(|v| v.as_str())
-            .map(str::to_string),
-        agent: "hermes",
-        model: field("model").and_then(|v| v.as_str()).map(str::to_string),
-        session: field("session_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
+    let cwd = field("cwd")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or("no working directory in hook input")?;
+    let changed: Vec<&str> = field("changed_paths")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|p| p.as_str()).collect())
+        .unwrap_or_default();
+    let repos = if changed.is_empty() {
+        vec![cwd]
+    } else {
+        projects_for(&changed, &cwd)
     };
-    let session = input.session.clone();
-    let (receipt, path, decision) = check(input)?;
-    log_call(&session, &receipt, &path, &decision, None);
-    if let Decision::Continue(message) = decision {
+    let claim = field("final_response")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let model = field("model").and_then(|v| v.as_str()).map(str::to_string);
+    let session = field("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let several = repos.len() > 1;
+    let mut messages = Vec::new();
+    for repo in repos {
+        let input = HookInput {
+            cwd: repo.clone(),
+            claim: claim.clone(),
+            agent: "hermes",
+            model: model.clone(),
+            session: session.clone(),
+        };
+        let (receipt, path, decision) = match check(input) {
+            Ok(r) => r,
+            // one broken project must not hide another project's result
+            Err(e) if several => {
+                eprintln!("countercheck: {}: {e}", repo.display());
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        log_call(&session, &receipt, &path, &decision, None);
+        if let Decision::Continue(message) = decision {
+            messages.push(if several {
+                format!("[{}]\n{message}", repo.display())
+            } else {
+                message
+            });
+        }
+    }
+    if !messages.is_empty() {
+        let mut message = messages.join("\n\n");
+        if message.chars().count() > MAX_MESSAGE_CHARS {
+            let cut: String = message.chars().take(MAX_MESSAGE_CHARS - 20).collect();
+            message = format!("{cut}\n[...truncated]");
+        }
         let out = serde_json::json!({ "action": "continue", "message": message });
         println!("{out}");
     }
     Ok(())
+}
+
+/// Most projects one turn's changed files can span before the rest are ignored.
+const MAX_PROJECTS: usize = 8;
+
+/// The git repositories holding `paths` (absolute, or relative to `cwd`) that have a
+/// `.countercheck/checks.toml`, in first-seen order. A deleted file counts through its nearest
+/// folder that still exists.
+fn projects_for(paths: &[&str], cwd: &Path) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = Vec::new();
+    let mut looked: Vec<PathBuf> = Vec::new();
+    for p in paths.iter().take(10_000) {
+        let p = Path::new(p);
+        let abs = if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            cwd.join(p)
+        };
+        let Some(dir) = abs.ancestors().skip(1).find(|d| d.is_dir()) else {
+            continue;
+        };
+        // one `git` call per folder, not per file
+        if found.iter().any(|r| dir.starts_with(r)) || looked.iter().any(|d| d == dir) {
+            continue;
+        }
+        looked.push(dir.to_path_buf());
+        let Ok(root) = git::toplevel(dir) else {
+            continue;
+        };
+        if found.contains(&root) || !root.join(".countercheck").join("checks.toml").is_file() {
+            continue;
+        }
+        found.push(root);
+        if found.len() == MAX_PROJECTS {
+            break;
+        }
+    }
+    found
 }
 
 /// Claude Code `Stop` (Cortex Code reads the same format): stdin is the Stop hook JSON; stdout is

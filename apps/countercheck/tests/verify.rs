@@ -985,6 +985,78 @@ fn hermes_hook_can_be_switched_off_and_fails_open() {
     assert_eq!((code, out.trim()), (0, ""));
 }
 
+/// Hermes runs hooks from its own working directory (the desktop app and gateway: the home
+/// folder), so the project comes from the changed files, not `cwd`.
+fn hermes_payload_from(cwd: &Path, changed: &[&Path]) -> String {
+    serde_json::json!({
+        "hook_event_name": "pre_verify",
+        "cwd": cwd,
+        "session_id": "s1",
+        "extra": { "final_response": "Fixed it, all tests pass.", "changed_paths": changed, "model": "m" }
+    })
+    .to_string()
+}
+
+#[test]
+fn hermes_hook_finds_the_project_from_the_changed_files_when_cwd_is_elsewhere() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    let home = tempfile::tempdir().unwrap(); // not a git repository, like Hermes's own cwd
+    let log = d.path().join("hook.log");
+    let (code, out) = hermes_hook(
+        &hermes_payload_from(home.path(), &[&d.path().join("tests/check.sh")]),
+        &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())],
+    );
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["action"], "continue", "{out}");
+    let line: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+    assert_eq!(line["verdict"], "failed");
+}
+
+#[test]
+fn hermes_hook_is_silent_when_the_changed_files_are_in_no_countercheck_project() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap(); // would fail if checked
+    let other = tempfile::tempdir().unwrap();
+    sh(other.path(), "git init -q && echo x > notes.txt");
+    let log = d.path().join("hook.log");
+    let (code, out) = hermes_hook(
+        // cwd is the failing project, but the turn only edited a file in another repository
+        &hermes_payload_from(d.path(), &[&other.path().join("notes.txt")]),
+        &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())],
+    );
+    assert_eq!((code, out.trim()), (0, ""));
+    assert!(!log.exists(), "nothing should have been checked");
+}
+
+#[test]
+fn hermes_hook_checks_every_project_the_turn_touched() {
+    let good = project(CHECKS);
+    fs::write(good.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let bad = project(CHECKS);
+    fs::write(bad.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let log = home.path().join("hook.log");
+    let (code, out) = hermes_hook(
+        &hermes_payload_from(
+            home.path(),
+            &[
+                &good.path().join("src/calc.sh"),
+                &bad.path().join("tests/check.sh"),
+            ],
+        ),
+        &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())],
+    );
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    let msg = v["message"].as_str().unwrap();
+    let bad_root = fs::canonicalize(bad.path()).unwrap();
+    assert!(msg.contains(&bad_root.display().to_string()), "{msg}");
+    assert_eq!(fs::read_to_string(&log).unwrap().lines().count(), 2);
+}
+
 #[test]
 fn hermes_hook_uses_a_fixed_base_when_the_agent_commits() {
     let d = project(CHECKS);
