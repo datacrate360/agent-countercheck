@@ -8,7 +8,11 @@ use std::path::Path;
 /// Remove an output file the worker left in the clean copy, so only what the command writes
 /// is compared (a committed fake output can't pass).
 pub fn clear_output(work: &Path, g: &GoldenSpec) -> Result<(), String> {
-    let path = work.join(crate::snapshot::safe_rel(&g.output)?);
+    let rel = crate::snapshot::safe_rel(&g.output)?;
+    if crate::snapshot::link_on_the_way(work, &rel) {
+        return Ok(()); // outside the clean copy: never deleted, refused after the run
+    }
+    let path = work.join(rel);
     match fs::symlink_metadata(&path) {
         Ok(m) if m.is_dir() => Ok(()), // reported as "not a file" after the run
         Ok(_) => fs::remove_file(&path).map_err(|e| format!("{}: {e}", g.output)),

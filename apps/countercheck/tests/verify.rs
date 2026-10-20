@@ -1956,3 +1956,49 @@ fn bad_covers_and_strict_mode_without_covers_are_refused() {
         String::from_utf8_lossy(&out.stderr).contains("needs at least one [[check]] with covers")
     );
 }
+
+/// The worker replaces the protected `tests` folder with a symlink to a folder outside the
+/// project: restoring the protected files must not write through it.
+#[cfg(unix)]
+#[test]
+fn protected_files_are_never_restored_through_a_symlinked_folder() {
+    let d = project(CHECKS);
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("check.sh"), WEAK_TEST_OUTSIDE).unwrap();
+    sh(d.path(), "git rm -rq tests");
+    std::os::unix::fs::symlink(outside.path(), d.path().join("tests")).unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["protected_changes"][0]["path"], "tests/check.sh");
+    assert_eq!(r["protected_changes"][0]["action"], "restored_from_base");
+    // the folder outside is untouched: nothing was written there
+    assert_eq!(
+        fs::read_to_string(outside.path().join("check.sh")).unwrap(),
+        WEAK_TEST_OUTSIDE
+    );
+}
+
+const WEAK_TEST_OUTSIDE: &str = "exit 0\n";
+
+/// A golden check's output folder is a symlink out of the project: the file there is not
+/// deleted before the run, and the output is refused.
+#[cfg(unix)]
+#[test]
+fn golden_output_is_never_cleared_through_a_symlinked_folder() {
+    let d = golden_project("");
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("totals.csv"), "keep me\n").unwrap();
+    std::os::unix::fs::symlink(outside.path(), d.path().join("out")).unwrap();
+    // the check only reads, so whatever is in the folder afterwards is what countercheck left
+    sh(
+        d.path(),
+        "sed -i.bak 's#run = .*#run = \"true\"#' .countercheck/checks.toml && rm .countercheck/checks.toml.bak \
+         && git commit -qam 'check only reads'",
+    );
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(
+        fs::read_to_string(outside.path().join("totals.csv")).unwrap(),
+        "keep me\n"
+    );
+}

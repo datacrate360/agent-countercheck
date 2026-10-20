@@ -117,7 +117,7 @@ pub fn link_dir(root: &Path, dest: &Path, name: &str) -> Result<bool, String> {
     let rel = safe_rel(name)?;
     let src = root.join(&rel);
     let to = dest.join(&rel);
-    if !src.is_dir() || fs::symlink_metadata(&to).is_ok() {
+    if !src.is_dir() || fs::symlink_metadata(&to).is_ok() || link_on_the_way(dest, &rel) {
         return Ok(false);
     }
     if let Some(parent) = to.parent() {
@@ -159,19 +159,56 @@ fn copy_dir(src: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// True when a folder on the way from `dest` to `rel` (not `rel` itself) is a symlink: a write
+/// or delete through it would land outside the clean copy.
+pub fn link_on_the_way(dest: &Path, rel: &Path) -> bool {
+    let mut p = dest.to_path_buf();
+    let parts: Vec<_> = rel.components().collect();
+    for c in parts.iter().take(parts.len().saturating_sub(1)) {
+        p.push(c);
+        if fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Make every folder on the way from `dest` to `rel` a real folder in the copy. A symlink there
+/// (the worker replaced a folder with a link) is removed first, so nothing is written through it.
+fn real_parents(dest: &Path, rel: &Path) -> Result<(), String> {
+    let mut p = dest.to_path_buf();
+    let parts: Vec<_> = rel.components().collect();
+    for c in parts.iter().take(parts.len().saturating_sub(1)) {
+        p.push(c);
+        match fs::symlink_metadata(&p) {
+            Ok(m) if m.file_type().is_symlink() => {
+                // a directory symlink or junction on Windows needs remove_dir
+                fs::remove_file(&p)
+                    .or_else(|_| fs::remove_dir(&p))
+                    .map_err(|e| format!("{}: {e}", p.display()))?;
+                fs::create_dir(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+            }
+            Ok(_) => {}
+            Err(_) => fs::create_dir(&p).map_err(|e| format!("{}: {e}", p.display()))?,
+        }
+    }
+    Ok(())
+}
+
 /// Put a protected file back to its base content (or remove it if it didn't exist at base).
+/// Never writes or deletes through a symlinked folder.
 pub fn restore(dest: &Path, path: &str, base_content: Option<&[u8]>) -> Result<(), String> {
-    let to = dest.join(safe_rel(path)?);
+    let rel = safe_rel(path)?;
+    let to = dest.join(&rel);
     match base_content {
         Some(bytes) => {
-            if let Some(parent) = to.parent() {
-                fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-            }
+            real_parents(dest, &rel)?;
             if fs::symlink_metadata(&to).is_ok() {
                 fs::remove_file(&to).map_err(|e| format!("{path}: {e}"))?;
             }
             fs::write(&to, bytes).map_err(|e| format!("{path}: {e}"))
         }
+        None if link_on_the_way(dest, &rel) => Ok(()), // the file isn't in the copy
         None => match fs::remove_file(&to) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
