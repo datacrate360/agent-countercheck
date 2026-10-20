@@ -1067,8 +1067,21 @@ fn hermes_hook_checks_every_project_the_turn_touched() {
     assert_eq!(code, 0);
     let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
     let msg = v["message"].as_str().unwrap();
-    let bad_root = fs::canonicalize(bad.path()).unwrap();
-    assert!(msg.contains(&bad_root.display().to_string()), "{msg}");
+    // the failing project is named (by its folder; git and the OS spell the full path differently on Windows)
+    let bad_name = bad
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let good_name = good
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    assert!(msg.contains(&bad_name), "{msg}");
+    assert!(!msg.contains(&good_name), "{msg}");
     assert_eq!(fs::read_to_string(&log).unwrap().lines().count(), 2);
 }
 

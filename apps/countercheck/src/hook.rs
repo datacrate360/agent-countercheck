@@ -185,6 +185,8 @@ fn projects_for(paths: &[&str], cwd: &Path, session: &str) -> Vec<PathBuf> {
         let Ok(root) = git::toplevel(dir) else {
             continue;
         };
+        // git prints C:/x/y on Windows; use the OS's own form so messages and comparisons agree
+        let root = crate::snapshot::canonical(&root).unwrap_or(root);
         if found.contains(&root) || !has_checks(&root, session) {
             continue;
         }
