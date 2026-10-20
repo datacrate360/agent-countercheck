@@ -2,6 +2,12 @@
 
 **Proof that AI work really happened.**
 
+[![Release](https://img.shields.io/github/v/release/datacrate360/countercheck?color=0F766E)](https://github.com/datacrate360/countercheck/releases)
+[![PyPI](https://img.shields.io/pypi/v/countercheck?color=0F766E)](https://pypi.org/project/countercheck/)
+[![CI](https://github.com/datacrate360/countercheck/actions/workflows/ci.yml/badge.svg?branch=DEV)](https://github.com/datacrate360/countercheck/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![macOS · Linux · Windows](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-334155)
+
 AI coding agents often say "done, all tests pass" when it isn't true: they skip a failing test, edit the test so it
 passes, or never run it. `countercheck verify` checks the claim itself:
 
@@ -11,6 +17,10 @@ passes, or never run it. `countercheck verify` checks the claim itself:
    writes only inside that folder.
 4. It writes a **receipt**: the claim, what ran, the output, what the agent changed that it shouldn't have, the cost if
    known, and a verdict. Receipts are sealed with a SHA-256 hash, so edits are detectable.
+
+<img src="docs/assets/demos/verify.gif" alt="The agent's own test run says OK (skipped=1); countercheck verify puts the edited test back, runs it and says FAILED with AssertionError -5.0 != 0; after the agent fixes the code, countercheck verify says VERIFIED" width="880">
+
+The same run as text:
 
 ```text
 $ countercheck verify --claim "Fixed the discount bug. All tests pass." --agent claude-code --cost-usd 0.42
@@ -136,6 +146,20 @@ isolation.
 
 What's shipped, in progress and next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Commands
+
+| Command | What it does | Example |
+|---|---|---|
+| `init` | Write a starter `.countercheck/checks.toml` to edit and commit. | `countercheck init` |
+| `verify` | Re-run the locked checks on the agent's work in a clean copy; write a sealed receipt. Exit `0` verified, `2` failed, `3` unverified. | `countercheck verify --claim "All tests pass."` |
+| `show` | Check a saved receipt's seal and print it (exit `4` if it was edited). | `countercheck show .countercheck/receipts/<id>.json` |
+| `ui` | A live page of every run in your browser, on this computer only. | `countercheck ui` |
+| `report` | The same page as one offline HTML file, safe to attach to a PR. | `countercheck report --open` |
+| `hook` | Run as an agent hook: `session-start`, `claude-stop` (Claude Code, Cortex Code), `hermes-pre-verify` (Hermes Agent). | `countercheck hook claude-stop` |
+
+All options: `countercheck help <command>`. Check types: [docs/checks.md](docs/checks.md). Ready setups for real jobs:
+[recipes/](recipes).
+
 ## Quick start
 
 ```sh
@@ -171,6 +195,8 @@ locked in the base revision, or none ran) · `1` error · `4` (`countercheck sho
 countercheck ui          # a live page in your browser; updates when a new receipt lands
 countercheck report --open   # the same page as one HTML file (offline, attach it to a PR or CI run)
 ```
+
+<img src="docs/assets/demos/ui.gif" alt="The countercheck ui page updates by itself: a FAILED run appears, opening it shows the failing test output, then a VERIFIED run appears on top" width="880">
 
 `countercheck ui` serves the page on this computer only (127.0.0.1, with a random token in the address; other
 hosts and other web pages can't read it). It uses port 7357, or any free port if that one is taken (`--port N` to
