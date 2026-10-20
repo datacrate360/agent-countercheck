@@ -161,6 +161,37 @@ fn ui_state_changes_when_a_new_receipt_lands() {
     assert_ne!(after, before);
 }
 
+/// Browsers open spare connections before they need them and may send nothing on them for a
+/// while. Such a connection must neither hold up other requests nor be answered: a stale reply
+/// sitting on it would be read by the browser's next request (the live page then showed
+/// "disconnected" after every reload).
+#[test]
+fn ui_idle_connections_neither_block_requests_nor_get_a_reply() {
+    let d = project_with_receipt();
+    let s = start(d.path(), &["--port", "0"]);
+    let host = format!("127.0.0.1:{}", s.port);
+    let path = format!("/state?t={}", s.token);
+    let idle = TcpStream::connect(("127.0.0.1", s.port)).unwrap(); // a preconnect: sends nothing
+    let started = std::time::Instant::now();
+    let (code, _, _) = request(s.port, "GET", &path, &host);
+    assert_eq!(code, 200);
+    assert!(
+        started.elapsed() < std::time::Duration::from_millis(1500),
+        "a request waited {:?} behind an idle connection",
+        started.elapsed()
+    );
+    // after the server gives up on the idle connection, it closes it without writing anything
+    idle.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .unwrap();
+    let mut got = Vec::new();
+    let _ = (&idle).read_to_end(&mut got);
+    assert!(
+        got.is_empty(),
+        "idle connection got: {}",
+        String::from_utf8_lossy(&got)
+    );
+}
+
 #[test]
 fn a_second_ui_finds_the_running_one() {
     let d = project_with_receipt();

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: the `countercheck ui` page showed "disconnected" and stopped updating after a new receipt landed.** The
+  server handled one connection at a time and answered a browser's spare, still-silent connection with `400 Bad
+  Request` after 2 s; the browser then read that stale reply for its next update. Silent connections are now closed
+  without a reply, and each connection has its own thread (at most 32), so one can't hold up another.
+
 ## v0.3.1 (2026-10-20)
 
 **Hermes desktop app / gateway users:** upgrade; with v0.3.0 the hook ran no checks there. Then approve the hook once

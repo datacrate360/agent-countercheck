@@ -25,6 +25,9 @@ pub const DEFAULT_PORT: u16 = 7357;
 /// Longest request we read (request line + headers).
 const MAX_REQUEST: usize = 8 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(2);
+/// Most connections served at once; more are closed straight away. Browsers open a few spare
+/// connections per page, so this is plenty for one person's browser tabs.
+const MAX_CONNECTIONS: usize = 32;
 
 pub struct Options {
     pub repo: PathBuf,
@@ -76,10 +79,26 @@ pub fn run(opts: &Options) -> Result<(), String> {
     if opts.open {
         report::open_in_browser(std::ffi::OsStr::new(&url));
     }
+    // One thread per connection: a browser's spare (pre-opened) connection that sends nothing
+    // must not hold up the page's own requests while we wait for it.
+    let shared = std::sync::Arc::new((token, dir, title));
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
-        // One bad request must not stop the server.
-        let _ = serve(stream, port, &token, &dir, &title);
+        if active.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= MAX_CONNECTIONS {
+            active.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            continue; // dropped: the connection closes
+        }
+        let (shared, done) = (shared.clone(), active.clone());
+        let spawned = std::thread::Builder::new().spawn(move || {
+            let (token, dir, title) = &*shared;
+            // One bad request must not stop the server.
+            let _ = serve(stream, port, token, dir, title);
+            done.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        if spawned.is_err() {
+            active.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        }
     }
     Ok(())
 }
@@ -135,16 +154,40 @@ struct Request {
     host: Option<String>,
 }
 
-fn read_request(stream: &mut TcpStream) -> Option<Request> {
+/// Why no request could be read.
+enum NoRequest {
+    /// The connection closed or went quiet before sending a byte (a browser's spare connection).
+    /// Close it without a reply: a reply left on it would be read by the browser's next request.
+    Idle,
+    /// Something arrived, but not a request we accept.
+    Bad,
+}
+
+fn read_request(stream: &mut TcpStream) -> Result<Request, NoRequest> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 1024];
     while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
-        let n = stream.read(&mut chunk).ok()?;
-        if n == 0 || buf.len() + n > MAX_REQUEST {
-            return None;
+        let n = match stream.read(&mut chunk) {
+            Ok(n) => n,
+            Err(_) if buf.is_empty() => return Err(NoRequest::Idle),
+            Err(_) => return Err(NoRequest::Bad),
+        };
+        if n == 0 {
+            return Err(if buf.is_empty() {
+                NoRequest::Idle
+            } else {
+                NoRequest::Bad
+            });
+        }
+        if buf.len() + n > MAX_REQUEST {
+            return Err(NoRequest::Bad);
         }
         buf.extend_from_slice(&chunk[..n]);
     }
+    parse_request(buf).ok_or(NoRequest::Bad)
+}
+
+fn parse_request(buf: Vec<u8>) -> Option<Request> {
     let text = String::from_utf8(buf).ok()?;
     let mut lines = text.split("\r\n");
     let mut first = lines.next()?.split(' ');
@@ -185,8 +228,12 @@ fn serve(
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
-    let Some(req) = read_request(&mut stream) else {
-        return respond(&mut stream, 400, "text/plain", "bad request\n", None);
+    let req = match read_request(&mut stream) {
+        Ok(req) => req,
+        Err(NoRequest::Idle) => return Ok(()),
+        Err(NoRequest::Bad) => {
+            return respond(&mut stream, 400, "text/plain", "bad request\n", None);
+        }
     };
     if req.method != "GET" {
         return respond(&mut stream, 405, "text/plain", "only GET\n", None);
