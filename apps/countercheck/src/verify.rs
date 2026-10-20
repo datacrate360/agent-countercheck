@@ -2,7 +2,8 @@
 
 use crate::{git, golden, runner, scan, snapshot};
 use countercheck_core::config::{self, CHECKS_PATH};
-use countercheck_core::protect::{Protected, ProtectedChange};
+use countercheck_core::gitobj::{self, Diff, Files};
+use countercheck_core::protect::{Change, Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
 use countercheck_core::uncovered;
 use std::path::PathBuf;
@@ -23,36 +24,38 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let root = git::toplevel(&opts.repo)?;
     let base_commit = git::resolve_commit(&root, &opts.base)?;
     let head_commit = git::resolve_commit(&root, "HEAD")?;
-    let dirty = git::is_dirty(&root)?;
+    let git_dirty = git::is_dirty(&root)?;
+    // The base, read from git objects checked against their ids (not the index, filters or
+    // replace refs, which the worker can change).
+    let mut base = git::Revision::load(&root, &base_commit)?;
 
     // 1. The checks: from the base revision if they exist there (locked), else the worker's copy.
-    let (checks_text, checks_locked, checks_source) =
-        match git::show(&root, &base_commit, CHECKS_PATH)? {
-            Some(bytes) => (
-                String::from_utf8_lossy(&bytes).into_owned(),
-                true,
-                format!("{CHECKS_PATH} @ {}", opts.base),
+    let (checks_text, checks_locked, checks_source) = match base.read(CHECKS_PATH)? {
+        Some(bytes) => (
+            String::from_utf8_lossy(&bytes).into_owned(),
+            true,
+            format!("{CHECKS_PATH} @ {}", opts.base),
+        ),
+        None => match std::fs::read_to_string(root.join(CHECKS_PATH)) {
+            Ok(t) => (
+                t,
+                false,
+                format!("{CHECKS_PATH} (working tree, not in base)"),
             ),
-            None => match std::fs::read_to_string(root.join(CHECKS_PATH)) {
-                Ok(t) => (
-                    t,
-                    false,
-                    format!("{CHECKS_PATH} (working tree, not in base)"),
-                ),
-                Err(_) => {
-                    return Err(format!(
-                        "no {CHECKS_PATH} found; run `countercheck init`, edit it and commit it"
-                    ));
-                }
-            },
-        };
+            Err(_) => {
+                return Err(format!(
+                    "no {CHECKS_PATH} found; run `countercheck init`, edit it and commit it"
+                ));
+            }
+        },
+    };
     let checks = config::parse(&checks_text)?;
     // Matrix files and coverage item lists come from the same place as the check file, so the
     // worker can't shrink the lists.
     let mut locked_texts = std::collections::BTreeMap::new();
     for path in checks.locked_files() {
         let bytes = if checks_locked {
-            git::show(&root, &base_commit, &path)?
+            base.read(&path)?
                 .ok_or_else(|| format!("{path} is not in the base revision"))?
         } else {
             std::fs::read(root.join(snapshot::safe_rel(&path)?))
@@ -78,22 +81,38 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
     let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
 
-    // 3. Protected files the worker changed go back to their base version.
+    // 3. What changed: the clean copy's own bytes against the base. Protected files the worker
+    // changed go back to their base version.
+    let copied = snapshot::file_ids(&work, base.format(), &links_as_text)?;
+    let diff = compare(&mut base, &copied, &work)?;
+    let dirty =
+        git_dirty || head_differs(&root, &head_commit, &base_commit, &diff, &copied, &work)?;
     let mut protected_changes = Vec::new();
-    let changes = git::changes_since(&root, &base_commit)?;
-    for (change, path) in changes.iter().cloned() {
+    let mut changes = Vec::new();
+    for (d, path) in diff {
+        let change = match d {
+            Diff::Added => Change::Added,
+            Diff::Deleted => Change::Deleted,
+            Diff::Modified => Change::Modified,
+            Diff::LineEndings => {
+                // The same file with CRLF line endings (e.g. `core.autocrlf`): not a change, but
+                // a protected file still runs with its exact base bytes.
+                if protected.matches(&path) {
+                    snapshot::restore(&work, &path, base.read(&path)?.as_deref())?;
+                }
+                continue;
+            }
+        };
+        changes.push((change, path.clone()));
         if countercheck_core::protect::is_junk(&path) || !protected.matches(&path) {
             continue;
         }
         let pc = ProtectedChange::decide(&path, change);
         if pc.action == "restored_from_base" {
-            let base_bytes = git::show(&root, &base_commit, &path)?;
-            snapshot::restore(&work, &path, base_bytes.as_deref())?;
+            snapshot::restore(&work, &path, base.read(&path)?.as_deref())?;
         }
         protected_changes.push(pc);
     }
-    protected_changes.sort_by(|a, b| a.path.cmp(&b.path));
-    protected_changes.dedup_by(|a, b| a.path == b.path);
     let tree_sha256 = snapshot::tree_hash(&work)?;
     let mut linked = Vec::new();
     for name in &checks.link {
@@ -125,7 +144,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         // The reference comes from the base revision (like the check file) when the checks are
         // locked, so neither the worker nor a check command can change it.
         let expected = if checks_locked {
-            match git::show(&root, &base_commit, &g.expected)? {
+            match base.read(&g.expected)? {
                 Some(bytes) => Ok(bytes),
                 None => Err(format!(
                     "the expected file {} is not in the base revision",
@@ -212,6 +231,50 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let text = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((receipt, path))
+}
+
+/// The clean copy against the base, by bytes. A file that differs only by CRLF line endings is
+/// marked [`Diff::LineEndings`].
+fn compare(
+    base: &mut git::Revision,
+    copied: &Files,
+    work: &std::path::Path,
+) -> Result<Vec<(Diff, String)>, String> {
+    let mut diff = gitobj::diff(base.files(), copied);
+    for (d, path) in diff.iter_mut() {
+        let both_files = base.files().get(path.as_str()).is_some_and(|f| !f.symlink)
+            && copied.get(path.as_str()).is_some_and(|f| !f.symlink);
+        if *d != Diff::Modified || !both_files {
+            continue;
+        }
+        let Some(was) = base.read(path)? else {
+            continue;
+        };
+        let now = std::fs::read(work.join(snapshot::safe_rel(path)?))
+            .map_err(|e| format!("{path}: {e}"))?;
+        if gitobj::eol_equal(&was, &now) {
+            *d = Diff::LineEndings;
+        }
+    }
+    Ok(diff)
+}
+
+/// True when the clean copy differs from HEAD beyond line endings: uncommitted work, even when
+/// git's index was told to look away.
+fn head_differs(
+    root: &std::path::Path,
+    head: &str,
+    base: &str,
+    base_diff: &[(Diff, String)],
+    copied: &Files,
+    work: &std::path::Path,
+) -> Result<bool, String> {
+    let real = |diff: &[(Diff, String)]| diff.iter().any(|(d, _)| *d != Diff::LineEndings);
+    if head == base {
+        return Ok(real(base_diff));
+    }
+    let mut head = git::Revision::load(root, head)?;
+    Ok(real(&compare(&mut head, copied, work)?))
 }
 
 /// Say on a check's output when symlinks in its clean copy are text files (Windows refused them).

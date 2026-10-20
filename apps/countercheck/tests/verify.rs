@@ -100,6 +100,122 @@ fn worker_cannot_weaken_the_check_file() {
     assert_eq!(r["checks"][0]["run"], "sh tests/check.sh");
 }
 
+/// A test edit that makes the buggy calc pass.
+const WEAK_TEST: &str = "exit 0\n";
+
+#[test]
+fn git_index_flags_do_not_hide_edited_tests() {
+    // `assume-unchanged` and `skip-worktree` make git itself report the edited test as unchanged.
+    for flag in ["--assume-unchanged", "--skip-worktree"] {
+        let d = project(CHECKS);
+        fs::write(d.path().join("tests/check.sh"), WEAK_TEST).unwrap();
+        sh(
+            d.path(),
+            &format!("git update-index {flag} tests/check.sh src/calc.sh"),
+        );
+        let (code, r) = countercheck(d.path(), &[]);
+        assert_eq!(code, 2, "{flag}: {r:#}");
+        assert_eq!(r["protected_changes"][0]["path"], "tests/check.sh");
+        assert_eq!(r["protected_changes"][0]["action"], "restored_from_base");
+        assert_eq!(r["repo"]["dirty"], true, "{flag}");
+    }
+}
+
+#[test]
+fn a_git_clean_filter_does_not_hide_edited_tests() {
+    // A clean filter that hands git the base text makes `git diff` see no change.
+    let d = project(CHECKS);
+    sh(
+        d.path(),
+        "git show HEAD:tests/check.sh > .git/base-copy && git config filter.same.clean 'cat .git/base-copy' \
+         && echo 'tests/check.sh filter=same' > .git/info/attributes",
+    );
+    fs::write(d.path().join("tests/check.sh"), WEAK_TEST).unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["protected_changes"][0]["path"], "tests/check.sh");
+}
+
+#[test]
+fn replace_refs_do_not_change_a_pinned_base() {
+    // `git replace` makes the base commit's id show the worker's commit, with its weak test and
+    // weak check file.
+    let d = project(CHECKS);
+    let base = String::from_utf8(
+        Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(d.path())
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    fs::write(d.path().join("tests/check.sh"), WEAK_TEST).unwrap();
+    fs::write(
+        d.path().join(".countercheck/checks.toml"),
+        "[[check]]\nname = \"calc\"\nrun = \"true\"\n",
+    )
+    .unwrap();
+    sh(
+        d.path(),
+        &format!("git commit -qam weak && git replace {base} HEAD"),
+    );
+    let (code, r) = countercheck(d.path(), &["--base", &base]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["run"], "sh tests/check.sh");
+    assert_eq!(r["repo"]["base_commit"], base.as_str());
+}
+
+#[test]
+fn a_rewritten_base_object_is_refused() {
+    // The worker overwrites the base's own object file for the test with a weaker test's bytes.
+    let d = project(CHECKS);
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(d.path())
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    let old = git(&["rev-parse", "HEAD:tests/check.sh"]);
+    fs::write(d.path().join("tests/check.sh"), WEAK_TEST).unwrap();
+    let new = git(&["hash-object", "-w", "tests/check.sh"]);
+    let object = |id: &str| d.path().join(".git/objects").join(&id[..2]).join(&id[2..]);
+    let mut perms = fs::metadata(object(&old)).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    fs::set_permissions(object(&old), perms).unwrap();
+    fs::copy(object(&new), object(&old)).unwrap();
+    assert_eq!(git(&["cat-file", "-p", &old]), WEAK_TEST.trim()); // git believes it
+    let mut cmd = Command::new(BIN);
+    cmd.args(["verify", "--json", "--repo"]).arg(d.path());
+    if nested() {
+        cmd.args(["--sandbox", "none"]);
+    }
+    let out = cmd.output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("does not match its id"), "{err}");
+}
+
+#[test]
+fn protected_files_with_only_crlf_line_endings_are_not_reported() {
+    // What `core.autocrlf` checkouts look like on Windows: the same test, CRLF line endings.
+    let d = project(CHECKS);
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    fs::write(
+        d.path().join("tests/check.sh"),
+        "[ \"$(sh src/calc.sh 2 3)\" = 5 ]\r\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["protected_changes"], serde_json::json!([]));
+}
+
 #[test]
 fn committed_work_against_a_base_branch() {
     let d = project(CHECKS);

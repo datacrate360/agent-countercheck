@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Fix: what changed is decided from the files themselves, and the base from checked git objects.** Countercheck
+  used git's index and `git diff` to find changed files, and trusted git to show the base revision. Settings in the
+  worker's own `.git` could make an edited protected file look unchanged, or make the base show other content, and
+  turn a FAILED into VERIFIED. Now the clean copy's bytes are compared with the base, and every git object read for
+  the base is hashed again and must match its id (replace refs are ignored); a mismatch stops the run with an error.
+  A protected file that differs only by CRLF line endings is not reported as changed and still runs with its base
+  bytes. Protected files stored through a git filter (e.g. Git LFS) are compared as stored in git.
 - **Fix: nothing is written or deleted through a symlinked folder in the clean copy.** If the worker replaced a
   folder with a symlink out of the project, putting back its protected files wrote them through the link, and a
   golden check's old output file was deleted through it. Now such a link is replaced by a real folder in the copy
