@@ -1978,6 +1978,7 @@ fn protected_files_are_never_restored_through_a_symlinked_folder() {
     );
 }
 
+#[cfg(unix)]
 const WEAK_TEST_OUTSIDE: &str = "exit 0\n";
 
 /// A golden check's output folder is a symlink out of the project: the file there is not
