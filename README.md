@@ -9,14 +9,16 @@
 ![macOS · Linux · Windows](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-334155)
 
 AI coding agents often say "done, all tests pass" when it isn't true: they skip a failing test, edit the test so it
-passes, or never run it. `countercheck verify` checks the claim itself:
+passes, or never run it. Agent Countercheck checks the claim itself. When the agent says it's finished, it:
 
-1. It reads your checks from the **base revision** (before the agent's change), so the agent can't weaken them.
-2. It copies the agent's files into a **clean folder** and puts back any protected file the agent changed (your tests).
-3. It runs the checks in a **macOS sandbox**: no internet (localhost works; a check can opt in with `network = true`),
-   writes only inside that folder.
-4. It writes a **receipt**: the claim, what ran, the output, what the agent changed that it shouldn't have, the cost if
-   known, and a verdict. Receipts are sealed with a SHA-256 hash, so edits are detectable.
+1. reads your checks from the **base revision** (before the agent's change), so the agent can't weaken them;
+2. copies the agent's files into a **clean folder** and puts back any protected file the agent changed (your tests);
+3. runs the checks, on macOS in a **sandbox** (no internet unless a check opts in, writes only inside that folder);
+4. writes a **receipt**: the claim, what ran, the output, what the agent changed that it shouldn't have, and a
+   verdict, sealed with a SHA-256 hash so edits are detectable.
+
+It is **not another AI agent**: it's a plain program, like `git` or `pytest`, with no AI model inside. Your agent does
+the work; Countercheck is the referee that re-runs your own checks on rules the agent couldn't change.
 
 <img src="docs/assets/demos/verify.gif" alt="The agent's own test run says OK (skipped=1); countercheck verify puts the edited test back, runs it and says FAILED with AssertionError -5.0 != 0; after the agent fixes the code, countercheck verify says VERIFIED" width="880">
 
@@ -38,9 +40,15 @@ countercheck receipt 9073a384e88f9d37  FAILED
 
 (The agent's own run said `OK (skipped=1)`: it had marked the failing test as skipped.)
 
-Agent Countercheck ("Countercheck" for short) installs as `agent-countercheck` and runs as `countercheck`, the
-same way `pip install pre-commit` gives you `pre-commit`. It was called `countercheck` up to v0.3; the old install names
-still work (see [Install](#install)).
+Agent Countercheck ("Countercheck" for short) installs as `agent-countercheck` and runs as `countercheck`, the same way
+`pip install pre-commit` gives you `pre-commit`. It was called `countercheck` up to v0.3; the old install names still
+work.
+
+**Contents:** [How it works](#how-it-works) · [Does it work?](#does-it-work) ·
+[Get started in 5 steps](#get-started-in-5-steps) · [Where everything lives](#where-everything-lives) ·
+[Commands](#commands) · [Check types](#check-types) · [Platforms and the sandbox](#platforms-and-the-sandbox) ·
+[FAQ](#faq) · [How it's tested](#how-countercheck-itself-is-tested) · [Why Rust?](#why-rust) · [Status](#status) ·
+[Contribute](#contribute-make-it-fit-your-domain)
 
 ## How it works
 
@@ -84,11 +92,11 @@ The code behind each rule, one run step by step, and where new work plugs in: [d
 
 | You use | How Countercheck plugs in |
 |---|---|
-| Claude Code | `Stop` hook: `countercheck hook claude-stop` ([docs/hooks/](docs/hooks)) |
+| Claude Code | `Stop` hook: `countercheck hook claude-stop` ([step 4a](#4a-claude-code-and-cortex-code)) |
 | Cortex Code (Snowflake) | same hook format as Claude Code (not yet tried on a real install) |
-| Hermes Agent | `pre_verify` hook: `countercheck hook hermes-pre-verify` |
-| Codex, Cursor, Copilot, Aider, your scripts | run `countercheck verify --claim "…"` when it says done (dedicated hooks planned) |
-| CI | `countercheck verify --base main`; fail the job on any exit code but `0` (GitHub Action planned) |
+| Hermes Agent | `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
+| Codex, Cursor, Copilot, Aider, OpenClaw, your scripts | run `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); dedicated hooks planned |
+| CI | `countercheck verify --base origin/main`; fail the job on any exit code but `0` ([step 4d](#4d-ci)) |
 
 Ready recipes for real projects (check files, helper scripts, a 5-minute start): [recipes/](recipes) — first one:
 [Oracle → Snowflake conversion with Cortex Code](recipes/oracle-to-snowflake/).
@@ -116,167 +124,260 @@ expects a wrong value, a server can't be reached): the honest answer is "this ca
 Full method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/results-2026-10.md). Reproduce:
 [eval/](eval).
 
-## Install
+## Get started in 5 steps
 
-| You use | Install with |
+```text
+1 install                  once per computer
+2 pick the project         a git repository your agent edits
+3 write checks.toml        and commit it, once per project
+4 connect your agent       a hook (Claude Code, Hermes) or `verify` (others, CI)
+5 read the receipts        countercheck ui / report / show
+```
+
+### Step 1: Install (once per computer)
+
+Pick one. Every option gives you the same `countercheck` command.
+
+| You have | Install with |
 |---|---|
-| Python (pip, a `.venv`, uv) | `pip install agent-countercheck` · `uv tool install agent-countercheck` · or run without installing: `uvx --from agent-countercheck countercheck verify` |
+| Python (pip, a `.venv`, uv) | `pip install agent-countercheck` · `uv tool install agent-countercheck` · or without installing: `uvx --from agent-countercheck countercheck verify` |
 | macOS or Linux, Homebrew | `brew trust --formula datacrate360/tap/agent-countercheck && brew install datacrate360/tap/agent-countercheck` (Homebrew 7 asks you to trust formulae from taps outside Homebrew once) |
-| macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh \| sh` |
-| Windows 10/11, PowerShell | `irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 \| iex` (or `pip install agent-countercheck` / `uvx --from agent-countercheck countercheck`) |
+| macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh \| sh` (installs to `~/.local/bin`; set `COUNTERCHECK_INSTALL_DIR` to change it) |
+| Windows 10/11, PowerShell | `irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 \| iex` (installs to `%LOCALAPPDATA%\Programs\countercheck` and tells you how to add it to `PATH`) |
 | Rust | `cargo install --git https://github.com/datacrate360/agent-countercheck countercheck` |
 | Direct download | [Releases](https://github.com/datacrate360/agent-countercheck/releases): one file per platform + `SHA256SUMS.txt` |
 
-Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, arm64; static) and Windows (x86_64,
-`countercheck.exe`, no runtime to install). Both install scripts check every download against `SHA256SUMS.txt`
-before installing. `install.ps1` puts `countercheck.exe` in `%LOCALAPPDATA%\Programs\countercheck` and tells you how
-to add that folder to `PATH`.
+Check it worked:
 
-**Windows needs [Git for Windows](https://git-scm.com/download/win)** (Countercheck calls `git`, and checks run with
-its `sh`, so the same `checks.toml` works on every OS). A check can use PowerShell or cmd instead:
-`shell = "pwsh"` or `shell = "cmd"` ([docs/checks.md](docs/checks.md#command)).
+```sh
+countercheck --version        # countercheck 0.5.0
+```
 
-**Sandbox by platform.** On macOS, checks run in the system sandbox (no internet, localhost allowed, writes only in
-the check folder; `network = true` lets a single check use the internet).
-On Linux and Windows there is no sandbox yet: checks run as a normal process and the receipt says so (on Windows:
-`none (no sandbox on Windows yet)`); run Countercheck inside a container or VM with networking off when you need
-isolation.
+- **Windows needs [Git for Windows](https://git-scm.com/download/win)**: Countercheck calls `git`, and checks run
+  with its `sh`, so the same `checks.toml` works on every OS (a check can use `shell = "pwsh"` or `shell = "cmd"`).
+- Both install scripts check every download against `SHA256SUMS.txt` before installing.
+- The program keeps **no data** where it's installed: rules and receipts live in each project (step 3 and 5).
 
-| Platform | Checks run in | Internet during checks | Writes outside the check folder |
-|---|---|---|---|
-| macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` | blocked |
-| Linux | a normal process | allowed | allowed |
-| Windows | a normal process | allowed | allowed |
+**Upgrade:** `pip install -U agent-countercheck` · `uv tool upgrade agent-countercheck` ·
+`brew upgrade agent-countercheck` · or run the install script again.
+**Uninstall:** `pip uninstall agent-countercheck` · `uv tool uninstall agent-countercheck` ·
+`brew uninstall agent-countercheck` · or delete the `countercheck` file the script installed.
 
-What's shipped, in progress and next: [docs/ROADMAP.md](docs/ROADMAP.md).
+### Step 2: Pick the project to check
+
+Countercheck works **inside the project your agent edits**: the folder with your code, which must be a git
+repository. Not your home folder, not the agent's settings folder, not where Countercheck is installed.
+
+```sh
+cd ~/code/my-app
+git status                    # "On branch main" = a git project
+```
+
+If it says `not a git repository`, make it one, with your current files as the first commit:
+
+```sh
+git init && git add -A && git commit -m "start"
+```
+
+Git is how Countercheck knows the "before" version of your tests and checks
+([how before/after works](#faq)). Several projects? Each gets its own `.countercheck/checks.toml`; the Hermes hook
+works out which project a turn touched from the files it changed.
+
+### Step 3: Write your checks and commit them (once per project)
+
+In the project folder:
+
+```sh
+countercheck init             # writes .countercheck/checks.toml
+```
+
+The starter check **fails on purpose** ("replace me with your test command") until you edit it. Point it at commands
+you already run, usually the ones in your CI:
+
+```toml
+protected = ["tests/**"]          # files the agent may not change; .countercheck/** is always protected
+link = [".venv"]                  # optional: git-ignored dependency folders the checks need (read-only)
+
+[[check]]
+name = "tests"
+run = "pytest -q"                 # any command; runs with `sh -c` in a clean copy of the project
+timeout_secs = 600
+
+[[check]]
+name = "lint"
+run = "ruff check ."
+```
+
+Then **commit it**. Countercheck only trusts checks that are in git *before* the agent starts; uncommitted checks
+give UNVERIFIED, because the agent could have written them.
+
+```sh
+git add .countercheck/checks.toml && git commit -m "Countercheck checks"
+```
+
+- **You own the tests.** Countercheck never writes them, and the agent being graded shouldn't either. An agent can
+  help draft tests in a separate step that you review and commit ([FAQ](#faq)).
+- **No tests yet?** Countercheck never says VERIFIED without proof, but a command that runs zero tests and exits 0
+  looks like a pass. Use pytest (it fails on zero tests) or a minimum count ([FAQ](#faq)).
+- **Beyond unit tests:** forbidden text, every item converted, output matches a reference, a number within limits,
+  and which changed files no check covers: [Check types](#check-types).
+
+### Step 4: Connect your agent
+
+#### 4a. Claude Code (and Cortex Code)
+
+In the project's `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "countercheck hook session-start", "timeout": 10 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "countercheck hook claude-stop", "timeout": 600 } ] }
+    ]
+  }
+}
+```
+
+Set the `Stop` timeout (seconds) longer than your checks take. On FAILED, Claude is told to keep working, with the
+failing output; after 3 push-backs in a session (`COUNTERCHECK_MAX_NUDGES`) it may stop. Details and Windows paths:
+[docs/hooks/claude-code.md](docs/hooks/claude-code.md).
+
+#### 4b. Hermes Agent
+
+In the profile's `config.yaml` (`~/.hermes/config.yaml`, or `~/.hermes/profiles/<name>/config.yaml`):
+
+```yaml
+hooks:
+  on_session_start:
+    - command: "countercheck hook session-start"
+  pre_verify:
+    - command: "countercheck hook hermes-pre-verify"
+      timeout: 300
+```
+
+Then **approve both hooks once in a terminal**. Hermes only runs a shell hook after you allow that exact command, and
+the desktop app never asks:
+
+```sh
+hermes hooks list             # "✗ not allowlisted" = the hook will NOT run
+hermes                        # or: hermes -p <name>; answer y to each hook, then /exit
+hermes hooks list             # now allowed
+```
+
+How the project is found (Hermes may run from your home folder) and more: [docs/hooks/hermes.md](docs/hooks/hermes.md).
+
+**Why the session-start hook (4a and 4b):** it remembers the commit each session started from, so the checks stay
+locked even if the agent commits its own edits to a test or to `checks.toml`. Without it, the checks are locked to
+`HEAD`.
+
+#### 4c. Any other agent, or a script
+
+Codex, Cursor, Copilot, Aider, OpenClaw or your own script: run `verify` when the agent says it's done, with its name
+and its final message:
+
+```sh
+countercheck verify --agent codex --claim "Fixed the discount bug."
+```
+
+The agent's wording doesn't matter ("done", "fixed", "success" or nothing at all): the verdict comes only from the
+checks.
+
+#### 4d. CI
+
+When the work is already committed on a branch, pass where it started:
+
+```sh
+countercheck verify --base origin/main
+```
+
+The exit code is the result: `0` VERIFIED, `2` FAILED, `3` UNVERIFIED, `1` error. Fail the job on anything but `0`.
+
+### Step 5: Read the results
+
+Every run writes a receipt to `<project>/.countercheck/receipts/<id>.json` (git-ignored automatically).
+
+```sh
+countercheck ui              # live page in your browser
+countercheck report --open   # the same page as one offline HTML file
+countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
+```
+
+<img src="docs/assets/demos/ui.gif" alt="The countercheck ui page updates by itself: a FAILED run appears, opening it shows the failing test output, then a VERIFIED run appears on top" width="880">
+
+`countercheck ui` serves the page on this computer only (127.0.0.1, with a random token in the address; other hosts
+and other web pages can't read it). It uses port 7357, or any free port if that one is taken (`--port N` to choose),
+and running it again opens the one already running for the project.
+
+`countercheck report` writes `.countercheck/receipts/report.html` with every saved run, newest first: the verdict,
+what the agent said, each check with its output, protected files it changed, changed files no check covers, whether
+the seal is intact, and for matrix checks a grid of targets × checks. It loads nothing from the internet and has no
+scripts, so it's safe to attach to a pull request or a CI run.
+
+## Where everything lives
+
+| Thing | Where | Notes |
+|---|---|---|
+| The program | wherever you installed it (e.g. `/opt/homebrew/bin/countercheck`, `~/.local/bin/countercheck`) | no data is kept here |
+| Your rules | `<project>/.countercheck/checks.toml` | committed; one per project |
+| Receipts | `<project>/.countercheck/receipts/<id>.json` | one file per run; git-ignored; `--out <folder>` writes elsewhere |
+| Session start commits | `<project>/.git/countercheck/sessions/<session>.json` | the "before" commit of each agent session; inside `.git`, so never copied or committed |
+| Claude Code hook | `<project>/.claude/settings.json` | step 4a |
+| Hermes hook | `~/.hermes/config.yaml` or `~/.hermes/profiles/<name>/config.yaml` | step 4b; approvals in that profile's `shell-hooks-allowlist.json` |
+
+There are no per-agent profiles. Each receipt names its agent (`"worker": {"agent": "claude-code"}`; the hooks fill
+it in, `--agent` sets it by hand), so when several agents work on one project, their receipts sit side by side in the
+same folder and `ui` / `report` show which was which. Each agent session keeps its own "before" commit.
 
 ## Commands
 
 | Command | What it does | Example |
 |---|---|---|
 | `init` | Write a starter `.countercheck/checks.toml` to edit and commit. | `countercheck init` |
-| `verify` | Re-run the locked checks on the agent's work in a clean copy; write a sealed receipt. Exit `0` verified, `2` failed, `3` unverified. | `countercheck verify --claim "All tests pass."` |
-| `show` | Check a saved receipt's seal and print it (exit `4` if it was edited). | `countercheck show .countercheck/receipts/<id>.json` |
+| `verify` | Re-run the locked checks on the agent's work in a clean copy; write a sealed receipt. | `countercheck verify --claim "All tests pass."` |
+| `show` | Check a saved receipt's seal and print it. | `countercheck show .countercheck/receipts/<id>.json` |
 | `ui` | A live page of every run in your browser, on this computer only. | `countercheck ui` |
 | `report` | The same page as one offline HTML file, safe to attach to a PR. | `countercheck report --open` |
 | `hook` | Run as an agent hook: `session-start`, `claude-stop` (Claude Code, Cortex Code), `hermes-pre-verify` (Hermes Agent). | `countercheck hook claude-stop` |
 
-All options: `countercheck help <command>`. Check types: [docs/checks.md](docs/checks.md). Ready setups for real jobs:
-[recipes/](recipes).
-
-## Quick start
-
-```sh
-countercheck init                      # writes .countercheck/checks.toml, edit the commands
-git add .countercheck && git commit -m "Countercheck checks"
-# ... let an agent work ...
-countercheck verify --claim "what the agent said"            # uncommitted work vs HEAD
-countercheck verify --base main                              # committed work on a branch vs main
-countercheck show .countercheck/receipts/<id>.json                   # re-check a receipt's seal
-```
-
-`.countercheck/checks.toml`:
-
-```toml
-protected = ["tests/**"]          # the agent may not change these; .countercheck/** is always protected
-link = ["node_modules", ".venv"]  # git-ignored dependency folders to make visible (read-only)
-
-[[check]]
-name = "unit tests"
-run = "pytest -q"                 # any command; runs with `sh -c` in the clean copy
-timeout_secs = 600
-```
-
-Besides plain commands there are matrix, forbid, golden, budget and coverage checks: see [docs/checks.md](docs/checks.md)
-and the runnable example in [examples/data-migration](examples/data-migration).
+Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
+`--cost-usd`, `--out <folder>`, `--json`. All options: `countercheck help <command>`.
 
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
-locked in the base revision, or none ran) · `1` error · `4` (`countercheck show`) receipt was edited.
+locked in the base revision, none ran, or with `uncovered = "unverified"` a changed file no check covers) · `1` error ·
+`4` (`countercheck show`) the receipt was edited.
 
-## See every run: `countercheck ui` and `countercheck report`
+## Check types
 
-```sh
-countercheck ui          # a live page in your browser; updates when a new receipt lands
-countercheck report --open   # the same page as one HTML file (offline, attach it to a PR or CI run)
-```
-
-<img src="docs/assets/demos/ui.gif" alt="The countercheck ui page updates by itself: a FAILED run appears, opening it shows the failing test output, then a VERIFIED run appears on top" width="880">
-
-`countercheck ui` serves the page on this computer only (127.0.0.1, with a random token in the address; other
-hosts and other web pages can't read it). It uses port 7357, or any free port if that one is taken (`--port N` to
-choose), and running it again opens the one already running for the project.
-
-`countercheck report` writes one HTML page (`.countercheck/receipts/report.html`, git-ignored) with every saved run, newest first: the
-verdict, what the agent said, each check with its output, protected files it changed, whether the receipt's seal is
-intact, and for matrix checks a grid of targets × checks. It works offline, loads nothing from the internet and has no
-scripts, so it's safe to attach to a pull request or a CI run.
-
-## Agent hooks
-
-- Hermes Agent: `countercheck hook hermes-pre-verify` keeps Hermes working while the checks fail. In the profile's
-  `config.yaml`:
-
-  ```yaml
-  hooks:
-    on_session_start:
-      - command: "countercheck hook session-start"
-    pre_verify:
-      - command: "countercheck hook hermes-pre-verify"
-        timeout: 300
-  ```
-
-  Then approve both hooks once in a terminal (`hermes hooks list` shows "✗ not allowlisted" until you do; the
-  desktop app never asks). Setup, approval and how the project is found: [docs/hooks/hermes.md](docs/hooks/hermes.md).
-- Claude Code and Cortex Code: `countercheck hook claude-stop` blocks the `Stop` while the checks fail, with
-  `countercheck hook session-start` on `SessionStart`. See [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
-
-**Add the session-start hook too.** It remembers the commit each session started from, so the checks stay locked
-even if the agent commits its own edits to a test or to `checks.toml`. Without it, the checks are locked to `HEAD`.
-In CI, pass the base explicitly: `countercheck verify --base origin/main`.
-
-**On Windows** the hooks work the same (Claude Code runs natively there): use the same settings with
-`countercheck.exe` on `PATH`, or give its full path with forward slashes, e.g.
-`"command": "C:/Users/you/AppData/Local/Programs/countercheck/countercheck.exe hook claude-stop"`. Paths in the hook
-input may be `C:\...` or `C:/...`; a transcript under `~\` is found through `USERPROFILE`. See
-[docs/hooks/claude-code.md](docs/hooks/claude-code.md#windows).
-
-## How Countercheck itself is tested
-
-A referee has to be right, so Countercheck is tested harder than most tools its size:
-
-- **140 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
-  repositories (tampered tests, timeouts, the macOS sandbox, both agent hooks, every check type), and **property
-  tests** that throw thousands of generated inputs at the verdict and seal logic (e.g. a receipt's seal breaks if any
-  one of 33 fields changes; `decide` never says VERIFIED when a check failed).
-- **Mutation testing** ([cargo-mutants](https://mutants.rs)): the receipt, claim and config code was deliberately
-  broken in every way the tool could find; tests were added until every break that compiles is caught (one remaining
-  change is provably equivalent).
-- **CI on every push** (macOS and Linux): `cargo fmt --check`, `cargo clippy -D warnings`, all tests, a release build
-  and the benchmark task validator. Countercheck also verifies itself with its own `.countercheck/checks.toml`.
-- **The benchmark** above, with hidden tests as ground truth.
-
-## Why Rust?
-
-Countercheck is a referee that runs inside other people's projects: Python, JavaScript, Java, SQL, anything. So it
-has to be one dependency-free file that starts instantly, can't crash, and behaves the same on every operating system.
-Rust gives exactly that, which is also why tools like [uv](https://github.com/astral-sh/uv),
-[ruff](https://github.com/astral-sh/ruff) and OpenAI's [Codex CLI](https://github.com/openai/codex) are written in it.
-
-| What a referee needs | Why it matters here | What Rust gives |
+| Type | Use it when | In `checks.toml` |
 |---|---|---|
-| **Nothing to install** | It runs inside your project, so it must never clash with your Python version, virtualenv or `node_modules` | One file of about 3–4 MB with no runtime; `pip install agent-countercheck` ships that same binary in a wheel, like ruff |
-| **Instant start** | An agent hook runs it every time the agent tries to finish | Starts in under 10 ms (a Python CLI often needs 100–300 ms just to import) |
-| **No crashes, no memory bugs** | A bug in a referee is a wrong verdict | Memory safety from the compiler; on top, this project forbids `unsafe` and `unwrap`/`panic!` outside tests |
-| **Same everywhere** | Teams mix macOS, Linux and Windows | One codebase, cross-compiled; static Linux builds |
-| **A strict gate for AI-written code** | Much of this code is written with coding agents | The compiler and `clippy -D warnings` reject whole classes of mistakes before review; property and mutation testing are first-class |
+| Command | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
+| Matrix | the same command must pass for many targets (tenants, schemas, files) | `[[check]]` + `matrix` |
+| Forbid | some text must not appear (leftover syntax, debug code, secrets) | `[[forbid]]` |
+| Golden | a command's output file must match a reference you keep | `[[check]]` + `golden` |
+| Budget | a number the command prints must stay within limits (time, size, test count) | `[[check]]` + `budget` |
+| Coverage | every item in a list you keep must show up in the agent's files | `[[coverage]]` |
+| Covers | list changed files no check looks at (optionally: UNVERIFIED) | `covers = [...]` on a `[[check]]` |
 
-**The costs, honestly:** fewer people know Rust than Python, and it is slower to write. That's why most contributions
-need no Rust at all: domain examples, check files and benchmark tasks are plain files, scripts and Python, and checks
-run your project's own commands in any language. Go would also have been a reasonable choice (single binary, simpler
-language); Rust won on stricter safety guarantees and its testing tools.
+Every type with an example: [docs/checks.md](docs/checks.md). A runnable example using all of them:
+[examples/data-migration](examples/data-migration). Ready setups for real jobs: [recipes/](recipes).
 
-**Where Rust is not the answer:** a future hosted team dashboard (logins, many repositories, rich views) is a web app
-and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md](docs/decisions/0001-stack.md).
+## Platforms and the sandbox
+
+Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, arm64; static) and Windows (x86_64,
+`countercheck.exe`, no runtime to install).
+
+| Platform | Checks run in | Internet during checks | Writes outside the check folder |
+|---|---|---|---|
+| macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` on that check | blocked |
+| Linux | a normal process (sandbox planned) | allowed | allowed |
+| Windows | a normal process (sandbox planned) | allowed | allowed |
+
+On Linux and Windows the receipt says there was no sandbox; run Countercheck inside a container or VM with networking
+off when you need that isolation. The main protections (locked checks, restored tests, clean copy, sealed receipts)
+work on every OS ([FAQ](#faq)).
 
 ## FAQ
 
@@ -322,6 +423,19 @@ run = "python3 -m unittest -v 2>&1 | tee .out; echo METRIC tests=$(grep -c ' ok$
 budget = { metric = "tests", min = 40 }
 ```
 
+**Does the agent have to say "done"?**
+No. Countercheck doesn't look for any word. The hooks run when the agent *tries to finish* (Claude Code's `Stop`,
+Hermes's `pre_verify`), whatever it wrote: "done", "fixed", "success", or nothing. Its final message is only recorded
+as the claim. The one place text is read is a small fixed list of phrases that recognise an honest "I'm blocked"
+("this can't pass, because …"), so the hook doesn't push an honest agent into gaming the check; the receipt still
+says FAILED, and an agent that edited protected tests is pushed back anyway.
+
+**Several agents on one project: one receipt for everything, or a profile per agent?**
+Neither. Each run writes its own receipt in that project's `.countercheck/receipts/`, and each receipt names its
+agent. Claude Code, Hermes and a CI job working on the same repository end up side by side in one list, and each
+agent session keeps its own "before" commit. Nothing is stored where Countercheck is installed. See
+[Where everything lives](#where-everything-lives).
+
 **Does Countercheck limit what my agent can do?**
 No. The agent works with its full harness: web search, docs, tools, anything you allow. Countercheck only steps in
 when the agent says "done": it re-runs your locked checks on a clean copy of the result. Like an exam after open-book
@@ -359,11 +473,6 @@ So the same work always gets the same verdict, and nobody can fetch the answer a
 only false alarms came from checks that called a real website. If a check truly needs the internet, set
 `network = true` on it; the receipt then says "internet allowed".
 
-**Does an LLM judge the work?**
-No. The agent never grades itself, and Countercheck doesn't ask a model either. The checks you lock decide. The only
-text reading is a small, fixed list of phrases that tells whether the agent's final message already admits a blocker
-("this can't pass, because …"), so the hook doesn't push an honest agent to keep going.
-
 **Will it catch every wrong "done"?**
 Only what your checks test. In the benchmark, the false "done" claims left were cases the visible tests didn't cover.
 Stronger checks (golden files, coverage, budgets: [docs/checks.md](docs/checks.md)) catch more. Add `covers` to your
@@ -374,12 +483,9 @@ checked ([docs/checks.md](docs/checks.md#which-files-the-checks-cover)).
 About 1 second on the median benchmark run; longer when your checks are slow, because it runs them for real.
 
 **Which agents does it work with?**
-Hermes Agent and Claude Code have hooks ([Agent hooks](#agent-hooks)). Snowflake's Cortex Code uses Claude Code's
-hook format, so the same hooks should work there (not yet tried on a real install). Any other agent, script or CI
-job can call `countercheck verify` directly.
-
-**Which operating systems?**
-macOS, Linux and Windows 10/11 (x86_64). Windows needs Git for Windows. See [Install](#install).
+Claude Code and Hermes Agent have hooks ([step 4](#step-4-connect-your-agent)). Snowflake's Cortex Code uses Claude
+Code's hook format, so the same hooks should work there (not yet tried on a real install). Any other agent, script or
+CI job can call `countercheck verify` directly.
 
 **Does my code leave my machine?**
 No. Everything runs locally; receipts are files in `.countercheck/receipts/`. `countercheck ui` listens on 127.0.0.1
@@ -387,6 +493,45 @@ only, behind a random token.
 
 **Is it free?**
 Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add check types, examples or agent hooks.
+
+## How Countercheck itself is tested
+
+A referee has to be right, so Countercheck is tested harder than most tools its size:
+
+- **207 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+  repositories (tampered tests, timeouts, the macOS sandbox, both agent hooks, every check type), and **property
+  tests** that throw thousands of generated inputs at the verdict and seal logic (e.g. a receipt's seal breaks if any
+  one of 35 fields changes; `decide` never says VERIFIED when a check failed).
+- **Mutation testing** ([cargo-mutants](https://mutants.rs)): the receipt, claim and config code was deliberately
+  broken in every way the tool could find; tests were added until every break that compiles is caught (one remaining
+  change is provably equivalent).
+- **CI on every push** (macOS, Linux and Windows): `cargo fmt --check`, `cargo clippy -D warnings`, all tests, a
+  release build and the benchmark task validator. Countercheck also verifies itself with its own
+  `.countercheck/checks.toml`.
+- **The benchmark** above, with hidden tests as ground truth.
+
+## Why Rust?
+
+Countercheck is a referee that runs inside other people's projects: Python, JavaScript, Java, SQL, anything. So it
+has to be one dependency-free file that starts instantly, can't crash, and behaves the same on every operating system.
+Rust gives exactly that, which is also why tools like [uv](https://github.com/astral-sh/uv),
+[ruff](https://github.com/astral-sh/ruff) and OpenAI's [Codex CLI](https://github.com/openai/codex) are written in it.
+
+| What a referee needs | Why it matters here | What Rust gives |
+|---|---|---|
+| **Nothing to install** | It runs inside your project, so it must never clash with your Python version, virtualenv or `node_modules` | One file of about 3–4 MB with no runtime; `pip install agent-countercheck` ships that same binary in a wheel, like ruff |
+| **Instant start** | An agent hook runs it every time the agent tries to finish | Starts in under 10 ms (a Python CLI often needs 100–300 ms just to import) |
+| **No crashes, no memory bugs** | A bug in a referee is a wrong verdict | Memory safety from the compiler; on top, this project forbids `unsafe` and `unwrap`/`panic!` outside tests |
+| **Same everywhere** | Teams mix macOS, Linux and Windows | One codebase, cross-compiled; static Linux builds |
+| **A strict gate for AI-written code** | Much of this code is written with coding agents | The compiler and `clippy -D warnings` reject whole classes of mistakes before review; property and mutation testing are first-class |
+
+**The costs, honestly:** fewer people know Rust than Python, and it is slower to write. That's why most contributions
+need no Rust at all: domain examples, check files and benchmark tasks are plain files, scripts and Python, and checks
+run your project's own commands in any language. Go would also have been a reasonable choice (single binary, simpler
+language); Rust won on stricter safety guarantees and its testing tools.
+
+**Where Rust is not the answer:** a future hosted team dashboard (logins, many repositories, rich views) is a web app
+and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md](docs/decisions/0001-stack.md).
 
 ## Status
 
