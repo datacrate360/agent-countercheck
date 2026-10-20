@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security problem
-    url: https://github.com/datacrate360/countercheck/security/advisories/new
+    url: https://github.com/datacrate360/agent-countercheck/security/advisories/new
     about: A way to fool the referee or escape the sandbox. Please report privately.

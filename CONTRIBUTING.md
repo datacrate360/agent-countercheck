@@ -28,7 +28,7 @@ open a "New domain" issue: that's exactly the feedback we need.
 ## Set up
 
 ```sh
-git clone -b DEV https://github.com/datacrate360/countercheck && cd countercheck
+git clone -b DEV https://github.com/datacrate360/agent-countercheck && cd agent-countercheck
 cargo build --release
 ```
 

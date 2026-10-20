@@ -854,7 +854,7 @@ proptest! {
         }
         let html = render_html(&[Entry { file, receipt: r, seal_ok }], "t", "now");
         let tag = regex::Regex::new(
-            r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer)[ >]",
+            r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer|nav|q|em)[ >]",
         ).unwrap();
         for (i, _) in html.match_indices('<') {
             prop_assert!(tag.is_match(&html[i..]), "unexpected markup at {}: {}", i, html[i..].chars().take(40).collect::<String>());

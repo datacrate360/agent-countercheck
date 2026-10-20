@@ -1,4 +1,5 @@
-# Python packaging for `pip install countercheck` / `uv tool install countercheck` / `uvx countercheck`.
+# Python packaging for `pip install agent-countercheck` / `uv tool install agent-countercheck` /
+# `uvx --from agent-countercheck countercheck`. The package is agent-countercheck; the command it installs is countercheck.
 # The wheel carries the compiled Rust binary (maturin "bin" bindings, the way ruff and uv ship);
 # there is no Python code. Built per platform by .github/workflows/release.yml.
 [build-system]
@@ -6,8 +7,8 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [project]
-name = "countercheck"
-description = "Proof that AI work really happened: re-runs your checks in a clean copy the worker can't edit, and writes a receipt."
+name = "agent-countercheck"
+description = "Proof that AI agents' work really happened: re-runs your checks in a clean copy the agent can't edit, and writes a sealed receipt."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
@@ -28,8 +29,8 @@ dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://countercheck.datacrate360.ai"
-Source = "https://github.com/datacrate360/countercheck"
-Issues = "https://github.com/datacrate360/countercheck/issues"
+Source = "https://github.com/datacrate360/agent-countercheck"
+Issues = "https://github.com/datacrate360/agent-countercheck/issues"
 
 [tool.maturin]
 bindings = "bin"

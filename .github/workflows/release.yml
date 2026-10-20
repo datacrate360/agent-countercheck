@@ -163,7 +163,7 @@ jobs:
           cat SHA256SUMS.txt
           ../packaging/homebrew/formula.sh "${{ needs.version.outputs.version }}" SHA256SUMS.txt \
             "https://github.com/${{ github.repository }}/releases/download/v${{ needs.version.outputs.version }}" \
-            > countercheck.rb
+            > agent-countercheck.rb
       - name: Install script works against these files
         run: |
           (cd out && python3 -m http.server 18765 --bind 127.0.0.1 &) && sleep 1
@@ -178,7 +178,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" out/* install.sh install.ps1 \
-            --title "Countercheck ${GITHUB_REF_NAME}" --generate-notes --verify-tag
+            --title "Agent Countercheck ${GITHUB_REF_NAME}" --generate-notes --verify-tag
 
   pypi:
     # Needs a one-time "trusted publisher" on pypi.org (no token stored here) and the repository
@@ -192,6 +192,18 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { pattern: "{wheel-*,sdist}", path: dist, merge-multiple: true }
+      # The old name, countercheck: an empty package that installs agent-countercheck at this version.
+      # PyPI needs this workflow as a trusted publisher on both projects.
+      - uses: actions/checkout@v4
+        with: { path: src, sparse-checkout: packaging/pypi-legacy }
+      - name: Build the countercheck (old name) package
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          cd src/packaging/pypi-legacy
+          sed -i "s/0\.0\.0/$v/g" pyproject.toml
+          grep -c "$v" pyproject.toml
+          python3 -m pip install --quiet build
+          python3 -m build --outdir "$GITHUB_WORKSPACE/dist" .
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true

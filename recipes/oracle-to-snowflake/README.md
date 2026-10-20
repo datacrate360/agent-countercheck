@@ -33,9 +33,9 @@ OK to install an open-source tool (MIT licence) if it asks for one.
 **1. Install** (in your repo):
 
 ```sh
-pip install countercheck
+pip install agent-countercheck
 mkdir -p .countercheck/inventory
-R=https://raw.githubusercontent.com/datacrate360/countercheck/PROD/recipes/oracle-to-snowflake
+R=https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/recipes/oracle-to-snowflake
 ```
 
 `R` is just a shortcut for the recipe's address in the next steps (PowerShell: `$R = "https://…"`, same address).
@@ -255,4 +255,4 @@ Oracle answer back, ran the checks again, and the receipt said `protected Modifi
   your checks, in your repo, so that is the same trust as running them yourself.
 - **Cortex Code's hooks are taken from Snowflake's documentation**; this setup hasn't yet been run in a real Cortex
   Code session. If the hook doesn't fire, run `countercheck verify` yourself when the agent says done, and please
-  [open an issue](https://github.com/datacrate360/countercheck/issues) with what you saw.
+  [open an issue](https://github.com/datacrate360/agent-countercheck/issues) with what you saw.

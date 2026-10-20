@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the countercheck command-line tool from GitHub Releases.
 #
-#   curl -fsSL https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh | sh
 #
 # Options (environment variables):
 #   COUNTERCHECK_VERSION      version to install, e.g. 0.1.0 (default: the latest release)
@@ -11,7 +11,7 @@
 # Every download is checked against the release's SHA256SUMS.txt before anything is installed.
 set -eu
 
-REPO="datacrate360/countercheck"
+REPO="datacrate360/agent-countercheck"
 APP="countercheck"
 INSTALL_DIR="${COUNTERCHECK_INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -41,7 +41,7 @@ case "$(uname -s)" in
       aarch64 | arm64) platform="linux-aarch64" ;;
       *) die "no build for Linux on $(uname -m) yet" ;;
     esac ;;
-  MINGW* | MSYS* | CYGWIN*) die "on Windows, install from PowerShell: irm https://raw.githubusercontent.com/$REPO/PROD/install.ps1 | iex (or: pip install countercheck)" ;;
+  MINGW* | MSYS* | CYGWIN*) die "on Windows, install from PowerShell: irm https://raw.githubusercontent.com/$REPO/PROD/install.ps1 | iex (or: pip install agent-countercheck)" ;;
   *) die "no build for $(uname -s) yet" ;;
 esac
 

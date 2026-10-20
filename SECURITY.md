@@ -6,7 +6,7 @@ twice: a bug can let unsafe code run, or let a false "done" through.
 ## Reporting a vulnerability
 
 Report privately through GitHub: **Security → Report a vulnerability** on
-[datacrate360/countercheck](https://github.com/datacrate360/countercheck/security). Please include steps to
+[datacrate360/agent-countercheck](https://github.com/datacrate360/agent-countercheck/security). Please include steps to
 reproduce and the version (`countercheck --version`). Don't open a public issue for a security problem.
 
 We aim to reply within a few days and to credit reporters who want credit.

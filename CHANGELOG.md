@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Renamed to Agent Countercheck**, to make clear it's for AI agents. The command is still `countercheck`, and so are
+  the `.countercheck/` folder, the hooks and the `COUNTERCHECK_*` settings: existing projects need no change.
+  - GitHub: `datacrate360/agent-countercheck` (the old address redirects).
+  - PyPI: `pip install agent-countercheck` / `uvx --from agent-countercheck countercheck`. `pip install countercheck`
+    keeps working: from this release it installs `agent-countercheck`.
+  - Homebrew: `brew install datacrate360/tap/agent-countercheck`; the tap renames the old formula, so
+    `brew upgrade` moves existing installs over.
+- **New look for `countercheck ui` and `countercheck report`**, in DataCrate360's teal and coral: a header, cards for the
+  totals, verdict pills, and runs that open and close. Still no web fonts, images or outside requests.
 - **Fixed: the `countercheck ui` page showed "disconnected" and stopped updating after a new receipt landed.** The
   server handled one connection at a time and answered a browser's spare, still-silent connection with `400 Bad
   Request` after 2 s; the browser then read that stale reply for its next update. Silent connections are now closed

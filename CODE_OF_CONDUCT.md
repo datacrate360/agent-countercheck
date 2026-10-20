@@ -10,6 +10,6 @@ discussions or anywhere the project is represented.
 
 Report unacceptable behaviour privately to the maintainers through GitHub: use **Report content** on the comment or
 issue, or open a private security advisory if it can't be public
-([Security → Report a vulnerability](https://github.com/datacrate360/countercheck/security)). Reports are handled
+([Security → Report a vulnerability](https://github.com/datacrate360/agent-countercheck/security)). Reports are handled
 confidentially. Maintainers may edit or remove contributions, and warn, suspend or ban contributors, following the
 Contributor Covenant's enforcement guidelines.

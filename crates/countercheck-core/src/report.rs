@@ -84,17 +84,23 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
     );
     let _ = write!(h, "<title>{}</title>", escape(title));
     let _ = write!(h, "<style>{STYLE}</style>");
-    h.push_str("</head><body><main>");
+    h.push_str("</head><body>");
     let _ = write!(
         h,
-        "<header><h1>{}</h1><p class=\"muted\">Countercheck report · generated {} · newest first{}</p></header>",
+        "<nav class=\"top\"><span class=\"brand\"><span class=\"mark\"></span>Agent&nbsp;Counter<em>check</em></span>{}</nav><main>",
+        if live.is_some() {
+            "<span class=\"pill live\"><span class=\"dot\"></span><span id=\"live\">live</span></span>"
+        } else {
+            "<span class=\"pill\">offline report</span>"
+        }
+    );
+    let _ = write!(
+        h,
+        "<header><p class=\"eyebrow\">Agent Countercheck · receipts</p><h1>{}</h1>\
+         <p class=\"lead\">Every time an agent said <q>done</q>, re-checked on rules it couldn't change.</p>\
+         <p class=\"meta\">Generated {} · newest first</p></header>",
         escape(title),
         escape(&pretty_time(generated_at)),
-        if live.is_some() {
-            " · <span id=\"live\">live</span>"
-        } else {
-            ""
-        }
     );
 
     let _ = write!(
@@ -120,13 +126,15 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
         h.push_str(&matrix_grid(&latest.receipt));
     }
 
-    h.push_str("<section><h2>Runs</h2>");
+    h.push_str(
+        "<section><p class=\"eyebrow\">Runs</p><h2>What each agent claimed, and what ran</h2>",
+    );
     for (i, e) in runs.iter().enumerate() {
         h.push_str(&run_html(e, i == 0));
     }
     h.push_str("</section>");
     h.push_str(
-        "<footer class=\"muted\">Each receipt is sealed with SHA-256; a broken seal means the file was \
+        "<footer class=\"muted\"><b>Agent Countercheck</b> · the agent never grades itself. Each receipt is sealed with SHA-256; a broken seal means the file was \
          edited after it was written. Check one with <code>countercheck show &lt;file&gt;</code>.</footer>",
     );
     h.push_str("</main>");

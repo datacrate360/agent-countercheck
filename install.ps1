@@ -1,6 +1,6 @@
 # Install the countercheck command-line tool on Windows from GitHub Releases.
 #
-#   irm https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 | iex
 #
 # Options (environment variables):
 #   COUNTERCHECK_VERSION      version to install, e.g. 0.3.0 (default: the latest release)
@@ -15,7 +15,7 @@
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest is very slow with the progress bar
 
-    $Repo = 'datacrate360/countercheck'
+    $Repo = 'datacrate360/agent-countercheck'
     $App = 'countercheck'
 
     function Say([string]$Message) { Write-Host "countercheck-install: $Message" }

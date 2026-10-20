@@ -1,10 +1,10 @@
-# Countercheck
+# Agent Countercheck
 
-**Proof that AI work really happened.**
+**Proof that AI agents' work really happened.**
 
-[![Release](https://img.shields.io/github/v/release/datacrate360/countercheck?color=0F766E)](https://github.com/datacrate360/countercheck/releases)
-[![PyPI](https://img.shields.io/pypi/v/countercheck?color=0F766E)](https://pypi.org/project/countercheck/)
-[![CI](https://github.com/datacrate360/countercheck/actions/workflows/ci.yml/badge.svg?branch=DEV)](https://github.com/datacrate360/countercheck/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/datacrate360/agent-countercheck?color=0F766E)](https://github.com/datacrate360/agent-countercheck/releases)
+[![PyPI](https://img.shields.io/pypi/v/agent-countercheck?color=0F766E)](https://pypi.org/project/agent-countercheck/)
+[![CI](https://github.com/datacrate360/agent-countercheck/actions/workflows/ci.yml/badge.svg?branch=DEV)](https://github.com/datacrate360/agent-countercheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![macOS · Linux · Windows](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-334155)
 
@@ -37,6 +37,10 @@ countercheck receipt 9073a384e88f9d37  FAILED
 ```
 
 (The agent's own run said `OK (skipped=1)`: it had marked the failing test as skipped.)
+
+Agent Countercheck ("Countercheck" for short) installs as `agent-countercheck` and runs as `countercheck`, the
+same way `pip install pre-commit` gives you `pre-commit`. It was called `countercheck` up to v0.3; the old install names
+still work (see [Install](#install)).
 
 ## How it works
 
@@ -116,12 +120,12 @@ Full method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/result
 
 | You use | Install with |
 |---|---|
-| Python (pip, a `.venv`, uv) | `pip install countercheck` · `uv tool install countercheck` · or run without installing: `uvx countercheck verify` |
-| macOS or Linux, Homebrew | `brew install datacrate360/tap/countercheck` |
-| macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.sh \| sh` |
-| Windows 10/11, PowerShell | `irm https://raw.githubusercontent.com/datacrate360/countercheck/PROD/install.ps1 \| iex` (or `pip install countercheck` / `uvx countercheck`) |
-| Rust | `cargo install --git https://github.com/datacrate360/countercheck countercheck` |
-| Direct download | [Releases](https://github.com/datacrate360/countercheck/releases): one file per platform + `SHA256SUMS.txt` |
+| Python (pip, a `.venv`, uv) | `pip install agent-countercheck` · `uv tool install agent-countercheck` · or run without installing: `uvx --from agent-countercheck countercheck verify` |
+| macOS or Linux, Homebrew | `brew install datacrate360/tap/agent-countercheck` |
+| macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh \| sh` |
+| Windows 10/11, PowerShell | `irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 \| iex` (or `pip install agent-countercheck` / `uvx --from agent-countercheck countercheck`) |
+| Rust | `cargo install --git https://github.com/datacrate360/agent-countercheck countercheck` |
+| Direct download | [Releases](https://github.com/datacrate360/agent-countercheck/releases): one file per platform + `SHA256SUMS.txt` |
 
 Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, arm64; static) and Windows (x86_64,
 `countercheck.exe`, no runtime to install). Both install scripts check every download against `SHA256SUMS.txt`
@@ -260,7 +264,7 @@ Rust gives exactly that, which is also why tools like [uv](https://github.com/as
 
 | What a referee needs | Why it matters here | What Rust gives |
 |---|---|---|
-| **Nothing to install** | It runs inside your project, so it must never clash with your Python version, virtualenv or `node_modules` | One file of about 3–4 MB with no runtime; `pip install countercheck` ships that same binary in a wheel, like ruff |
+| **Nothing to install** | It runs inside your project, so it must never clash with your Python version, virtualenv or `node_modules` | One file of about 3–4 MB with no runtime; `pip install agent-countercheck` ships that same binary in a wheel, like ruff |
 | **Instant start** | An agent hook runs it every time the agent tries to finish | Starts in under 10 ms (a Python CLI often needs 100–300 ms just to import) |
 | **No crashes, no memory bugs** | A bug in a referee is a wrong verdict | Memory safety from the compiler; on top, this project forbids `unsafe` and `unwrap`/`panic!` outside tests |
 | **Same everywhere** | Teams mix macOS, Linux and Windows | One codebase, cross-compiled; static Linux builds |
@@ -354,7 +358,7 @@ or a migration is knowledge we don't have and you do.
 
 | Start here | Rust? |
 |---|---|
-| Open a ["New domain" issue](https://github.com/datacrate360/countercheck/issues/new?template=new-domain.yml): how "done" goes wrong in your work | no |
+| Open a ["New domain" issue](https://github.com/datacrate360/agent-countercheck/issues/new?template=new-domain.yml): how "done" goes wrong in your work | no |
 | Add an example for your field ([examples/](examples/)) | no |
 | Add a benchmark task that tempts agents to cheat ([eval/](eval/)) | no |
 | Hook another agent (Codex, Cursor, OpenCode, …) | yes |

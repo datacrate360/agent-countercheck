@@ -1,0 +1,21 @@
+# The old PyPI name. `pip install countercheck` keeps working: this empty package only depends on
+# agent-countercheck at the same version, which installs the `countercheck` command.
+# The release workflow sets both versions (0.0.0 below) to the release's version before building.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "countercheck"
+version = "0.0.0"
+description = "Renamed to agent-countercheck. This package installs agent-countercheck, which provides the countercheck command."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+dependencies = ["agent-countercheck==0.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/datacrate360/agent-countercheck"
+
+[tool.setuptools]
+py-modules = []
