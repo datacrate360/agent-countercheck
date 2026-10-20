@@ -121,7 +121,7 @@ Full method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/result
 | You use | Install with |
 |---|---|
 | Python (pip, a `.venv`, uv) | `pip install agent-countercheck` · `uv tool install agent-countercheck` · or run without installing: `uvx --from agent-countercheck countercheck verify` |
-| macOS or Linux, Homebrew | `brew install datacrate360/tap/agent-countercheck` |
+| macOS or Linux, Homebrew | `brew trust --formula datacrate360/tap/agent-countercheck && brew install datacrate360/tap/agent-countercheck` (Homebrew 7 asks you to trust formulae from taps outside Homebrew once) |
 | macOS or Linux, any shell | `curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh \| sh` |
 | Windows 10/11, PowerShell | `irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 \| iex` (or `pip install agent-countercheck` / `uvx --from agent-countercheck countercheck`) |
 | Rust | `cargo install --git https://github.com/datacrate360/agent-countercheck countercheck` |
