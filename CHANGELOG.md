@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Fix: nothing is written or deleted through a symlinked folder in the clean copy.** If the worker replaced a
+  folder with a symlink out of the project, putting back its protected files wrote them through the link, and a
+  golden check's old output file was deleted through it. Now such a link is replaced by a real folder in the copy
+  before protected files are restored, a golden output behind it is left alone (and refused after the run), and a
+  `link` folder behind it is not linked.
 - **Docs fix: the README's "at least N tests" example could pass failing tests.** Its exit code came from
   `grep -q '^OK'` on the output, so code that printed `OK` and a few `... ok` lines passed while its tests failed. The
   example now keeps unittest's own exit code and counts tests from its `Ran N tests` line.
