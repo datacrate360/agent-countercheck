@@ -324,7 +324,9 @@ text reading is a small, fixed list of phrases that tells whether the agent's fi
 
 **Will it catch every wrong "done"?**
 Only what your checks test. In the benchmark, the false "done" claims left were cases the visible tests didn't cover.
-Stronger checks (golden files, coverage, budgets: [docs/checks.md](docs/checks.md)) catch more.
+Stronger checks (golden files, coverage, budgets: [docs/checks.md](docs/checks.md)) catch more. Add `covers` to your
+checks and the receipt also lists changed files no check looked at, so a VERIFIED can't quietly say more than it
+checked ([docs/checks.md](docs/checks.md#which-files-the-checks-cover)).
 
 **How much slower does it make my agent?**
 About 1 second on the median benchmark run; longer when your checks are slow, because it runs them for real.
@@ -346,7 +348,7 @@ Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add 
 
 ## Status
 
-v0.4 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
+v0.5 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
 so). Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 

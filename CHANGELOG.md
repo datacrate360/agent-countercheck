@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 (2026-10-20)
 
 - **Receipts can say which changed files no check covers** ([#6](https://github.com/datacrate360/agent-countercheck/issues/6)).
   Add `covers = ["backend/**"]` to a `[[check]]`; `[[forbid]]` and `[[coverage]]` cover their `paths`. The receipt
