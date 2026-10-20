@@ -4,6 +4,7 @@ use crate::{git, golden, runner, scan, snapshot};
 use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::protect::{Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
+use countercheck_core::uncovered;
 use std::path::PathBuf;
 
 /// Matrix files and coverage item lists may be larger than the check file (up to 10,000 items).
@@ -79,7 +80,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
     // 3. Protected files the worker changed go back to their base version.
     let mut protected_changes = Vec::new();
-    for (change, path) in git::changes_since(&root, &base_commit)? {
+    let changes = git::changes_since(&root, &base_commit)?;
+    for (change, path) in changes.iter().cloned() {
         if countercheck_core::protect::is_junk(&path) || !protected.matches(&path) {
             continue;
         }
@@ -153,8 +155,24 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     }
     results.extend(scan_results);
 
-    // 5. Decide, seal, save.
+    // 5. Decide (uncovered changed files can only add a reason or turn VERIFIED into UNVERIFIED),
+    // seal, save.
     let (verdict, reasons) = receipt::decide(checks_locked, &results, &protected_changes);
+    let uncovered = if checks.uncovered_enabled() {
+        let covers = Protected::labeled(&checks.covers_patterns(), "covers pattern")?;
+        Some(uncovered::find(
+            &changes,
+            &covers,
+            &protected,
+            checks.uncovered,
+        ))
+    } else {
+        None
+    };
+    let (verdict, reasons) = match &uncovered {
+        Some(u) => uncovered::apply(verdict, reasons, u),
+        None => (verdict, reasons),
+    };
     let claim_status = receipt::claim_status(opts.claim.as_deref(), verdict);
     let receipt = Receipt {
         schema: receipt::SCHEMA.to_string(),
@@ -178,6 +196,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         linked,
         protected_changes,
         checks: results,
+        uncovered,
         verdict,
         reasons,
     }

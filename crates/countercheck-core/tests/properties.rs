@@ -7,6 +7,7 @@ use countercheck_core::protect::{Change, Protected, ProtectedChange};
 use countercheck_core::receipt::{
     self, CheckResult, ClaimStatus, Receipt, RepoInfo, SCHEMA, Verdict, Worker,
 };
+use countercheck_core::uncovered::{self, Mode as UncoveredMode, Uncovered};
 use proptest::prelude::*;
 
 // ---- generators ----
@@ -89,6 +90,19 @@ fn cost() -> impl Strategy<Value = Option<f64>> {
     ])
 }
 
+fn uncovered_section() -> impl Strategy<Value = Uncovered> {
+    (
+        prop_oneof![Just(UncoveredMode::Note), Just(UncoveredMode::Unverified)],
+        proptest::collection::vec(text(), 0..3),
+        0usize..5,
+    )
+        .prop_map(|(mode, paths, extra)| Uncovered {
+            mode,
+            total: paths.len() + extra,
+            paths,
+        })
+}
+
 fn receipt() -> impl Strategy<Value = Receipt> {
     (
         (text(), text(), text(), text(), text(), any::<bool>()),
@@ -109,6 +123,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
             proptest::collection::vec(check_result(), 0..3),
             verdict(),
             proptest::collection::vec(text(), 0..3),
+            proptest::option::of(uncovered_section()),
         ),
     )
         .prop_map(
@@ -117,7 +132,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 (agent, model, cost_usd),
                 (claim, claim_status, checks_locked),
                 (checks_source, sandbox, tree_sha256, linked),
-                (protected_changes, checks, verdict, reasons),
+                (protected_changes, checks, verdict, reasons, uncovered),
             )| Receipt {
                 schema: SCHEMA.to_string(),
                 id: String::new(),
@@ -144,6 +159,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 linked,
                 protected_changes,
                 checks,
+                uncovered,
                 verdict,
                 reasons,
             },
@@ -206,7 +222,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 33;
+const EDITS: usize = 35;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -271,6 +287,26 @@ fn edit(r: &mut Receipt, which: usize) {
         29 => first_check(r).output_sha256.push('x'),
         30 => r.verdict = other_verdict(r.verdict),
         31 => first_check(r).network ^= true,
+        32 => match &mut r.uncovered {
+            Some(u) => u.total = u.total.wrapping_add(1),
+            None => {
+                r.uncovered = Some(Uncovered {
+                    mode: UncoveredMode::Note,
+                    total: 0,
+                    paths: vec![],
+                })
+            }
+        },
+        33 => match &mut r.uncovered {
+            Some(u) => u.paths.push("p".into()),
+            None => {
+                r.uncovered = Some(Uncovered {
+                    mode: UncoveredMode::Unverified,
+                    total: 1,
+                    paths: vec!["p".into()],
+                })
+            }
+        },
         _ => r.reasons.push(String::new()),
     }
 }
@@ -472,6 +508,69 @@ proptest! {
         prop_assert_eq!(pc.change, c);
         let want = if c == Change::Added { "kept_new_file" } else { "restored_from_base" };
         prop_assert_eq!(pc.action, want);
+    }
+}
+
+// ---- uncovered (issue #6) ----
+
+fn changes() -> impl Strategy<Value = Vec<(Change, String)>> {
+    proptest::collection::vec((change(), rel_path()), 0..8)
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1024))]
+
+    /// Adding a covers pattern never turns a covered file into an uncovered one.
+    #[test]
+    fn more_covers_never_uncover_a_file(
+        ch in changes(), covers in patterns(), extra in patterns(), prot in patterns(),
+    ) {
+        let protected = Protected::new(&prot).map_err(TestCaseError::fail)?;
+        let small = Protected::new(&covers).map_err(TestCaseError::fail)?;
+        let mut more = covers.clone();
+        more.extend(extra);
+        let big = Protected::new(&more).map_err(TestCaseError::fail)?;
+        let a = uncovered::find(&ch, &small, &protected, UncoveredMode::Note);
+        let b = uncovered::find(&ch, &big, &protected, UncoveredMode::Note);
+        prop_assert!(b.total <= a.total);
+        for p in &b.paths {
+            prop_assert!(a.paths.contains(p), "{} became uncovered", p);
+        }
+    }
+
+    /// Only changed files are listed, never a protected or covered one, sorted, no duplicates.
+    #[test]
+    fn uncovered_lists_only_unprotected_uncovered_changes(
+        ch in changes(), covers in patterns(), prot in patterns(),
+    ) {
+        let protected = Protected::new(&prot).map_err(TestCaseError::fail)?;
+        let cov = Protected::new(&covers).map_err(TestCaseError::fail)?;
+        let u = uncovered::find(&ch, &cov, &protected, UncoveredMode::Note);
+        for p in &u.paths {
+            prop_assert!(ch.iter().any(|(_, c)| c == p));
+            prop_assert!(!protected.matches(p) && !cov.matches(p));
+        }
+        let mut sorted = u.paths.clone();
+        sorted.sort();
+        sorted.dedup();
+        prop_assert_eq!(&sorted, &u.paths);
+        prop_assert!(u.total >= u.paths.len());
+    }
+
+    /// Uncovered files never make a verdict better: FAILED stays FAILED, UNVERIFIED stays
+    /// UNVERIFIED, and VERIFIED stays VERIFIED or becomes UNVERIFIED.
+    #[test]
+    fn uncovered_never_improves_a_verdict(v in verdict(), u in uncovered_section()) {
+        let (out, reasons) = uncovered::apply(v, vec!["r".into()], &u);
+        match v {
+            Verdict::Verified => prop_assert!(out == Verdict::Verified || out == Verdict::Unverified),
+            other => prop_assert_eq!(out, other),
+        }
+        if out != v {
+            prop_assert!(u.mode == UncoveredMode::Unverified && u.total > 0);
+        }
+        prop_assert_eq!(&reasons[0], "r");
+        prop_assert_eq!(reasons.len(), if u.total > 0 { 2 } else { 1 });
     }
 }
 

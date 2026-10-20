@@ -55,6 +55,9 @@ pub struct ChecksFile {
     /// Top-level folders linked (not copied) into the clean copy, e.g. node_modules.
     #[serde(default)]
     pub link: Vec<String>,
+    /// What a changed file no check `covers` does: `"note"` (listed, default) or `"unverified"`.
+    #[serde(default, skip_serializing_if = "crate::uncovered::Mode::is_default")]
+    pub uncovered: crate::uncovered::Mode,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -84,6 +87,10 @@ pub struct CheckSpec {
     /// or `cmd`.
     #[serde(default, skip_serializing_if = "Shell::is_default")]
     pub shell: Shell,
+    /// Files this check looks at (globs, like `protected`). When any check declares `covers`, the
+    /// receipt lists changed files that no check covers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub covers: Vec<String>,
 }
 
 /// The shell a check's `run` is given to.
@@ -151,6 +158,22 @@ impl ChecksFile {
         out
     }
 
+    /// True when at least one `[[check]]` declares `covers`: only then are uncovered files listed.
+    pub fn uncovered_enabled(&self) -> bool {
+        self.checks.iter().any(|c| !c.covers.is_empty())
+    }
+
+    /// Every pattern that counts as covered: each check's `covers` plus the `paths` of every
+    /// `[[forbid]]` and `[[coverage]]` (they scan those files).
+    pub fn covers_patterns(&self) -> Vec<String> {
+        let mut out: Vec<String> = self.checks.iter().flat_map(|c| c.covers.clone()).collect();
+        out.extend(self.forbids.iter().flat_map(|f| f.paths.clone()));
+        out.extend(self.coverages.iter().flat_map(|c| c.paths.clone()));
+        out.sort();
+        out.dedup();
+        out
+    }
+
     /// Protected patterns including the always-protected `.countercheck/**`.
     pub fn protected_patterns(&self) -> Vec<String> {
         let mut out = self.protected.clone();
@@ -207,6 +230,11 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
             return Err(format!("two checks are named \"{}\"", c.name));
         }
         check_matrix_shape(c)?;
+        if c.covers.iter().any(|p| p.trim().is_empty()) {
+            return Err(format!("check \"{}\": covers has an empty pattern", c.name));
+        }
+        crate::protect::Protected::labeled(&c.covers, "covers pattern")
+            .map_err(|e| format!("check \"{}\": {e}", c.name))?;
         if let Some(b) = &c.budget {
             b.validate(&c.name)?;
         }
@@ -226,6 +254,12 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
         }
     }
     crate::protect::Protected::new(&file.protected_patterns())?;
+    if file.uncovered == crate::uncovered::Mode::Unverified && !file.uncovered_enabled() {
+        return Err(
+            "uncovered = \"unverified\" needs at least one [[check]] with covers = [...], or every change would be uncovered"
+                .to_string(),
+        );
+    }
     // Everything knowable without the matrix files is checked now; `plan` repeats it with them.
     plan_inner(&file, None)?;
     Ok(file)

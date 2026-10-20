@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Receipts can say which changed files no check covers** ([#6](https://github.com/datacrate360/agent-countercheck/issues/6)).
+  Add `covers = ["backend/**"]` to a `[[check]]`; `[[forbid]]` and `[[coverage]]` cover their `paths`. The receipt
+  then lists every changed file none of them covers, and `show`, `report` and `ui` show it. Top-level
+  `uncovered = "unverified"` turns such a VERIFIED into UNVERIFIED. Off until a check declares `covers`, so existing
+  projects see no change; read from the base revision like every other rule. docs/checks.md "Which files the checks
+  cover".
+
 ## v0.4.0 (2026-10-20)
 
 **Upgrading:** nothing to change in your projects. Homebrew users: `brew trust --formula

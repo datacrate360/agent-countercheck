@@ -100,6 +100,10 @@ pub struct Receipt {
     pub linked: Vec<String>,
     pub protected_changes: Vec<ProtectedChange>,
     pub checks: Vec<CheckResult>,
+    /// Changed files no check covers (only when a check declares `covers`). Absent on older
+    /// receipts, so their seals still verify.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncovered: Option<crate::uncovered::Uncovered>,
     pub verdict: Verdict,
     pub reasons: Vec<String>,
 }
@@ -256,6 +260,19 @@ impl Receipt {
                 }
             }
         }
+        if let Some(u) = self.uncovered.as_ref().filter(|u| u.total > 0) {
+            let more = u.total.saturating_sub(u.paths.len());
+            s.push_str(&format!(
+                "  uncovered: {} changed file(s) no check covers: {}{}\n",
+                u.total,
+                u.paths.join(", "),
+                if more > 0 {
+                    format!(", and {more} more")
+                } else {
+                    String::new()
+                }
+            ));
+        }
         if let Some(cost) = self.worker.cost_usd {
             s.push_str(&format!("  cost:     ${cost:.4} (reported)\n"));
         }
@@ -311,6 +328,7 @@ mod tests {
             tree_sha256: "t".into(),
             linked: vec![],
             protected_changes: vec![],
+            uncovered: None,
             checks: vec![],
             verdict: Verdict::Unverified,
             reasons: vec![],
@@ -448,6 +466,7 @@ mod tests {
             tree_sha256: "t".into(),
             linked: vec![],
             protected_changes: vec![],
+            uncovered: None,
             checks: vec![result(false)],
             verdict: Verdict::Failed,
             reasons: vec![],
@@ -494,6 +513,7 @@ mod tests {
                 tree_sha256: String::new(),
                 linked: vec![],
                 protected_changes: vec![],
+                uncovered: None,
                 checks: vec![],
                 verdict: Verdict::Unverified,
                 reasons: vec![],
