@@ -330,6 +330,22 @@ fn run_html(e: &Entry, open: bool) -> String {
         h.push_str("</ul>");
     }
 
+    if let Some(u) = r.uncovered.as_ref().filter(|u| u.total > 0) {
+        let _ = write!(
+            h,
+            "<p><b>Changed files no check covers</b> ({}; listed, not checked):</p><ul>",
+            u.total
+        );
+        for p in &u.paths {
+            let _ = write!(h, "<li><code>{}</code></li>", escape(p));
+        }
+        let more = u.total.saturating_sub(u.paths.len());
+        if more > 0 {
+            let _ = write!(h, "<li>and {more} more</li>");
+        }
+        h.push_str("</ul>");
+    }
+
     let _ = write!(
         h,
         "<dl class=\"facts\">\
@@ -400,6 +416,7 @@ mod tests {
             tree_sha256: "f".repeat(64),
             linked: vec![],
             protected_changes: vec![],
+            uncovered: None,
             checks,
             verdict,
             reasons: vec!["check \"t\" failed".to_string()],

@@ -20,6 +20,8 @@ hooks find it themselves with `countercheck hook session-start` (README "Agent h
 | [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
 | [Coverage](#coverage) | every item in a list you keep must show up in the worker's files (tables, procedures, levels, pages) | `[[coverage]]` |
 
+Also: [Which files the checks cover](#which-files-the-checks-cover) lists changed files no check looks at.
+
 [examples/data-migration](../examples/data-migration) uses all of them on a small made-up migration. For a real
 Oracle → Snowflake setup with Cortex Code, see the recipe
 [recipes/oracle-to-snowflake](../recipes/oracle-to-snowflake/).
@@ -204,3 +206,40 @@ case_insensitive = true
 - The items file must be under `.countercheck/`, and is read from the base revision like the check file, so a worker
   can't shorten the list. Blank lines and lines starting with `#` are skipped; at most 10,000 items.
 - On the receipt it is a check named `coverage: <name>`. A failure lists up to 50 missing items plus the total.
+
+## Which files the checks cover
+
+A VERIFIED means every check passed. It doesn't say whether the checks **looked at the files the agent changed**. Tell
+Countercheck which files each check covers, and the receipt lists every changed file that none of them covers:
+
+```toml
+uncovered = "note"                  # optional: "note" (default) or "unverified"
+
+[[check]]
+name = "backend tests"
+run = "cd backend && pytest -q"
+covers = ["backend/**"]             # globs, like `protected`
+
+[[check]]
+name = "frontend build"
+run = "cd frontend && npm run build"
+covers = ["frontend/src/**", "frontend/package.json"]
+```
+
+```text
+  uncovered: 2 changed file(s) no check covers: docs/setup.md, frontend/functions/_middleware.js
+  - 2 changed file(s) no check covers (listed, not checked): docs/setup.md, frontend/functions/_middleware.js
+```
+
+- It's **off** until at least one `[[check]]` has `covers`; then every changed file is compared.
+- `[[forbid]]` and `[[coverage]]` cover their `paths`.
+- **Not counted as uncovered:** protected files (they're put back and listed under "protected"), everything under
+  `.countercheck/`, and build junk (`__pycache__`, `.DS_Store`, `*.pyc`). **Deleted files count:** deleting is a change.
+- `uncovered = "unverified"` turns a VERIFIED with uncovered changes into UNVERIFIED (exit 3). It never touches a
+  FAILED. It needs at least one `covers`; turn it on once your `covers` are complete.
+- `covers` and `uncovered` come from the check file at the base revision, like every rule, so a worker can't widen them
+  to hide a change.
+- "Covered" means a check claims those files, not that its tests run every line of them.
+- Agent hooks push back only on FAILED. Uncovered files are for the person reading the receipt: the agent can't fix them
+  by itself, because only a new commit to `checks.toml` changes `covers`.
+- The receipt keeps up to 100 paths plus the total; `show`, `report` and `ui` list them.

@@ -1762,3 +1762,197 @@ fn hooks_work_with_windows_payloads() {
     let (_, out) = hermes_hook(&hermes.to_string(), &[]);
     assert!(out.contains("\"continue\""), "{out}");
 }
+
+// ---- uncovered changed files (issue #6) ----
+
+/// The calc check covers src/calc.sh only; docs and other source files are uncovered.
+const COVERS: &str = "protected = [\"tests/**\"]\n[[check]]\nname = \"calc\"\nrun = \"sh tests/check.sh\"\ntimeout_secs = 30\ncovers = [\"src/calc.sh\"]\n";
+
+fn fix_calc(p: &Path) {
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+}
+
+#[test]
+fn uncovered_is_off_without_covers() {
+    let d = project(CHECKS);
+    fix_calc(d.path());
+    fs::write(d.path().join("src/billing.sh"), "echo 1\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert!(r.get("uncovered").is_none(), "{r:#}");
+}
+
+#[test]
+fn uncovered_changes_are_listed_and_the_verdict_stays_by_default() {
+    let d = project(COVERS);
+    fix_calc(d.path());
+    fs::write(d.path().join("src/billing.sh"), "echo 1\n").unwrap();
+    fs::write(d.path().join("NOTES.md"), "hi\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["verdict"], "verified");
+    assert_eq!(r["uncovered"]["mode"], "note");
+    assert_eq!(r["uncovered"]["total"], 2);
+    assert_eq!(
+        r["uncovered"]["paths"],
+        serde_json::json!(["NOTES.md", "src/billing.sh"])
+    );
+    let reasons = r["reasons"].to_string();
+    assert!(
+        reasons.contains("2 changed file(s) no check covers"),
+        "{reasons}"
+    );
+}
+
+#[test]
+fn uncovered_unverified_mode_turns_verified_into_unverified() {
+    let d = project(&format!("uncovered = \"unverified\"\n{COVERS}"));
+    fix_calc(d.path());
+    fs::write(d.path().join("src/billing.sh"), "echo 1\n").unwrap();
+    let (code, r) = countercheck(d.path(), &["--claim", "done"]);
+    assert_eq!(code, 3, "{r:#}");
+    assert_eq!(r["verdict"], "unverified");
+    assert_eq!(r["claim_status"], "not_checked");
+}
+
+#[test]
+fn uncovered_never_rescues_a_failure() {
+    // The bug is left in, and the worker touches an uncovered file: still FAILED.
+    let d = project(&format!("uncovered = \"unverified\"\n{COVERS}"));
+    fs::write(d.path().join("src/billing.sh"), "echo 1\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["verdict"], "failed");
+}
+
+#[test]
+fn a_fully_covered_change_has_nothing_uncovered() {
+    let d = project(&format!("uncovered = \"unverified\"\n{COVERS}"));
+    fix_calc(d.path());
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["uncovered"]["total"], 0);
+}
+
+#[test]
+fn worker_cannot_widen_covers_or_switch_the_mode() {
+    // The worker edits checks.toml to cover everything and drop strict mode: ignored, because
+    // the check file is read from the base revision.
+    let d = project(&format!("uncovered = \"unverified\"\n{COVERS}"));
+    fix_calc(d.path());
+    fs::write(d.path().join("src/billing.sh"), "echo 1\n").unwrap();
+    fs::write(
+        d.path().join(".countercheck/checks.toml"),
+        "protected = [\"tests/**\"]\n[[check]]\nname = \"calc\"\nrun = \"sh tests/check.sh\"\ncovers = [\"**\"]\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 3, "{r:#}");
+    assert_eq!(
+        r["uncovered"]["paths"],
+        serde_json::json!(["src/billing.sh"])
+    );
+    // The edited check file itself is protected, so it's listed there, not as uncovered.
+    assert_eq!(
+        r["protected_changes"][0]["path"],
+        ".countercheck/checks.toml"
+    );
+}
+
+fn head(p: &Path) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(p)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+#[test]
+fn an_edited_protected_test_is_listed_as_protected_not_uncovered() {
+    let d = project(COVERS);
+    fix_calc(d.path());
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(r["protected_changes"][0]["path"], "tests/check.sh", "{r:#}");
+    assert_eq!(r["uncovered"]["total"], 0, "{r:#}");
+}
+
+#[test]
+fn a_deleted_file_is_an_uncovered_change() {
+    let d = project(COVERS);
+    fs::write(d.path().join("gone.sh"), "x\n").unwrap();
+    sh(d.path(), "git add gone.sh && git commit -qm g");
+    let base = head(d.path());
+    fix_calc(d.path());
+    fs::remove_file(d.path().join("gone.sh")).unwrap();
+    let (_, r) = countercheck(d.path(), &["--base", &base]);
+    assert_eq!(
+        r["uncovered"]["paths"],
+        serde_json::json!(["gone.sh"]),
+        "{r:#}"
+    );
+}
+
+#[test]
+fn a_symlink_into_a_covered_folder_is_judged_by_its_own_path() {
+    if cfg!(windows) {
+        return;
+    }
+    let d = project(COVERS);
+    fix_calc(d.path());
+    // A new link outside src/ pointing at the covered file is itself an uncovered change.
+    sh(d.path(), "ln -s src/calc.sh link.sh");
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        r["uncovered"]["paths"],
+        serde_json::json!(["link.sh"]),
+        "{r:#}"
+    );
+}
+
+#[test]
+fn renaming_into_a_covered_path_still_runs_the_checks() {
+    // Moving a file under a covered pattern makes it covered, and the checks then run on it:
+    // the worker gains nothing it couldn't do before.
+    let d = project(&format!(
+        "uncovered = \"unverified\"\n{}",
+        COVERS.replace("[\"src/calc.sh\"]", "[\"src/**\"]")
+    ));
+    fs::write(d.path().join("billing.sh"), "echo 1\n").unwrap();
+    sh(d.path(), "git add billing.sh && git commit -qm b");
+    let base = head(d.path());
+    sh(d.path(), "git mv billing.sh src/billing.sh");
+    // calc is still broken: covered or not, the verdict is FAILED.
+    let (code, r) = countercheck(d.path(), &["--base", &base]);
+    assert_eq!(code, 2, "{r:#}");
+    // billing.sh (deleted at the old path) is uncovered; src/billing.sh is covered.
+    assert_eq!(
+        r["uncovered"]["paths"],
+        serde_json::json!(["billing.sh"]),
+        "{r:#}"
+    );
+}
+
+#[test]
+fn bad_covers_and_strict_mode_without_covers_are_refused() {
+    let d = project(&format!("{CHECKS}covers = [\"src/[\"]\n"));
+    let out = Command::new(BIN)
+        .args(["verify", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("covers pattern"));
+    let d = project(&format!("uncovered = \"unverified\"\n{CHECKS}"));
+    let out = Command::new(BIN)
+        .args(["verify", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("needs at least one [[check]] with covers")
+    );
+}
