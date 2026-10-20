@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## v0.3.1 (2026-10-20)
+
+**Hermes desktop app / gateway users:** upgrade; with v0.3.0 the hook ran no checks there. Then approve the hook once
+in a terminal ([docs/hooks/hermes.md](docs/hooks/hermes.md)).
+
+- **Recipes:** [`recipes/`](recipes) with a first recipe, Oracle → Snowflake (check files, helper scripts, a tested
+  5-minute start). README FAQ and diagrams.
 
 - **Fixed: the Hermes hook did nothing when Hermes ran outside the project.** Hermes sends its own working directory
   as `cwd`, and the desktop app and gateway run from the home folder, so `hermes-pre-verify` found no git repository

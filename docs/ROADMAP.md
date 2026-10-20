@@ -18,7 +18,8 @@ section. Ideas and use cases are welcome as issues.
 | Native Windows 10/11 (x86_64): `countercheck.exe`, `install.ps1`, pip/uvx wheel, Windows CI; `shell = "pwsh" / "cmd"` per check; Job Object kills a timed-out check's whole tree (no Windows sandbox yet) | v0.3.0 |
 | `countercheck report` (one self-contained HTML page of all runs) and `countercheck ui` (live local page, 127.0.0.1 + token) | v0.3.0 |
 | Fix: `coverage`/`forbid` patterns ending in `$` missed lines in files with Windows (CRLF) line endings | v0.3.0 |
-| Recipes (`recipes/`): ready check files + helpers + a tested 5-minute start per job; first: Oracle → Snowflake | DEV |
+| Recipes (`recipes/`): ready check files + helpers + a tested 5-minute start per job; first: Oracle → Snowflake | v0.3.1 |
+| Hermes hook finds the project from the turn's changed files (works in the desktop app and gateway) | v0.3.1 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |
