@@ -194,6 +194,9 @@ scripts, so it's safe to attach to a pull request or a CI run.
       - command: "countercheck hook hermes-pre-verify"
         timeout: 300
   ```
+
+  Then approve both hooks once in a terminal (`hermes hooks list` shows "✗ not allowlisted" until you do; the
+  desktop app never asks). Setup, approval and how the project is found: [docs/hooks/hermes.md](docs/hooks/hermes.md).
 - Claude Code and Cortex Code: `countercheck hook claude-stop` blocks the `Stop` while the checks fail, with
   `countercheck hook session-start` on `SessionStart`. See [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
 
