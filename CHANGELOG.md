@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 (2026-10-20)
+
+**Upgrading:** nothing to change in your projects. Homebrew users: `brew trust --formula
+datacrate360/tap/agent-countercheck`, then `brew upgrade` (Homebrew 7 asks before loading a renamed third-party formula).
+
 
 - **Renamed to Agent Countercheck**, to make clear it's for AI agents. The command is still `countercheck`, and so are
   the `.countercheck/` folder, the hooks and the `COUNTERCHECK_*` settings: existing projects need no change.

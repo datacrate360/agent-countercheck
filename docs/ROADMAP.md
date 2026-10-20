@@ -20,6 +20,8 @@ section. Ideas and use cases are welcome as issues.
 | Fix: `coverage`/`forbid` patterns ending in `$` missed lines in files with Windows (CRLF) line endings | v0.3.0 |
 | Recipes (`recipes/`): ready check files + helpers + a tested 5-minute start per job; first: Oracle → Snowflake | v0.3.1 |
 | Hermes hook finds the project from the turn's changed files (works in the desktop app and gateway) | v0.3.1 |
+| Renamed to Agent Countercheck (`agent-countercheck` on GitHub, PyPI, Homebrew; command still `countercheck`) | v0.4.0 |
+| `ui` / `report` in DataCrate360's teal and coral; fix: live page no longer shows "disconnected" after a new receipt | v0.4.0 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |

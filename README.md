@@ -346,7 +346,7 @@ Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add 
 
 ## Status
 
-v0.3 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
+v0.4 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
 so). Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
