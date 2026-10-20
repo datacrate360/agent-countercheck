@@ -22,7 +22,8 @@ folder, not from the project, so `cwd` alone is often not a git repository at al
 
 So when Hermes lists the files the turn changed (`changed_paths`), the hook checks the **git repositories that hold
 those files and have a `.countercheck/checks.toml`**, each one separately (up to 8). One profile can then work on
-several projects, and only the ones the turn touched are checked:
+several projects, and only the ones the turn touched are checked. "Has a check file" also looks at the committed
+base, so an agent can't skip the checks by deleting `checks.toml`:
 
 | The turn edited | What runs |
 |---|---|

@@ -1032,6 +1032,21 @@ fn hermes_hook_is_silent_when_the_changed_files_are_in_no_countercheck_project()
 }
 
 #[test]
+fn hermes_hook_still_checks_a_project_whose_check_file_the_agent_deleted() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("tests/check.sh"), "exit 0\n").unwrap();
+    fs::remove_file(d.path().join(".countercheck/checks.toml")).unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let (code, out) = hermes_hook(
+        &hermes_payload_from(home.path(), &[&d.path().join("tests/check.sh")]),
+        &[],
+    );
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["action"], "continue", "{out}");
+}
+
+#[test]
 fn hermes_hook_checks_every_project_the_turn_touched() {
     let good = project(CHECKS);
     fs::write(good.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();

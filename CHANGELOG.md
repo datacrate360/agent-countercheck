@@ -6,7 +6,8 @@
   as `cwd`, and the desktop app and gateway run from the home folder, so `hermes-pre-verify` found no git repository
   and silently let every turn finish. It now checks the git repositories holding the turn's `changed_paths` that
   have a `.countercheck/checks.toml` (each one; a failure names its project), and stays silent when the changed files
-  are in no such project. Without `changed_paths`, `cwd` is used as before.
+  are in no such project. A project counts if its check file is in the working tree or the base revision, so
+  deleting `checks.toml` doesn't skip the checks. Without `changed_paths`, `cwd` is used as before.
 - **Docs: [docs/hooks/hermes.md](docs/hooks/hermes.md)**: setup, which project gets checked, and the one-time hook
   approval Hermes needs (`hermes hooks list` shows "not allowlisted" until you answer y in a terminal; until then the
   hook never runs).

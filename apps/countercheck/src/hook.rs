@@ -92,6 +92,10 @@ pub fn hermes_pre_verify() -> Result<(), String> {
             .get(key)
             .or_else(|| payload.get("extra").and_then(|e| e.get(key)))
     };
+    let session = field("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let cwd = field("cwd")
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
@@ -104,16 +108,12 @@ pub fn hermes_pre_verify() -> Result<(), String> {
     let repos = if changed.is_empty() {
         vec![cwd]
     } else {
-        projects_for(&changed, &cwd)
+        projects_for(&changed, &cwd, &session)
     };
     let claim = field("final_response")
         .and_then(|v| v.as_str())
         .map(str::to_string);
     let model = field("model").and_then(|v| v.as_str()).map(str::to_string);
-    let session = field("session_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
     let several = repos.len() > 1;
     let mut messages = Vec::new();
     for repo in repos {
@@ -160,7 +160,11 @@ const MAX_PROJECTS: usize = 8;
 /// The git repositories holding `paths` (absolute, or relative to `cwd`) that have a
 /// `.countercheck/checks.toml`, in first-seen order. A deleted file counts through its nearest
 /// folder that still exists.
-fn projects_for(paths: &[&str], cwd: &Path) -> Vec<PathBuf> {
+///
+/// "Has a check file" is decided from the base revision too, not only the working tree: an agent
+/// that deletes (or renames) `.countercheck/checks.toml` must not turn its project into "nothing to
+/// check". The checks themselves are then read from the base as always.
+fn projects_for(paths: &[&str], cwd: &Path, session: &str) -> Vec<PathBuf> {
     let mut found: Vec<PathBuf> = Vec::new();
     let mut looked: Vec<PathBuf> = Vec::new();
     for p in paths.iter().take(10_000) {
@@ -181,7 +185,7 @@ fn projects_for(paths: &[&str], cwd: &Path) -> Vec<PathBuf> {
         let Ok(root) = git::toplevel(dir) else {
             continue;
         };
-        if found.contains(&root) || !root.join(".countercheck").join("checks.toml").is_file() {
+        if found.contains(&root) || !has_checks(&root, session) {
             continue;
         }
         found.push(root);
@@ -190,6 +194,18 @@ fn projects_for(paths: &[&str], cwd: &Path) -> Vec<PathBuf> {
         }
     }
     found
+}
+
+/// True when the project has a check file in its working tree, at the session's base, or at HEAD.
+fn has_checks(root: &Path, session: &str) -> bool {
+    const FILE: &str = ".countercheck/checks.toml";
+    if root.join(FILE).is_file() {
+        return true;
+    }
+    let base = session_base(root, session);
+    [base.as_str(), "HEAD"]
+        .iter()
+        .any(|rev| matches!(git::show(root, rev, FILE), Ok(Some(_))))
 }
 
 /// Claude Code `Stop` (Cortex Code reads the same format): stdin is the Stop hook JSON; stdout is
