@@ -294,6 +294,42 @@ fn timeouts_kill_the_whole_process_group() {
     panic!("background process {} survived the timeout", pid.trim());
 }
 
+/// Unix: what a passing check leaves running in the background (a server, a `sleep &`) is
+/// stopped when the check ends, not left running after verify.
+#[cfg(unix)]
+#[test]
+fn background_processes_stop_when_a_check_ends() {
+    let outside = tempfile::tempdir().unwrap();
+    let pid_file = outside.path().join("bg.pid");
+    let checks = format!(
+        "[[check]]\nname = \"bg\"\nrun = \"(sleep 60 & echo $! > '{}'); exit 0\"\n",
+        pid_file.display()
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &["--sandbox", "none"]);
+    assert_eq!(code, 0, "{r:#}");
+    let pid = fs::read_to_string(&pid_file).unwrap();
+    let running = || {
+        let out = Command::new("ps")
+            .args(["-o", "stat=", "-p", pid.trim()])
+            .output()
+            .unwrap();
+        let stat = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        !stat.is_empty() && !stat.starts_with('Z')
+    };
+    for _ in 0..20 {
+        if !running() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let _ = Command::new("kill").arg(pid.trim()).status();
+    panic!(
+        "background process {} is still running after verify",
+        pid.trim()
+    );
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn seatbelt_blocks_writes_outside_the_check_folder() {
