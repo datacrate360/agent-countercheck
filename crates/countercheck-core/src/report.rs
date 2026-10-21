@@ -434,6 +434,7 @@ mod tests {
             claim_status: ClaimStatus::NoClaim,
             checks_locked: true,
             checks_source: ".countercheck/checks.toml @ HEAD".to_string(),
+            checks_external: None,
             sandbox: "none".to_string(),
             tree_sha256: "f".repeat(64),
             linked: vec![],

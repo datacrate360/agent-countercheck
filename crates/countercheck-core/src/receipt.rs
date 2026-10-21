@@ -97,6 +97,10 @@ pub struct Receipt {
     /// True when the check file came from the base revision (the worker couldn't edit it).
     pub checks_locked: bool,
     pub checks_source: String,
+    /// Where the checks came from when they were outside the repository (`--checks-from`).
+    /// Absent otherwise and on older receipts, so their seals still verify.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks_external: Option<ExternalChecks>,
     pub sandbox: String,
     /// SHA-256 over the exact files that were checked (path + content hash, sorted).
     pub tree_sha256: String,
@@ -114,6 +118,19 @@ pub struct Receipt {
     pub watched: Option<crate::watched::Watched>,
     pub verdict: Verdict,
     pub reasons: Vec<String>,
+}
+
+/// Checks read from outside the repository (`--checks-from`, ADR-0002).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalChecks {
+    /// `git` (a commit of another repository) or `file` (a file with a SHA-256 pin).
+    pub kind: String,
+    /// `<repo>@<commit>:<path>` or the file's path.
+    pub source: String,
+    /// SHA-256 of the check file that was used.
+    pub sha256: String,
+    /// Pinned by a commit id or `--checks-sha256`. Unpinned checks are not locked.
+    pub pinned: bool,
 }
 
 /// Decide the verdict and give plain reasons for it.
@@ -351,6 +368,7 @@ mod tests {
             claim_status: ClaimStatus::NoClaim,
             checks_locked: true,
             checks_source: "src".into(),
+            checks_external: None,
             sandbox: "none".into(),
             tree_sha256: "t".into(),
             linked: vec![],
@@ -490,6 +508,7 @@ mod tests {
             claim_status: ClaimStatus::Contradicted,
             checks_locked: true,
             checks_source: "x".into(),
+            checks_external: None,
             sandbox: "none".into(),
             tree_sha256: "t".into(),
             linked: vec![],
@@ -538,6 +557,7 @@ mod tests {
                 claim_status: ClaimStatus::NoClaim,
                 checks_locked: false,
                 checks_source: String::new(),
+                checks_external: None,
                 sandbox: String::new(),
                 tree_sha256: String::new(),
                 linked: vec![],

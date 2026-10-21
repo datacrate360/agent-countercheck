@@ -2653,3 +2653,211 @@ fn a_worker_cannot_grant_itself_writes() {
     assert!(!target.exists());
     assert!(r["checks"][0].get("writes").is_none(), "{r:#}");
 }
+
+// ---- checks from outside the repository (issue #20, ADR-0002) ----
+
+/// A suite repository with `suites/proj.toml` (CHECKS) committed: (dir, full commit id).
+fn suite_repo(checks: &str) -> (tempfile::TempDir, String) {
+    let d = tempfile::tempdir().unwrap();
+    sh(d.path(), common::GIT_INIT);
+    fs::create_dir_all(d.path().join("suites")).unwrap();
+    fs::write(d.path().join("suites/proj.toml"), checks).unwrap();
+    sh(d.path(), "git add -A && git commit -qm suite");
+    let out = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(d.path())
+        .output()
+        .unwrap();
+    (d, String::from_utf8(out.stdout).unwrap().trim().to_string())
+}
+
+/// The target project without a check file of its own.
+fn project_without_checks() -> tempfile::TempDir {
+    let d = project(CHECKS);
+    sh(
+        d.path(),
+        "git rm -q .countercheck/checks.toml && git commit -qm 'no countercheck here'",
+    );
+    d
+}
+
+/// verify with extra args; (exit code, receipt JSON or null, stderr).
+fn verify_with(dir: &Path, args: &[&str]) -> (i32, serde_json::Value, String) {
+    let mut cmd = Command::new(BIN);
+    cmd.args(["verify", "--json", "--repo"]).arg(dir).args(args);
+    if nested() {
+        cmd.args(["--sandbox", "none"]);
+    }
+    let out = cmd.output().unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn checks_from_a_suite_commit_lock_the_checks() {
+    let (suite, commit) = suite_repo(CHECKS);
+    let src = format!("{}@{commit}:suites/proj.toml", suite.path().display());
+    let d = project_without_checks();
+    // The defect: FAILED.
+    let (code, r, err) = verify_with(d.path(), &["--checks-from", &src]);
+    assert_eq!(code, 2, "{err}{r:#}");
+    assert_eq!(r["checks_locked"], true);
+    assert_eq!(r["checks_external"]["kind"], "git");
+    assert_eq!(r["checks_external"]["pinned"], true);
+    assert!(
+        r["checks_source"]
+            .as_str()
+            .unwrap()
+            .starts_with("external: "),
+        "{r:#}"
+    );
+    // Weakening the protected test doesn't help: it comes back from the target's --base.
+    fs::write(d.path().join("tests/check.sh"), "true\n").unwrap();
+    let (code, r, _) = verify_with(d.path(), &["--checks-from", &src]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["protected_changes"][0]["action"], "restored_from_base");
+    // The honest fix: VERIFIED.
+    sh(d.path(), "git checkout -q tests/check.sh");
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r, err) = verify_with(d.path(), &["--checks-from", &src]);
+    assert_eq!(code, 0, "{err}{r:#}");
+    assert_eq!(r["verdict"], "verified");
+}
+
+#[test]
+fn external_checks_replace_the_repository_s_own() {
+    // The repository's own check file passes anything; the suite's doesn't.
+    let d = project("[[check]]\nname = \"always\"\nrun = \"true\"\n");
+    let (suite, commit) = suite_repo(CHECKS);
+    let src = format!("{}@{commit}:suites/proj.toml", suite.path().display());
+    let (code, r, err) = verify_with(d.path(), &["--checks-from", &src]);
+    assert_eq!(code, 2, "{err}{r:#}");
+    assert!(
+        r["checks_source"]
+            .as_str()
+            .unwrap()
+            .contains("own .countercheck/checks.toml was ignored"),
+        "{r:#}"
+    );
+    assert!(!r["checks"].to_string().contains("always"), "{r:#}");
+}
+
+#[test]
+fn checks_from_needs_a_full_commit_id_and_a_real_path() {
+    let (suite, commit) = suite_repo(CHECKS);
+    let d = project_without_checks();
+    let base = suite.path().display().to_string();
+    for (src, want) in [
+        (format!("{base}@main:suites/proj.toml"), "full commit id"),
+        (
+            format!("{base}@{}:suites/proj.toml", &commit[..7]),
+            "full commit id",
+        ),
+        (
+            format!("{base}@{commit}:suites/missing.toml"),
+            "is not in commit",
+        ),
+        (format!("{base}@{commit}:../escape.toml"), "unsafe path"),
+        (
+            format!("{base}@{}:suites/proj.toml", "0".repeat(40)),
+            "--checks-from",
+        ),
+    ] {
+        let (code, _, err) = verify_with(d.path(), &["--checks-from", &src]);
+        assert_eq!(code, 1, "{src}: {err}");
+        assert!(err.contains(want), "{src}: {err}");
+    }
+}
+
+#[test]
+fn a_rewritten_object_in_the_suite_is_refused() {
+    let (suite, commit) = suite_repo(CHECKS);
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(suite.path())
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    let old = git(&["rev-parse", "HEAD:suites/proj.toml"]);
+    fs::write(
+        suite.path().join("suites/proj.toml"),
+        "[[check]]\nname = \"c\"\nrun = \"true\"\n",
+    )
+    .unwrap();
+    let new = git(&["hash-object", "-w", "suites/proj.toml"]);
+    let object = |id: &str| {
+        suite
+            .path()
+            .join(".git/objects")
+            .join(&id[..2])
+            .join(&id[2..])
+    };
+    let mut perms = fs::metadata(object(&old)).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    fs::set_permissions(object(&old), perms).unwrap();
+    fs::copy(object(&new), object(&old)).unwrap();
+    let d = project_without_checks();
+    let src = format!("{}@{commit}:suites/proj.toml", suite.path().display());
+    let (code, _, err) = verify_with(d.path(), &["--checks-from", &src]);
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("does not match its id"), "{err}");
+}
+
+#[test]
+fn a_checks_file_is_locked_only_by_its_pin() {
+    let outside = tempfile::tempdir().unwrap();
+    let file = outside.path().join("proj.toml");
+    fs::write(&file, CHECKS).unwrap();
+    let sha = countercheck_core::sha256_hex(CHECKS.as_bytes());
+    let f = file.to_str().unwrap();
+    let d = project_without_checks();
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    // Pinned: VERIFIED.
+    let (code, r, err) = verify_with(d.path(), &["--checks-from", f, "--checks-sha256", &sha]);
+    assert_eq!(code, 0, "{err}{r:#}");
+    assert_eq!(r["checks_external"]["kind"], "file");
+    assert_eq!(r["checks_external"]["pinned"], true);
+    // Not pinned: UNVERIFIED, with the reason.
+    let (code, r, _) = verify_with(d.path(), &["--checks-from", f]);
+    assert_eq!(code, 3, "{r:#}");
+    assert!(r["reasons"].to_string().contains("not pinned"), "{r:#}");
+    // The file changed after it was pinned (an agent with a shell can do that): an error.
+    fs::write(&file, "[[check]]\nname = \"c\"\nrun = \"true\"\n").unwrap();
+    let (code, _, err) = verify_with(d.path(), &["--checks-from", f, "--checks-sha256", &sha]);
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("not the pinned"), "{err}");
+    // A file inside the repository is refused, pinned or not.
+    let inside = d.path().join("suite.toml");
+    fs::write(&inside, CHECKS).unwrap();
+    let (code, _, err) = verify_with(
+        d.path(),
+        &[
+            "--checks-from",
+            inside.to_str().unwrap(),
+            "--checks-sha256",
+            &sha,
+        ],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("inside the repository"), "{err}");
+    // A file that names other files is refused: each would need its own pin.
+    let golden = "[[check]]\nname = \"g\"\nrun = \"true\"\ngolden = { output = \"o.txt\", expected = \".countercheck/e.txt\" }\n";
+    fs::write(&file, golden).unwrap();
+    let (code, _, err) = verify_with(
+        d.path(),
+        &[
+            "--checks-from",
+            f,
+            "--checks-sha256",
+            &countercheck_core::sha256_hex(golden.as_bytes()),
+        ],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("can't name other files"), "{err}");
+}

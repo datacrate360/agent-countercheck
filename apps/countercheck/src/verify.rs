@@ -1,6 +1,6 @@
 //! The verify flow: lock the checks, snapshot, restore protected files, run, decide, seal.
 
-use crate::{git, golden, runner, scan, snapshot};
+use crate::{external, git, golden, runner, scan, snapshot};
 use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::gitobj::{self, Diff, Files};
 use countercheck_core::protect::{Change, Protected, ProtectedChange};
@@ -18,6 +18,23 @@ pub struct Options {
     pub worker: Worker,
     pub sandbox: runner::Sandbox,
     pub out: Option<PathBuf>,
+    /// `--checks-from`: the checks come from outside the repository (ADR-0002).
+    pub checks_from: Option<String>,
+    /// `--checks-sha256`: the pin for a `--checks-from` file.
+    pub checks_sha256: Option<String>,
+}
+
+/// Where the checks and the files they name (matrix files, coverage lists, golden references)
+/// are read from.
+enum Rules {
+    /// The target repository's base revision (locked).
+    Base,
+    /// The worker's working tree (not locked).
+    WorkTree,
+    /// Another repository at a pinned commit (`--checks-from <repo>@<commit>:<path>`).
+    Suite(Box<git::Revision>),
+    /// A single external file: it may not name other files.
+    File,
 }
 
 pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
@@ -29,37 +46,69 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // replace refs, which the worker can change).
     let mut base = git::Revision::load(&root, &base_commit)?;
 
-    // 1. The checks: from the base revision if they exist there (locked), else the worker's copy.
-    let (checks_text, checks_locked, checks_source) = match base.read(CHECKS_PATH)? {
-        Some(bytes) => (
-            String::from_utf8_lossy(&bytes).into_owned(),
-            true,
-            format!("{CHECKS_PATH} @ {}", opts.base),
-        ),
-        None => match std::fs::read_to_string(root.join(CHECKS_PATH)) {
-            Ok(t) => (
-                t,
-                false,
-                format!("{CHECKS_PATH} (working tree, not in base)"),
-            ),
-            Err(_) => {
-                return Err(format!(
-                    "no {CHECKS_PATH} found; run `countercheck init`, edit it and commit it"
-                ));
+    // 1. The checks: from outside the repository when asked (pinned), else from the base revision
+    // if they exist there (locked), else the worker's copy.
+    let mut checks_external = None;
+    let (checks_text, checks_locked, checks_source, mut rules) =
+        if let Some(src) = &opts.checks_from {
+            let loaded = external::load(src, opts.checks_sha256.as_deref(), &root)?;
+            let mut label = loaded.label;
+            if base.read(CHECKS_PATH)?.is_some() || root.join(CHECKS_PATH).exists() {
+                // External replaces, never merges: a file the worker can edit must not add or
+                // soften rules.
+                label.push_str(&format!("; the repository's own {CHECKS_PATH} was ignored"));
             }
-        },
-    };
+            checks_external = Some(loaded.info);
+            let rules = match loaded.suite {
+                Some(rev) => Rules::Suite(Box::new(rev)),
+                None => Rules::File,
+            };
+            (loaded.text, loaded.locked, label, rules)
+        } else {
+            match base.read(CHECKS_PATH)? {
+                Some(bytes) => (
+                    String::from_utf8_lossy(&bytes).into_owned(),
+                    true,
+                    format!("{CHECKS_PATH} @ {}", opts.base),
+                    Rules::Base,
+                ),
+                None => match std::fs::read_to_string(root.join(CHECKS_PATH)) {
+                    Ok(t) => (
+                        t,
+                        false,
+                        format!("{CHECKS_PATH} (working tree, not in base)"),
+                        Rules::WorkTree,
+                    ),
+                    Err(_) => {
+                        return Err(format!(
+                            "no {CHECKS_PATH} found; run `countercheck init`, edit it and commit it"
+                        ));
+                    }
+                },
+            }
+        };
     let checks = config::parse(&checks_text)?;
+    if matches!(rules, Rules::File)
+        && (!checks.locked_files().is_empty() || checks.checks.iter().any(|c| c.golden.is_some()))
+    {
+        return Err(
+            "--checks-from: a check file given as a file can't name other files (matrix_file, coverage items, golden); put the suite in a git repository and use <repo>@<commit>:<path>"
+                .to_string(),
+        );
+    }
     // Matrix files and coverage item lists come from the same place as the check file, so the
     // worker can't shrink the lists.
     let mut locked_texts = std::collections::BTreeMap::new();
     for path in checks.locked_files() {
-        let bytes = if checks_locked {
-            base.read(&path)?
-                .ok_or_else(|| format!("{path} is not in the base revision"))?
-        } else {
-            std::fs::read(root.join(snapshot::safe_rel(&path)?))
-                .map_err(|e| format!("{path}: {e}"))?
+        let bytes = match &mut rules {
+            Rules::Base => base
+                .read(&path)?
+                .ok_or_else(|| format!("{path} is not in the base revision"))?,
+            Rules::Suite(suite) => suite
+                .read(&path)?
+                .ok_or_else(|| format!("{path} is not in the --checks-from commit"))?,
+            Rules::WorkTree | Rules::File => std::fs::read(root.join(snapshot::safe_rel(&path)?))
+                .map_err(|e| format!("{path}: {e}"))?,
         };
         if bytes.len() > MAX_LIST_BYTES {
             return Err(format!("{path} is larger than {MAX_LIST_BYTES} bytes"));
@@ -184,7 +233,15 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         };
         // The reference comes from the base revision (like the check file) when the checks are
         // locked, so neither the worker nor a check command can change it.
-        let expected = if checks_locked {
+        let expected = if let Rules::Suite(suite) = &mut rules {
+            match suite.read_real(&g.expected)? {
+                Some(bytes) => Ok(bytes),
+                None => Err(format!(
+                    "the expected file {} is not in the --checks-from commit",
+                    g.expected
+                )),
+            }
+        } else if checks_locked {
             match base.read_real(&g.expected)? {
                 Some(bytes) => Ok(bytes),
                 None => Err(format!(
@@ -217,7 +274,15 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
     // 5. Decide (uncovered changed files can only add a reason or turn VERIFIED into UNVERIFIED),
     // seal, save.
-    let (verdict, reasons) = receipt::decide(checks_locked, &results, &protected_changes);
+    let (verdict, mut reasons) = receipt::decide(checks_locked, &results, &protected_changes);
+    if checks_external.as_ref().is_some_and(|e| !e.pinned) {
+        // Same verdict (not locked), but the right reason.
+        for r in reasons.iter_mut() {
+            if r.starts_with("the checks are not in the base revision") {
+                *r = "the --checks-from file is not pinned (no --checks-sha256), so the worker could have changed it".to_string();
+            }
+        }
+    }
     let uncovered = if checks.uncovered_enabled() {
         let covers = Protected::labeled(&checks.covers_patterns(), "covers pattern")?;
         Some(uncovered::find(
@@ -255,6 +320,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         claim_status,
         checks_locked,
         checks_source,
+        checks_external,
         sandbox: opts.sandbox.label().to_string(),
         tree_sha256,
         linked,

@@ -8,6 +8,7 @@
     clippy::unreachable
 )]
 
+mod external;
 mod git;
 mod golden;
 mod hook;
@@ -73,6 +74,13 @@ enum Cmd {
         /// Where to save receipts (default: <repo>/.countercheck/receipts).
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Read the checks from outside the repository: `<suite repo>@<full commit id>:<path>`, or a
+        /// file with --checks-sha256 (without the hash the checks aren't locked: UNVERIFIED).
+        #[arg(long, value_name = "SOURCE")]
+        checks_from: Option<String>,
+        /// The SHA-256 the --checks-from file must have (pins it).
+        #[arg(long, value_name = "HEX", requires = "checks_from")]
+        checks_sha256: Option<String>,
     },
     /// Write a starter .countercheck/checks.toml.
     Init {
@@ -151,6 +159,8 @@ fn run(cli: Cli) -> Result<u8, String> {
             sandbox,
             json,
             out,
+            checks_from,
+            checks_sha256,
         } => {
             let sandbox = match sandbox {
                 SandboxArg::Auto if runner::seatbelt_works() => runner::Sandbox::Seatbelt,
@@ -200,6 +210,8 @@ fn run(cli: Cli) -> Result<u8, String> {
                 },
                 sandbox,
                 out,
+                checks_from,
+                checks_sha256,
             };
             let (receipt, path) = verify::verify(&opts)?;
             if json {
