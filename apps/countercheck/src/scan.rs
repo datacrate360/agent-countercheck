@@ -88,6 +88,7 @@ pub fn forbid_all(
                 passed,
                 output_sha256: countercheck_core::sha256_hex(output.as_bytes()),
                 network: false,
+                writes: Vec::new(),
                 output_tail: output,
             }
         })
@@ -129,6 +130,7 @@ pub fn coverage_all(
             passed,
             output_sha256: countercheck_core::sha256_hex(output.as_bytes()),
             network: false,
+            writes: Vec::new(),
             output_tail: output,
         });
     }

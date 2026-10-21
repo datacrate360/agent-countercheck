@@ -2532,3 +2532,123 @@ fn forbid_added_catches_a_copied_old_line_and_scope_all_is_unchanged() {
         "{r:#}"
     );
 }
+
+// ---- extra write locations per check (issue #18) ----
+
+/// `verify` that is expected to stop with an error: (exit code, stderr).
+fn verify_fails(dir: &Path) -> (Option<i32>, String) {
+    let out = Command::new(BIN)
+        .args(["verify", "--repo"])
+        .arg(dir)
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn writes_lets_one_check_write_there_and_nowhere_else() {
+    if nested() {
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let base = outside.path().canonicalize().unwrap();
+    let allowed = base.join("runner-scratch");
+    let other = base.join("other");
+    let checks = format!(
+        "[[check]]\nname = \"allowed\"\nrun = \"mkdir -p '{a}/sub' && echo x > '{a}/sub/f'\"\nwrites = [\"{a}\"]\n\
+         [[check]]\nname = \"elsewhere\"\nrun = \"echo x > '{o}'\"\nwrites = [\"{a}\"]\n\
+         [[check]]\nname = \"not listed\"\nrun = \"echo x > '{a}/g'\"\n",
+        a = allowed.display(),
+        o = other.display()
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let by = |n: &str| {
+        r["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == n)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(by("allowed")["passed"], true, "{r:#}");
+    assert!(allowed.join("sub/f").exists());
+    assert_eq!(by("allowed")["writes"][0], allowed.display().to_string());
+    // Only that location, and only for the check that lists it.
+    assert_eq!(by("elsewhere")["passed"], false);
+    assert!(!other.exists());
+    assert_eq!(by("not listed")["passed"], false);
+    assert!(!allowed.join("g").exists());
+    assert!(by("not listed").get("writes").is_none());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn writes_never_reaches_the_repository_or_home() {
+    if nested() {
+        return;
+    }
+    // The repository itself, a folder inside it, and home are refused before anything runs.
+    for target in ["{repo}", "{repo}/tests", "{home}", "/Users"] {
+        let p = project("[[check]]\nname = \"c\"\nrun = \"true\"\n");
+        let proj = p.path().canonicalize().unwrap();
+        let w = target.replace("{repo}", &proj.display().to_string());
+        fs::write(
+            p.path().join(".countercheck/checks.toml"),
+            format!("[[check]]\nname = \"c\"\nrun = \"true\"\nwrites = [\"{w}\"]\n"),
+        )
+        .unwrap();
+        sh(p.path(), "git commit -qam 'writes'");
+        let (code, err) = verify_fails(p.path());
+        assert_eq!(code, Some(1), "{target}: {err}");
+        assert!(err.contains("writes path"), "{target}: {err}");
+    }
+    // A symlink that points into the repository is followed and refused too.
+    let outside = tempfile::tempdir().unwrap();
+    let link = outside.path().canonicalize().unwrap().join("innocent");
+    let p = project("[[check]]\nname = \"c\"\nrun = \"true\"\n");
+    std::os::unix::fs::symlink(p.path().join("src"), &link).unwrap();
+    fs::write(
+        p.path().join(".countercheck/checks.toml"),
+        format!(
+            "[[check]]\nname = \"c\"\nrun = \"true\"\nwrites = [\"{}\"]\n",
+            link.display()
+        ),
+    )
+    .unwrap();
+    sh(p.path(), "git commit -qam 'writes via a symlink'");
+    let (code, err) = verify_fails(p.path());
+    assert_eq!(code, Some(1), "{err}");
+    assert!(err.contains("repository"), "{err}");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_worker_cannot_grant_itself_writes() {
+    if nested() {
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().canonicalize().unwrap().join("leak");
+    let checks = format!(
+        "[[check]]\nname = \"c\"\nrun = \"echo x > '{}'\"\n",
+        target.display()
+    );
+    let d = project(&checks);
+    // The worker adds `writes` to its copy of the check file: the base version is used.
+    fs::write(
+        d.path().join(".countercheck/checks.toml"),
+        format!("{checks}writes = [\"{}\"]\n", target.display()),
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert!(!target.exists());
+    assert!(r["checks"][0].get("writes").is_none(), "{r:#}");
+}

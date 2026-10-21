@@ -32,9 +32,20 @@ fn check_result() -> impl Strategy<Value = CheckResult> {
         any::<bool>(),
         text(),
         "[0-9a-f]{0,64}",
+        proptest::collection::vec(text(), 0..2),
     )
         .prop_map(
-            |(name, run, exit_code, timed_out, duration_ms, passed, output_tail, output_sha256)| {
+            |(
+                name,
+                run,
+                exit_code,
+                timed_out,
+                duration_ms,
+                passed,
+                output_tail,
+                output_sha256,
+                writes,
+            )| {
                 CheckResult {
                     name,
                     run,
@@ -45,6 +56,7 @@ fn check_result() -> impl Strategy<Value = CheckResult> {
                     output_tail,
                     output_sha256,
                     network: false,
+                    writes,
                 }
             },
         )
@@ -252,6 +264,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
             output_tail: String::new(),
             output_sha256: String::new(),
             network: false,
+            writes: Vec::new(),
         });
         return &mut r.checks[0];
     }
@@ -259,7 +272,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 37;
+const EDITS: usize = 38;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -324,6 +337,7 @@ fn edit(r: &mut Receipt, which: usize) {
         29 => first_check(r).output_sha256.push('x'),
         30 => r.verdict = other_verdict(r.verdict),
         31 => first_check(r).network ^= true,
+        36 => first_check(r).writes.push("/var/tmp/x".into()),
         32 => match &mut r.uncovered {
             Some(u) => u.total = u.total.wrapping_add(1),
             None => {

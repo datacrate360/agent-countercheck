@@ -290,6 +290,12 @@ fn run_html(e: &Entry, open: bool) -> String {
     );
     for c in &r.checks {
         let net = if c.network { " · internet" } else { "" };
+        let writes = if c.writes.is_empty() {
+            String::new()
+        } else {
+            format!(" · writes {}", escape(&c.writes.join(", ")))
+        };
+        let net = format!("{net}{writes}");
         let mark = if c.passed {
             "<td class=\"ok\">pass</td>"
         } else {
@@ -451,6 +457,7 @@ mod tests {
             output_tail: out.to_string(),
             output_sha256: String::new(),
             network: false,
+            writes: Vec::new(),
         }
     }
 

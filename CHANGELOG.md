@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **New: `writes = [...]` on a `[[check]]`** ([#18](https://github.com/datacrate360/agent-countercheck/issues/18)).
+  Lets one check write to a fixed location under the macOS sandbox (e.g. `/var/tmp/hermes-pytest-{uid}`), so a test
+  runner with a hard-coded scratch path no longer forces `--sandbox none`. Absolute paths with `{uid}`, `{user}`,
+  `{home}`; after symlinks are followed, `/`, the home folder (or above) and the repository (inside, equal or above)
+  are refused before anything runs. Read from the locked check file; shown on the receipt per check as `writes
+  allowed: ...` (new optional field, older receipts still verify). The write-denied hint now suggests it.
+
 ## v0.6.0 (2026-10-21)
 
 - **New: `watched` paths** ([#19](https://github.com/datacrate360/agent-countercheck/issues/19)). Files the agent may
