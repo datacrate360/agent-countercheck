@@ -150,7 +150,7 @@ Pick one. Every option gives you the same `countercheck` command.
 Check it worked:
 
 ```sh
-countercheck --version        # countercheck 0.5.2
+countercheck --version        # countercheck 0.5.3
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win)**: Countercheck calls `git`, and checks run
@@ -501,7 +501,7 @@ Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add 
 
 A referee has to be right, so Countercheck is tested harder than most tools its size:
 
-- **224 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **225 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, the macOS sandbox, both agent hooks, every check type), and **property
   tests** that throw thousands of generated inputs at the verdict and seal logic (e.g. a receipt's seal breaks if any
   one of 35 fields changes; `decide` never says VERIFIED when a check failed).

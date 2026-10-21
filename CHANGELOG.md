@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.3 (2026-10-21)
 
 - **Fix: on macOS and Linux, processes a check leaves running in the background are stopped when the check ends.**
   A check that started a server or `sleep 300 &` and exited could pass while that process kept running (and kept

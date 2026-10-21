@@ -25,6 +25,7 @@ section. Ideas and use cases are welcome as issues.
 | Receipts list changed files no check covers (`covers`, `uncovered = "unverified"`, #6) | v0.5.0 |
 | Security: changes decided from file bytes, base read from hash-checked git objects; no writes through symlinked folders (2026-10 audit) | v0.5.1 |
 | Protected files in Git LFS: real content from the local LFS store, hash-checked (#11) | v0.5.2 |
+| macOS/Linux: background processes a check leaves running are stopped when it ends (process group killed after every check) | v0.5.3 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |
