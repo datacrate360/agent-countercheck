@@ -2716,31 +2716,31 @@ fn the_linux_sandbox_kills_what_a_check_detached_with_setsid() {
         eprintln!("skipped: no Landlock on this kernel");
         return;
     }
-    let outside = tempfile::tempdir().unwrap();
-    let dir = outside.path().canonicalize().unwrap();
-    let pid_file = dir.join("daemon.pid");
-    // A daemon that leaves the process group and session, and the check exits at once.
+    // Found by a unique command line, which every PID namespace shows the same way (a pid the
+    // daemon prints would be its pid inside the check's namespace).
+    let marker = format!("{}", 40_000 + std::process::id() % 20_000);
     let checks = format!(
-        "[[check]]\nname = \"daemon\"\nrun = \"setsid sh -c 'echo $$ > {p}; exec sleep 300' & sleep 0.5; exit 0\"\nwrites = [\"{d}\"]\n",
-        p = pid_file.display(),
-        d = dir.display()
+        "[[check]]\nname = \"daemon\"\nrun = \"setsid sh -c 'exec sleep {marker}' & sleep 0.5; exit 0\"\n"
     );
     let d = project(&checks);
     let (code, r) = countercheck(d.path(), &[]);
     assert_eq!(code, 0, "{r:#}");
-    let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
+    let alive = || {
+        Command::new("pgrep")
+            .args(["-f", &format!("^sleep {marker}$")])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
     for _ in 0..30 {
-        let state = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
-        let running = state
-            .rsplit_once(')')
-            .is_some_and(|(_, rest)| !rest.trim_start().starts_with('Z'));
-        if !running {
+        if !alive() {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    let _ = Command::new("kill").args(["-9", &pid]).status();
-    panic!("the setsid daemon {pid} survived its check");
+    let _ = Command::new("pkill")
+        .args(["-f", &format!("^sleep {marker}$")])
+        .status();
+    panic!("the setsid daemon (sleep {marker}) survived its check");
 }
 
 #[cfg(target_os = "linux")]
