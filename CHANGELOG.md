@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Docs: lock the test runner's settings, not just the tests.** With only `tests/**` protected, an agent could skip
+  or deselect a failing test from outside `tests/` (a `conftest.py` in any folder, `addopts` in `pyproject.toml` or
+  `pytest.ini`) and get VERIFIED. The README setup and `docs/checks.md` now protect the test-only config files and pin
+  pytest's settings in the locked command; notes for jest, go and cargo; new
+  [examples/python-pytest](examples/python-pytest/) proves each trick now fails (run in CI). `pyproject.toml` is
+  deliberately not protected: it holds dependencies. Suggested in a reply to the launch post.
+
 ## v0.5.3 (2026-10-21)
 
 - **Fix: on macOS and Linux, processes a check leaves running in the background are stopped when the check ends.**
