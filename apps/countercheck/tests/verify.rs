@@ -2336,3 +2336,199 @@ fn a_changed_lfs_store_is_refused() {
     assert_eq!(code, Some(1), "{err}");
     assert!(err.contains("does not match its pointer"), "{err}");
 }
+
+// ---- watched paths (issue #19) ----
+
+/// Checks that pass once calc is fixed, with tests/** watched (not protected).
+const WATCHED: &str = "watched = [\"tests/**\"]\n[[check]]\nname = \"calc\"\nrun = \"sh tests/check.sh\"\ntimeout_secs = 30\n";
+
+#[test]
+fn watched_test_edits_are_listed_on_the_receipt() {
+    let d = project(WATCHED);
+    fix_calc(d.path());
+    // The worker edits the existing test (still passing) and adds a new one.
+    fs::write(
+        d.path().join("tests/check.sh"),
+        "# double-checked\n[ \"$(sh src/calc.sh 2 3)\" = 5 ]\n",
+    )
+    .unwrap();
+    fs::write(d.path().join("tests/more.sh"), "true\ntrue\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["verdict"], "verified");
+    let w = &r["watched"];
+    assert_eq!(w["total"], 2, "{r:#}");
+    assert_eq!(w["existing_changed"], 1);
+    assert_eq!(w["changes"][0]["path"], "tests/check.sh");
+    assert_eq!(w["changes"][0]["change"], "modified");
+    assert_eq!(w["changes"][0]["lines_added"], 1);
+    assert_eq!(w["changes"][0]["lines_removed"], 0);
+    assert_eq!(w["changes"][1]["path"], "tests/more.sh");
+    assert_eq!(w["changes"][1]["change"], "added");
+    assert_eq!(w["changes"][1]["lines_added"], 2);
+    let reasons = r["reasons"].to_string();
+    assert!(
+        reasons.contains("M tests/check.sh (+1 -0)") && reasons.contains("A tests/more.sh"),
+        "{reasons}"
+    );
+    // Nothing protected changed: the edit stays and is only reported.
+    assert_eq!(r["protected_changes"], serde_json::json!([]));
+}
+
+#[test]
+fn watched_mode_unverified_flags_edits_to_existing_files_only() {
+    let checks = format!("watched_mode = \"unverified\"\n{WATCHED}");
+    // Only a new test: still VERIFIED.
+    let d = project(&checks);
+    fix_calc(d.path());
+    fs::write(d.path().join("tests/more.sh"), "true\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["verdict"], "verified");
+    // Weakening the existing test: UNVERIFIED (exit 3), with the file named.
+    let d = project(&checks);
+    fix_calc(d.path());
+    fs::write(d.path().join("tests/check.sh"), "true\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 3, "{r:#}");
+    assert_eq!(r["verdict"], "unverified");
+    assert!(
+        r["reasons"].to_string().contains("M tests/check.sh"),
+        "{r:#}"
+    );
+    // Deleting an existing watched file, with a failing check: FAILED stays FAILED.
+    let failing = "watched_mode = \"unverified\"\nwatched = [\"tests/**\"]\n[[check]]\nname = \"t\"\nrun = \"sh tests/other.sh\"\n";
+    let d = project(failing);
+    fs::remove_file(d.path().join("tests/check.sh")).unwrap();
+    fs::write(d.path().join("tests/other.sh"), "exit 1\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["verdict"], "failed");
+    let changes = r["watched"]["changes"].to_string();
+    assert!(changes.contains("\"deleted\""), "{r:#}");
+}
+
+#[test]
+fn watched_comes_from_the_base_and_protected_wins() {
+    let checks = format!("protected = [\"tests/check.sh\"]\n{WATCHED}");
+    let d = project(&checks);
+    fix_calc(d.path());
+    fs::write(d.path().join("tests/more.sh"), "true\n").unwrap();
+    // The worker drops `watched` from its copy of the check file and edits the protected test.
+    fs::write(
+        d.path().join(".countercheck/checks.toml"),
+        "[[check]]\nname = \"calc\"\nrun = \"true\"\n",
+    )
+    .unwrap();
+    fs::write(d.path().join("tests/check.sh"), "true\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    // The base check file still watches tests/**: the new test is listed...
+    let paths: Vec<&str> = r["watched"]["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths, vec!["tests/more.sh"], "{r:#}");
+    // ...and the protected test is restored and reported as protected, not as watched.
+    let restored: Vec<&str> = r["protected_changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["path"].as_str().unwrap())
+        .collect();
+    assert!(restored.contains(&"tests/check.sh"), "{r:#}");
+}
+
+#[test]
+fn no_watched_section_without_watched_paths() {
+    let d = project(CHECKS);
+    fix_calc(d.path());
+    let (_, r) = countercheck(d.path(), &[]);
+    assert!(r.get("watched").is_none(), "{r:#}");
+}
+
+// ---- forbid scope = "added" (issue #17) ----
+
+const FORBID_ADDED: &str = "[[check]]\nname = \"calc\"\nrun = \"sh tests/check.sh\"\ntimeout_secs = 30\n[[forbid]]\nname = \"no skipped tests\"\npattern = 'skip\\('\npaths = [\"tests/**\"]\nscope = \"added\"\n";
+
+/// A project whose base already has one legitimate skip in tests/.
+fn project_with_a_skip(checks: &str) -> tempfile::TempDir {
+    let d = project(checks);
+    fs::write(
+        d.path().join("tests/legacy.py"),
+        "def test_db():\n    skip(\"needs a database\")\n",
+    )
+    .unwrap();
+    sh(d.path(), "git add -A && git commit -qm legacy");
+    d
+}
+
+#[test]
+fn forbid_added_ignores_old_lines_and_catches_new_ones() {
+    // The old skip alone passes.
+    let d = project_with_a_skip(FORBID_ADDED);
+    fix_calc(d.path());
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let f = r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "forbid (added lines): no skipped tests")
+        .unwrap_or_else(|| panic!("{r:#}"));
+    assert_eq!(f["passed"], true);
+    // A new skip in the same file and one in a new file: FAILED, only the new lines named.
+    fs::write(
+        d.path().join("tests/legacy.py"),
+        "def test_db():\n    skip(\"needs a database\")\n\ndef test_calc():\n    skip(\"flaky\")\n",
+    )
+    .unwrap();
+    fs::write(d.path().join("tests/new.py"), "skip(\"later\")\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let f = r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "forbid (added lines): no skipped tests")
+        .unwrap();
+    let out = f["output_tail"].as_str().unwrap();
+    assert!(
+        out.contains("2 new (added since the base) forbidden line(s)"),
+        "{out}"
+    );
+    assert!(
+        out.contains("tests/legacy.py:5:") && out.contains("tests/new.py:1:"),
+        "{out}"
+    );
+    assert!(
+        !out.contains("tests/legacy.py:2:"),
+        "the old skip is not new: {out}"
+    );
+}
+
+#[test]
+fn forbid_added_catches_a_copied_old_line_and_scope_all_is_unchanged() {
+    // Copying the existing skip line still adds a skip.
+    let d = project_with_a_skip(FORBID_ADDED);
+    fix_calc(d.path());
+    fs::write(
+        d.path().join("tests/legacy.py"),
+        "def test_db():\n    skip(\"needs a database\")\n\ndef test_x():\n    skip(\"needs a database\")\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    // Without `scope`, the old line fails as before.
+    let all = FORBID_ADDED.replace("scope = \"added\"\n", "");
+    let d = project_with_a_skip(&all);
+    fix_calc(d.path());
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert!(
+        r["checks"].to_string().contains("forbid: no skipped tests"),
+        "{r:#}"
+    );
+}

@@ -58,6 +58,14 @@ pub struct ChecksFile {
     /// What a changed file no check `covers` does: `"note"` (listed, default) or `"unverified"`.
     #[serde(default, skip_serializing_if = "crate::uncovered::Mode::is_default")]
     pub uncovered: crate::uncovered::Mode,
+    /// Paths the worker may change, but every change is listed on the receipt (globs, like
+    /// `protected`). A path that is also protected is protected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub watched: Vec<String>,
+    /// What modifying or deleting an existing watched file does: `"note"` (default) or
+    /// `"unverified"`.
+    #[serde(default, skip_serializing_if = "crate::watched::Mode::is_default")]
+    pub watched_mode: crate::watched::Mode,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -254,6 +262,14 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
         }
     }
     crate::protect::Protected::new(&file.protected_patterns())?;
+    if !file.watched.is_empty() {
+        crate::protect::Protected::labeled(&file.watched, "watched pattern")?;
+    }
+    if file.watched_mode == crate::watched::Mode::Unverified && file.watched.is_empty() {
+        return Err(
+            "watched_mode = \"unverified\" needs watched = [...] (the paths to watch)".to_string(),
+        );
+    }
     if file.uncovered == crate::uncovered::Mode::Unverified && !file.uncovered_enabled() {
         return Err(
             "uncovered = \"unverified\" needs at least one [[check]] with covers = [...], or every change would be uncovered"
@@ -914,5 +930,25 @@ mod tests {
     #[test]
     fn template_parses() {
         assert!(parse(TEMPLATE).is_ok());
+    }
+
+    #[test]
+    fn watched_parses_and_is_validated() {
+        let f = parse("watched = [\"tests/**\"]\nwatched_mode = \"unverified\"\n[[check]]\nname = \"t\"\nrun = \"true\"\n")
+            .unwrap();
+        assert_eq!(f.watched, vec!["tests/**"]);
+        assert_eq!(f.watched_mode, crate::watched::Mode::Unverified);
+        // The default is note, and an old file parses as before.
+        let f = parse("[[check]]\nname = \"t\"\nrun = \"true\"\n").unwrap();
+        assert!(f.watched.is_empty());
+        assert_eq!(f.watched_mode, crate::watched::Mode::Note);
+        for bad in [
+            "watched_mode = \"unverified\"\n",
+            "watched = [\"tests/[\"]\n",
+            "watched_mode = \"maybe\"\nwatched = [\"t/**\"]\n",
+        ] {
+            let text = format!("{bad}[[check]]\nname = \"t\"\nrun = \"true\"\n");
+            assert!(parse(&text).is_err(), "{bad}");
+        }
     }
 }

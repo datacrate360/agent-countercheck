@@ -9,6 +9,8 @@
 //! - [`matrix`]: running one check once per target value.
 //! - [`protect`]: which paths a worker may not change (tests, the check file itself).
 //! - [`receipt`]: the record of one verification and how its verdict is decided.
+//! - [`uncovered`]: changed files no check covers.
+//! - [`watched`]: changed files that may change but are always listed on the receipt.
 //!
 //! Nothing here touches the file system, processes or the network; the `countercheck` binary does that.
 #![deny(
@@ -32,6 +34,7 @@ pub mod protect;
 pub mod receipt;
 pub mod report;
 pub mod uncovered;
+pub mod watched;
 
 /// Hex SHA-256 of some bytes.
 pub fn sha256_hex(bytes: &[u8]) -> String {
