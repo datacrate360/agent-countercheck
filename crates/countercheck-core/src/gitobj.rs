@@ -187,9 +187,82 @@ pub fn eol_equal(base: &[u8], worker: &[u8]) -> bool {
     w.next().is_none()
 }
 
+/// A Git LFS pointer: the small text file git stores in place of a large file
+/// (<https://github.com/git-lfs/git-lfs/blob/main/docs/spec.md>).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LfsPointer {
+    /// SHA-256 of the real content, 64 lowercase hex characters.
+    pub oid: String,
+    pub size: u64,
+}
+
+/// Pointer files are small; anything bigger is a real file.
+const MAX_POINTER_BYTES: usize = 1024;
+
+/// The LFS pointer in `body`, when it is one: UTF-8, `version https://git-lfs.github.com/spec/v1`
+/// on the first line, an `oid sha256:<64 hex>` line and a `size <digits>` line.
+pub fn lfs_pointer(body: &[u8]) -> Option<LfsPointer> {
+    if body.len() > MAX_POINTER_BYTES {
+        return None;
+    }
+    let text = std::str::from_utf8(body).ok()?;
+    let mut lines = text.lines();
+    if lines.next()? != "version https://git-lfs.github.com/spec/v1" {
+        return None;
+    }
+    let (mut oid, mut size) = (None, None);
+    for line in lines {
+        if let Some(h) = line.strip_prefix("oid sha256:") {
+            if h.len() == 64
+                && h.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            {
+                oid = Some(h.to_string());
+            } else {
+                return None;
+            }
+        } else if let Some(n) = line.strip_prefix("size ") {
+            if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            size = Some(n.parse().ok()?);
+        }
+    }
+    Some(LfsPointer {
+        oid: oid?,
+        size: size?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lfs_pointers_are_recognised_strictly() {
+        let oid = "4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393";
+        let p =
+            format!("version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize 12345\n");
+        assert_eq!(
+            lfs_pointer(p.as_bytes()),
+            Some(LfsPointer {
+                oid: oid.into(),
+                size: 12345
+            })
+        );
+        // Not pointers: wrong version line, no oid, uppercase or short hex, no size, too big.
+        assert!(lfs_pointer(b"version x\noid sha256:aa\nsize 1\n").is_none());
+        assert!(lfs_pointer(b"version https://git-lfs.github.com/spec/v1\nsize 1\n").is_none());
+        let upper = p.replace(oid, &oid.to_uppercase());
+        assert!(lfs_pointer(upper.as_bytes()).is_none());
+        let short = p.replace(oid, &oid[..63]);
+        assert!(lfs_pointer(short.as_bytes()).is_none());
+        let nosize = format!("version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\n");
+        assert!(lfs_pointer(nosize.as_bytes()).is_none());
+        let big = format!("{p}{}", "x".repeat(2000));
+        assert!(lfs_pointer(big.as_bytes()).is_none());
+        assert!(lfs_pointer(b"id,amount\n1,10.50\n").is_none());
+    }
 
     #[test]
     fn ids_match_git() {

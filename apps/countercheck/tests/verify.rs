@@ -2121,3 +2121,86 @@ fn golden_output_is_never_cleared_through_a_symlinked_folder() {
         "keep me\n"
     );
 }
+
+// ---- protected files stored in Git LFS (issue #11) ----
+
+const LFS_REAL: &str = "id\nrow1\n";
+/// The check passes only when it sees the real content, not the pointer.
+const LFS_CHECKS: &str = "protected = [\"tests/**\"]\n[[check]]\nname = \"fixture\"\nrun = \"grep -qx row1 tests/data.csv\"\ntimeout_secs = 30\n";
+
+/// A project whose protected tests/data.csv is stored in Git LFS: the commit holds the pointer,
+/// the local LFS store and the working tree hold the real content (as `git lfs` leaves them).
+/// `store` = what goes in the LFS store (None: not on this computer).
+fn lfs_project(store: Option<&str>) -> tempfile::TempDir {
+    let d = project(LFS_CHECKS);
+    let p = d.path();
+    let oid = countercheck_core::sha256_hex(LFS_REAL.as_bytes());
+    let pointer = format!(
+        "version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {}\n",
+        LFS_REAL.len()
+    );
+    fs::write(p.join("tests/data.csv"), &pointer).unwrap();
+    sh(p, "git add -A && git commit -qm 'lfs fixture'");
+    if let Some(content) = store {
+        let dir = p.join(".git/lfs/objects").join(&oid[..2]).join(&oid[2..4]);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(&oid), content).unwrap();
+    }
+    fs::write(p.join("tests/data.csv"), LFS_REAL).unwrap();
+    d
+}
+
+#[test]
+fn an_untouched_lfs_test_file_is_not_a_change_and_checks_see_its_content() {
+    let d = lfs_project(Some(LFS_REAL));
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["protected_changes"], serde_json::json!([]), "{r:#}");
+}
+
+#[test]
+fn an_edited_lfs_test_file_is_restored_with_its_real_content() {
+    let d = lfs_project(Some(LFS_REAL));
+    fs::write(d.path().join("tests/data.csv"), "id\nweakened\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    // The check ran with the base content (row1), so it passed; the edit is on the receipt.
+    assert_eq!(code, 0, "{r:#}");
+    assert_eq!(r["protected_changes"][0]["path"], "tests/data.csv", "{r:#}");
+    assert_eq!(r["protected_changes"][0]["action"], "restored_from_base");
+}
+
+fn verify_error(dir: &Path) -> (Option<i32>, String) {
+    let mut cmd = Command::new(BIN);
+    cmd.args(["verify", "--repo"]).arg(dir);
+    if nested() {
+        cmd.args(["--sandbox", "none"]);
+    }
+    let out = cmd.output().unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn an_edited_lfs_test_file_without_its_content_is_a_plain_error() {
+    let d = lfs_project(None);
+    fs::write(d.path().join("tests/data.csv"), "id\nweakened\n").unwrap();
+    let (code, err) = verify_error(d.path());
+    assert_eq!(code, Some(1), "{err}");
+    assert!(
+        err.contains("stored in Git LFS") && err.contains("git lfs pull"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_changed_lfs_store_is_refused() {
+    // The worker rewrites the stored content to match its weakened file: the sha256 no longer
+    // matches the pointer in the base, so nothing is trusted.
+    let d = lfs_project(Some("id\nweakened\n"));
+    fs::write(d.path().join("tests/data.csv"), "id\nweakened\n").unwrap();
+    let (code, err) = verify_error(d.path());
+    assert_eq!(code, Some(1), "{err}");
+    assert!(err.contains("does not match its pointer"), "{err}");
+}

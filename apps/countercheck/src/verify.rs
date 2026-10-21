@@ -98,7 +98,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
                 // The same file with CRLF line endings (e.g. `core.autocrlf`): not a change, but
                 // a protected file still runs with its exact base bytes.
                 if protected.matches(&path) {
-                    snapshot::restore(&work, &path, base.read(&path)?.as_deref())?;
+                    snapshot::restore(&work, &path, base.read_real(&path)?.as_deref())?;
                 }
                 continue;
             }
@@ -109,7 +109,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         }
         let pc = ProtectedChange::decide(&path, change);
         if pc.action == "restored_from_base" {
-            snapshot::restore(&work, &path, base.read(&path)?.as_deref())?;
+            snapshot::restore(&work, &path, base.read_real(&path)?.as_deref())?;
         }
         protected_changes.push(pc);
     }
@@ -144,7 +144,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         // The reference comes from the base revision (like the check file) when the checks are
         // locked, so neither the worker nor a check command can change it.
         let expected = if checks_locked {
-            match base.read(&g.expected)? {
+            match base.read_real(&g.expected)? {
                 Some(bytes) => Ok(bytes),
                 None => Err(format!(
                     "the expected file {} is not in the base revision",
@@ -241,21 +241,36 @@ fn compare(
     work: &std::path::Path,
 ) -> Result<Vec<(Diff, String)>, String> {
     let mut diff = gitobj::diff(base.files(), copied);
+    let mut same = Vec::new();
     for (d, path) in diff.iter_mut() {
         let both_files = base.files().get(path.as_str()).is_some_and(|f| !f.symlink)
             && copied.get(path.as_str()).is_some_and(|f| !f.symlink);
         if *d != Diff::Modified || !both_files {
             continue;
         }
-        let Some(was) = base.read(path)? else {
+        let Some(mut was) = base.read(path)? else {
             continue;
         };
         let now = std::fs::read(work.join(snapshot::safe_rel(path)?))
             .map_err(|e| format!("{path}: {e}"))?;
+        // Stored in Git LFS: compare with the real content (checked against the pointer). If it
+        // isn't available or doesn't check out, the file counts as changed; a protected one then
+        // fails with a plain error when it is restored.
+        if gitobj::lfs_pointer(&was).is_some() {
+            match base.read_real(path) {
+                Ok(Some(real)) => was = real,
+                _ => continue,
+            }
+            if was == now {
+                same.push(path.clone());
+                continue;
+            }
+        }
         if gitobj::eol_equal(&was, &now) {
             *d = Diff::LineEndings;
         }
     }
+    diff.retain(|(_, p)| !same.contains(p));
     Ok(diff)
 }
 

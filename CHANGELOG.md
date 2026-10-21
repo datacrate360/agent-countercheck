@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: protected files stored in Git LFS work again** ([#11](https://github.com/datacrate360/agent-countercheck/issues/11)).
+  Since v0.5.1 the base is read from git's own objects, which for an LFS file is the small pointer, so an untouched
+  LFS test fixture counted as changed and the checks ran against the pointer. Now the real content comes from the
+  local LFS store, checked against the pointer's SHA-256 and size: an untouched file isn't a change, an edited one is
+  put back with its real content, and a changed LFS store is refused like a changed git object. If the content isn't
+  on the computer, `verify` says so (`git lfs pull`) instead of failing the check. Golden expected files stored in LFS
+  are read the same way.
+
 ## v0.5.1 (2026-10-20)
 
 **Upgrade:** security fix. With v0.5.0 and earlier, an agent that changed settings in the project's own `.git` could
