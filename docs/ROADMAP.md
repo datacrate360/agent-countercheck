@@ -27,7 +27,8 @@ section. Ideas and use cases are welcome as issues.
 | Protected files in Git LFS: real content from the local LFS store, hash-checked (#11) | v0.5.2 |
 | macOS/Linux: background processes a check leaves running are stopped when it ends (process group killed after every check) | v0.5.3 |
 | `watched` paths: every change to files the agent may edit is listed on the receipt, optionally UNVERIFIED (#19); `[[forbid]] scope = "added"`: only lines new since the base (#17); sandbox hints tell a refused write from a refused connection (#16); Cortex Code Stop hook reads its session files | v0.6.0 |
-| Linux sandbox: Landlock confines writes; user + network + PID namespaces block the internet (localhost allowed) and stop everything a check started, `setsid` included; a subreaper does it where namespaces are blocked. No root needed | next |
+| Linux sandbox: Landlock confines writes; user + network + PID namespaces block the internet (localhost allowed) and stop everything a check started, `setsid` included; a subreaper does it where namespaces are blocked. No root needed | v0.7.0 |
+| `--checks-from`: checks kept outside the repository, pinned by a suite commit or SHA-256 (#20, ADR-0002); `writes = [...]` per check (#18); macOS stops processes a check detached with `setsid`; `watched` line counts like `git diff --stat` | v0.7.0 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |

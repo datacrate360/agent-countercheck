@@ -1,11 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.7.0 (2026-10-22)
 
-- **Fix: on macOS, processes a check detached with `setsid` (double fork, new session) are stopped when it ends.**
-  macOS has no subreaper or PID namespace, so after each check a cheap `ps` lists young orphans of this user, and a
-  targeted `lsof` confirms which ones have their working folder in the check folder or still hold the check's output;
-  those are killed. A process that also leaves the folder and closes its output can still escape (documented).
+A sandbox on Linux, checks kept outside the repository, and detached processes stopped on every OS.
+
 - **New: a sandbox on Linux.** Checks run through `countercheck sandbox-exec`, with no root needed:
   **Landlock** confines writes to the check folder, its temp dir and `writes = [...]` (and, on kernels 6.7+, stops
   signals and abstract sockets reaching outside processes); where the system allows unprivileged user namespaces, a
@@ -14,7 +12,6 @@
   (Docker's default profile, some hardened servers) writes are still confined, the internet is not, and the receipt's
   `sandbox` says exactly that; a **subreaper** then finds and kills detached processes. `--sandbox auto` picks it
   on Linux; `--sandbox landlock` requires it. The write and no-internet hints work under it too.
-- **Fix: a check's detached processes (`setsid`, double fork) are stopped on Linux** when it ends or times out.
 - **New: `--checks-from`, checks kept outside the repository** ([#20](https://github.com/datacrate360/agent-countercheck/issues/20),
   [ADR-0002](docs/decisions/0002-external-checks.md)). Verify work on a repository you don't control:
   `--checks-from <suite repo>@<full commit id>:<path>` (read through the hash-checked object reader; branch and tag
@@ -22,15 +19,20 @@
   unpinned file gives UNVERIFIED, a changed pinned file an error, a file inside the repository is refused. External
   checks replace the repository's own (never merged), and the receipt records the source (`checks_external`,
   optional field). Command line only.
-- **`watched` line counts are a real line diff**, the same numbers as `git diff --stat` (a moved line now counts as
-  one removed and one added; before, lines were matched by text and a move counted as nothing).
-- `writes` asks for the user id only when a path uses `{uid}`.
 - **New: `writes = [...]` on a `[[check]]`** ([#18](https://github.com/datacrate360/agent-countercheck/issues/18)).
   Lets one check write to a fixed location under the macOS sandbox (e.g. `/var/tmp/hermes-pytest-{uid}`), so a test
   runner with a hard-coded scratch path no longer forces `--sandbox none`. Absolute paths with `{uid}`, `{user}`,
   `{home}`; after symlinks are followed, `/`, the home folder (or above) and the repository (inside, equal or above)
   are refused before anything runs. Read from the locked check file; shown on the receipt per check as `writes
   allowed: ...` (new optional field, older receipts still verify). The write-denied hint now suggests it.
+- **Fix: a check's detached processes (`setsid`, double fork) are stopped on Linux** when it ends or times out.
+- **Fix: on macOS, processes a check detached with `setsid` (double fork, new session) are stopped when it ends.**
+  macOS has no subreaper or PID namespace, so after each check a cheap `ps` lists young orphans of this user, and a
+  targeted `lsof` confirms which ones have their working folder in the check folder or still hold the check's output;
+  those are killed. A process that also leaves the folder and closes its output can still escape (documented).
+- **`watched` line counts are a real line diff**, the same numbers as `git diff --stat` (a moved line now counts as
+  one removed and one added; before, lines were matched by text and a move counted as nothing).
+- `writes` asks for the user id only when a path uses `{uid}`.
 
 ## v0.6.0 (2026-10-21)
 

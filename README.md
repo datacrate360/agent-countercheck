@@ -150,7 +150,7 @@ Pick one. Every option gives you the same `countercheck` command.
 Check it worked:
 
 ```sh
-countercheck --version        # countercheck 0.6.0
+countercheck --version        # countercheck 0.7.0
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win)**: Countercheck calls `git`, and checks run
@@ -522,7 +522,7 @@ Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add 
 
 A referee has to be right, so Countercheck is tested harder than most tools its size:
 
-- **244 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **262 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, the macOS sandbox, both agent hooks, every check type), and **property
   tests** that throw thousands of generated inputs at the verdict and seal logic (e.g. a receipt's seal breaks if any
   one of 35 fields changes; `decide` never says VERIFIED when a check failed).
@@ -559,7 +559,7 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 ## Status
 
-v0.6 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows runs checks without one (the receipt says
+v0.7 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows runs checks without one (the receipt says
 so). Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, a Windows sandbox, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
