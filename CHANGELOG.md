@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 (2026-10-21)
 
 - **New: `watched` paths** ([#19](https://github.com/datacrate360/agent-countercheck/issues/19)). Files the agent may
   change, but every change is listed on the receipt (`A`/`M`/`D` with line counts) and in `show`, `report` and `ui`:
