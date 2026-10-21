@@ -59,6 +59,10 @@ pub struct CheckResult {
     /// The check ran with internet access (`network = true`). Absent on older receipts.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub network: bool,
+    /// Extra locations the sandbox let this check write to (`writes = [...]`), resolved. Absent on
+    /// older receipts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub writes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -246,8 +250,13 @@ impl Receipt {
         for r in &self.checks {
             let mark = if r.passed { "pass" } else { "FAIL" };
             let net = if r.network { ", internet allowed" } else { "" };
+            let writes = if r.writes.is_empty() {
+                String::new()
+            } else {
+                format!(", writes allowed: {}", r.writes.join(", "))
+            };
             s.push_str(&format!(
-                "  [{mark}] {}  ({} ms{net})  $ {}\n",
+                "  [{mark}] {}  ({} ms{net}{writes})  $ {}\n",
                 r.name, r.duration_ms, r.run
             ));
             if !r.passed {
@@ -320,6 +329,7 @@ mod tests {
             output_tail: String::new(),
             output_sha256: String::new(),
             network: false,
+            writes: Vec::new(),
         }
     }
 

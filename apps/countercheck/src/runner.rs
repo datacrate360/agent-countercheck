@@ -53,13 +53,18 @@ fn sb_str(p: &Path) -> String {
         .replace('"', "\\\"")
 }
 
-fn seatbelt_profile(workdir: &Path, tmp: &Path, network: bool) -> String {
+fn seatbelt_profile(workdir: &Path, tmp: &Path, network: bool, writes: &[PathBuf]) -> String {
+    // Extra locations from `writes = [...]` (validated and resolved before the check runs).
+    let extra: String = writes
+        .iter()
+        .map(|p| format!(" (subpath \"{}\")", sb_str(p)))
+        .collect();
     if network {
         // `network = true`: the project says this check needs the internet. Writes stay confined.
         return format!(
             "(version 1)\n(allow default)\n\
              (deny file-write*)\n\
-             (allow file-write* (subpath \"{}\") (subpath \"{}\") (literal \"/dev/null\") \
+             (allow file-write* (subpath \"{}\") (subpath \"{}\"){extra} (literal \"/dev/null\") \
              (regex #\"^/dev/tty\") (regex #\"^/dev/fd/\"))\n",
             sb_str(workdir),
             sb_str(tmp)
@@ -74,11 +79,63 @@ fn seatbelt_profile(workdir: &Path, tmp: &Path, network: bool) -> String {
          (allow network-inbound (local ip \"localhost:*\"))\n\
          (allow network-outbound (remote ip \"localhost:*\"))\n\
          (deny file-write*)\n\
-         (allow file-write* (subpath \"{}\") (subpath \"{}\") (literal \"/dev/null\") \
+         (allow file-write* (subpath \"{}\") (subpath \"{}\"){extra} (literal \"/dev/null\") \
          (regex #\"^/dev/tty\") (regex #\"^/dev/fd/\"))\n",
         sb_str(workdir),
         sb_str(tmp)
     )
+}
+
+/// The extra write locations of a check (`writes = [...]`), with placeholders filled in and
+/// symlinks resolved, refused if they could reach the repository or the home folder. Only used
+/// under the sandbox; without one, nothing restricts writes anyway.
+pub fn resolve_writes(spec: &PlannedCheck, repo: &Path) -> Result<Vec<PathBuf>, String> {
+    if spec.writes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let home = std::env::var("HOME").map_err(|_| "writes: HOME is not set".to_string())?;
+    let user = std::env::var("USER").unwrap_or_default();
+    let uid = Command::new("/usr/bin/id")
+        .arg("-u")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    let real_home = resolve_existing(Path::new(&home));
+    let real_repo = resolve_existing(repo);
+    let mut out = Vec::new();
+    for t in &spec.writes {
+        let path = countercheck_core::writes::expand(t, &uid, &user, &home)
+            .map_err(|e| format!("check \"{}\": {e}", spec.name))?;
+        let real = resolve_existing(Path::new(&path));
+        countercheck_core::writes::check_resolved(
+            &spec.name,
+            &real.to_string_lossy(),
+            &real_home.to_string_lossy(),
+            &real_repo.to_string_lossy(),
+        )?;
+        out.push(real);
+    }
+    Ok(out)
+}
+
+/// `path` with symlinks resolved as far as it exists, the rest appended (a location the check
+/// creates doesn't exist yet). `/var/tmp/x` becomes `/private/var/tmp/x` on macOS.
+fn resolve_existing(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut cur = path.to_path_buf();
+    loop {
+        if let Ok(real) = cur.canonicalize() {
+            return rest.iter().rev().fold(real, |p: PathBuf, seg| p.join(seg));
+        }
+        match (cur.file_name().map(|s| s.to_os_string()), cur.parent()) {
+            (Some(name), Some(parent)) => {
+                rest.push(name);
+                cur = parent.to_path_buf();
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
 }
 
 /// Shown when a check needs `sh` and Windows has none.
@@ -207,6 +264,7 @@ fn not_started(spec: &PlannedCheck, why: String) -> CheckResult {
         output_sha256: countercheck_core::sha256_hex(why.as_bytes()),
         output_tail: why,
         network: spec.network,
+        writes: Vec::new(),
     }
 }
 
@@ -265,6 +323,7 @@ pub fn run_check(
     workdir: &Path,
     tmp: &Path,
     sandbox: Sandbox,
+    writes: &[PathBuf],
 ) -> Result<CheckResult, String> {
     let program = match shell_program(spec.shell) {
         Ok(p) => p,
@@ -279,7 +338,7 @@ pub fn run_check(
         Sandbox::Seatbelt => {
             let mut c = Command::new("/usr/bin/sandbox-exec");
             c.arg("-p")
-                .arg(seatbelt_profile(workdir, tmp, spec.network))
+                .arg(seatbelt_profile(workdir, tmp, spec.network, writes))
                 .arg(&program);
             c
         }
@@ -350,6 +409,14 @@ pub fn run_check(
         output_tail,
         output_sha256,
         network: spec.network,
+        writes: if sandbox == Sandbox::Seatbelt {
+            writes
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect()
+        } else {
+            Vec::new()
+        },
     };
     if let Some(b) = &spec.budget
         && result.passed
@@ -458,7 +525,8 @@ fn write_denied_hint(path: &str) -> String {
     format!(
         "\n[countercheck] this check tried to write outside the check folder ({path}); the sandbox allows \
          writes only in the check folder and the temp dir. Point the tool at $TMPDIR if it can be \
-         changed, or run with --sandbox none (the receipt says so)"
+         changed, or allow that location for this check with `writes = [\"...\"]` in \
+         .countercheck/checks.toml"
     )
 }
 
@@ -466,11 +534,11 @@ fn write_denied_hint(path: &str) -> String {
 pub const UNCLEAR_DENIAL_NETWORK_HINT: &str = "\n[countercheck] the sandbox refused something this check \
     did (\"Operation not permitted\"): a connection to the internet, or a write outside the check folder and the \
     temp dir. If it needs the internet, set `network = true` on it in .countercheck/checks.toml; if it writes to a \
-    fixed path, point it at $TMPDIR or run with --sandbox none (the receipt says so)";
+    fixed path, point it at $TMPDIR or allow it with `writes = [\"...\"]` on the check";
 /// The same, for a check that already has `network = true` (so only a write can be refused).
 pub const UNCLEAR_DENIAL_HINT: &str = "\n[countercheck] the sandbox refused something this check did \
     (\"Operation not permitted\"), probably a write outside the check folder and the temp dir; point it at \
-    $TMPDIR or run with --sandbox none (the receipt says so)";
+    $TMPDIR or allow the location with `writes = [\"...\"]` on the check";
 
 /// Added to a failed check that ran without internet access.
 pub const NO_INTERNET_HINT: &str = "\n[countercheck] this check ran without internet access (sandbox); \
@@ -624,6 +692,7 @@ mod tests {
             budget: None,
             network: false,
             shell: Shell::Sh,
+            writes: Vec::new(),
         };
         let r = not_started(&spec, NO_SH.to_string());
         assert!(!r.passed && !r.timed_out && r.exit_code.is_none());

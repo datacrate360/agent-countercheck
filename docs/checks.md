@@ -82,11 +82,39 @@ network = true
   FAILED: a failure that might be caused by the missing internet is still a failure until the check file says the
   check may use it.
 - The hint only appears when the output looks like a connection error (can't resolve, unreachable).
-- **Writes outside the check folder** (and the temp dir) are refused too. When the output names the refused path
+- **Writes outside the check folder** (and the temp dir) are refused too; a check that must write to a fixed path
+  can be allowed one with [`writes`](#checks-that-write-to-a-fixed-path). When the output names the refused path
   (`Operation not permitted: '/var/tmp/x'`, `EPERM … open '/var/tmp/x'`), the hint says the check tried to write
   there, not that it lacked the internet. A bare "Operation not permitted" with no path is what both a refused
   connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict.
 - On Linux and Windows there is no sandbox yet, so checks always have the internet there, and the hint never shows.
+
+### Checks that write to a fixed path
+
+Some test runners always write to the same place, whatever `TMPDIR` says (a per-user scratch folder like
+`/var/tmp/hermes-pytest-<uid>`). Under the macOS sandbox that write is refused, and the only other way out,
+`--sandbox none`, drops every protection. Allow that one location on that one check:
+
+```toml
+[[check]]
+name = "tests (official runner)"
+run = "scripts/run_tests.sh"
+writes = ["/var/tmp/hermes-pytest-{uid}"]   # this check may also write here (and below it)
+```
+
+```text
+  [pass] tests (official runner)  (8.2 s, writes allowed: /private/var/tmp/hermes-pytest-501)  $ scripts/run_tests.sh
+```
+
+- Absolute paths, with the placeholders `{uid}`, `{user}` and `{home}`. No `.`/`..`, globs, quotes or `$`; at most 8
+  per check.
+- **Refused** (an error before any check runs), after symlinks are followed: `/` and other one-folder paths, your home
+  folder or anything above it, and the repository, anything inside it or above it. A check can't use `writes` to change
+  the worker's files or yours.
+- It lives in the locked check file, so a worker can't grant itself a write location. The internet stays blocked
+  unless the check also has `network = true`.
+- The receipt shows the resolved locations on that check (`writes allowed: ...`). On Linux and Windows there is no
+  sandbox yet, so nothing restricts writes there and `writes` has no effect.
 
 ### Lock the test runner's settings
 

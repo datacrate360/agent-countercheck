@@ -99,6 +99,10 @@ pub struct CheckSpec {
     /// receipt lists changed files that no check covers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub covers: Vec<String>,
+    /// Extra locations this check may write to under the macOS sandbox (absolute paths with
+    /// `{uid}`, `{user}`, `{home}` placeholders). Set in the locked check file, like `network`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub writes: Vec<String>,
 }
 
 /// The shell a check's `run` is given to.
@@ -136,6 +140,8 @@ pub struct PlannedCheck {
     /// Internet allowed for this run (`network = true` on the check).
     pub network: bool,
     pub shell: Shell,
+    /// Extra write locations (templates, as written in the check file).
+    pub writes: Vec<String>,
 }
 
 fn default_timeout() -> u64 {
@@ -262,6 +268,9 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
         }
     }
     crate::protect::Protected::new(&file.protected_patterns())?;
+    for c in &file.checks {
+        crate::writes::validate(&c.name, &c.writes)?;
+    }
     if !file.watched.is_empty() {
         crate::protect::Protected::labeled(&file.watched, "watched pattern")?;
     }
@@ -418,6 +427,7 @@ fn plan_inner(
                 budget: c.budget.clone(),
                 network: c.network,
                 shell: c.shell,
+                writes: c.writes.clone(),
             });
             continue;
         };
@@ -445,6 +455,7 @@ fn plan_inner(
                 budget: c.budget.clone(),
                 network: c.network,
                 shell: c.shell,
+                writes: c.writes.clone(),
             });
             if out.len() > matrix::MAX_EXPANSIONS {
                 break; // refused just below; stop before building more
@@ -950,5 +961,16 @@ mod tests {
             let text = format!("{bad}[[check]]\nname = \"t\"\nrun = \"true\"\n");
             assert!(parse(&text).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn writes_is_parsed_and_validated() {
+        let f = parse("[[check]]\nname = \"t\"\nrun = \"true\"\nwrites = [\"/var/tmp/x-{uid}\"]\n")
+            .unwrap();
+        assert_eq!(f.checks[0].writes, vec!["/var/tmp/x-{uid}"]);
+        assert!(parse("[[check]]\nname = \"t\"\nrun = \"true\"\nwrites = [\"tmp/x\"]\n").is_err());
+        assert!(
+            parse("[[check]]\nname = \"t\"\nrun = \"true\"\nwrites = [\"/var/../etc\"]\n").is_err()
+        );
     }
 }

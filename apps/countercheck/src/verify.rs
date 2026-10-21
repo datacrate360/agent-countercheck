@@ -165,10 +165,19 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             &files,
         )?);
     }
-    let mut results = Vec::new();
+    // Extra write locations, checked before anything runs (only the sandbox restricts writes).
+    let mut writes = Vec::new();
     for spec in &planned {
+        writes.push(if opts.sandbox == runner::Sandbox::Seatbelt {
+            runner::resolve_writes(spec, &root)?
+        } else {
+            Vec::new()
+        });
+    }
+    let mut results = Vec::new();
+    for (spec, writes) in planned.iter().zip(&writes) {
         let Some(g) = &spec.golden else {
-            let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox)?;
+            let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox, writes)?;
             note_links_as_text(&mut result, &links_as_text);
             results.push(result);
             continue;
@@ -199,7 +208,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             }
         });
         golden::clear_output(&work, g)?;
-        let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox)?;
+        let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox, writes)?;
         golden::judge(&work, g, &expected, &mut result);
         note_links_as_text(&mut result, &links_as_text);
         results.push(result);
