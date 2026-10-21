@@ -254,5 +254,6 @@ Oracle answer back, ran the checks again, and the receipt said `protected Modifi
 - **No sandbox with `--sandbox none`** (Part 2): the checks run as a normal process with your permissions. They are
   your checks, in your repo, so that is the same trust as running them yourself.
 - **Cortex Code's hooks are taken from Snowflake's documentation**; this setup hasn't yet been run in a real Cortex
-  Code session. If the hook doesn't fire, run `countercheck verify` yourself when the agent says done, and please
+  Code session, and Snowflake's CLI docs list the Stop hook as unable to block, so the push-back may not reach the
+  agent (the receipt is written either way; [details](../../docs/hooks/claude-code.md#cortex-code)). If the hook doesn't fire, run `countercheck verify` yourself when the agent says done, and please
   [open an issue](https://github.com/datacrate360/agent-countercheck/issues) with what you saw.

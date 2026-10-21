@@ -92,6 +92,19 @@ with `COUNTERCHECK_HOOK_DISABLED=1`). The hard guarantee is the same check in CI
 
 ## Cortex Code
 
-Snowflake's Cortex Code reads the same hook format from the same settings files, so the snippet above works there
-too. Receipts record the agent as `claude-code`, because the hook input doesn't say which of the two tools is
-running. This adapter hasn't been tested in a real Cortex Code session.
+Snowflake's Cortex Code (CoCo) reads hooks from the same settings files (project `.claude/settings.json` or
+`.cortex/settings.json`, and `~/.snowflake/cortex/hooks.json`), and sends the same fields on stdin (`session_id`,
+`transcript_path`, `cwd`, `hook_event_name`), so the snippet above works there too. What differs, and what
+Countercheck does about it:
+
+- **No `last_assistant_message`.** The claim is read from Cortex Code's own session files in
+  `~/.snowflake/cortex/conversations/`: `<id>.json`, with the messages in its `history` array or in
+  `<id>.history.jsonl` next to it. `transcript_path` may name either file.
+- **The receipt says `cortex-code`** when the transcript is under `.snowflake/cortex/`, else `claude-code`.
+- **Whether Stop can push back is not settled.** Snowflake's Desktop hooks page says Stop "can force continuation";
+  the CLI page lists Stop as unable to block. If the CLI ignores the push-back, the receipt is still written (FAILED
+  when the work fails), but the agent is not sent back to work: read it with `countercheck report --open`.
+
+Tested only with hook input and session files shaped from Snowflake's docs, its `cortex-code-agent-sdk` types and
+the `cortex-replay` parser; not yet in a real Cortex Code session. If you try it, please
+[open an issue](https://github.com/datacrate360/agent-countercheck/issues) with what you saw.

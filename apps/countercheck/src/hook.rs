@@ -212,7 +212,7 @@ fn has_checks(root: &Path, session: &str) -> bool {
     })
 }
 
-/// Claude Code `Stop` (Cortex Code reads the same format): stdin is the Stop hook JSON; stdout is
+/// Claude Code `Stop` (Cortex Code sends the same input): stdin is the Stop hook JSON; stdout is
 /// `{"decision":"block","reason":...}` or nothing. Same env as the Hermes hook, plus
 /// `COUNTERCHECK_MAX_NUDGES` (default 3): after that many push-backs in one session the agent may
 /// stop, so the hook never blocks forever.
@@ -231,7 +231,7 @@ pub fn claude_stop() -> Result<(), String> {
             .or_else(|| std::env::current_dir().ok())
             .ok_or("no working directory in hook input")?,
         claim,
-        agent: "claude-code",
+        agent: agent_from_transcript(text("transcript_path").unwrap_or("")),
         model: text("model").map(str::to_string),
         session: text("session_id").unwrap_or("").to_string(),
     };
@@ -249,6 +249,16 @@ pub fn claude_stop() -> Result<(), String> {
         println!("{out}");
     }
     Ok(())
+}
+
+/// Claude Code and Cortex Code send the same Stop input; only where the transcript lives tells
+/// them apart (Cortex Code keeps sessions in `~/.snowflake/cortex/conversations/`).
+fn agent_from_transcript(path: &str) -> &'static str {
+    if path.replace('\\', "/").contains("/.snowflake/cortex/") {
+        "cortex-code"
+    } else {
+        "claude-code"
+    }
 }
 
 /// The commit the checks are locked to: `COUNTERCHECK_BASE` if set, else the commit this session
@@ -387,48 +397,84 @@ fn safe_id(session: &str) -> String {
     }
 }
 
-/// The text of the last assistant message in a Claude Code transcript (JSON Lines). Only the last
-/// 8 MiB are read. Any problem (missing file, bad lines) means no claim, never an error.
+/// The text of the last assistant message in the transcript. Any problem (missing file, bad lines)
+/// means no claim, never an error. Two layouts:
+/// - Claude Code: JSON Lines of `{"type":"assistant","message":{"content":...}}`.
+/// - Cortex Code: `<id>.json` holds the session, with the messages in a `history` array (older
+///   versions) or in `<id>.history.jsonl` next to it, one `{"role":"assistant","content":...}` per
+///   line. `transcript_path` may name either file.
 fn last_assistant_text(path: &str) -> Option<String> {
-    use std::io::{Seek, SeekFrom};
-    const TAIL: u64 = 8 * 1024 * 1024;
-    // `~/...` (or `~\...` on Windows, where the home folder is USERPROFILE when HOME isn't set).
+    let path = home_path(path);
+    let (text, whole) = read_tail(&path)?;
+    last_in_lines(&text)
+        .or_else(|| {
+            // a whole JSON document with a `history` array (only when the file was read in full)
+            let doc: serde_json::Value = serde_json::from_str(&text).ok().filter(|_| whole)?;
+            doc.get("history")?
+                .as_array()?
+                .iter()
+                .rev()
+                .find_map(assistant_text)
+        })
+        .or_else(|| {
+            let name = path.file_name()?.to_str()?.strip_suffix(".json")?;
+            let (text, _) = read_tail(&path.with_file_name(format!("{name}.history.jsonl")))?;
+            last_in_lines(&text)
+        })
+}
+
+/// `~/...` (or `~\...` on Windows, where the home folder is USERPROFILE when HOME isn't set).
+fn home_path(path: &str) -> PathBuf {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     let rest = path
         .strip_prefix("~/")
         .or_else(|| path.strip_prefix("~\\").filter(|_| cfg!(windows)));
-    let path = match (rest, home) {
+    match (rest, home) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
         _ => PathBuf::from(path),
-    };
+    }
+}
+
+/// The last 8 MiB of a file, and whether that is the whole file.
+fn read_tail(path: &Path) -> Option<(String, bool)> {
+    use std::io::{Seek, SeekFrom};
+    const TAIL: u64 = 8 * 1024 * 1024;
     let mut f = std::fs::File::open(path).ok()?;
     let len = f.metadata().ok()?.len();
     f.seek(SeekFrom::Start(len.saturating_sub(TAIL))).ok()?;
     let mut bytes = Vec::new();
     f.take(TAIL).read_to_end(&mut bytes).ok()?;
-    String::from_utf8_lossy(&bytes)
-        .lines()
-        .rev()
-        .find_map(|line| {
-            let v: serde_json::Value = serde_json::from_str(line).ok()?;
-            let msg = v.get("message")?;
-            if v.get("type").and_then(|t| t.as_str()) != Some("assistant")
-                && msg.get("role").and_then(|r| r.as_str()) != Some("assistant")
-            {
-                return None;
-            }
-            let text = match msg.get("content")? {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Array(blocks) => blocks
-                    .iter()
-                    .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
-                    .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                _ => return None,
-            };
-            (!text.trim().is_empty()).then_some(text)
-        })
+    Some((String::from_utf8_lossy(&bytes).into_owned(), len <= TAIL))
+}
+
+/// The last assistant text in JSON Lines.
+fn last_in_lines(text: &str) -> Option<String> {
+    text.lines().rev().find_map(|line| {
+        let v: serde_json::Value = serde_json::from_str(line).ok()?;
+        assistant_text(&v)
+    })
+}
+
+/// The text of one transcript entry, if it is an assistant message with text: Claude Code's
+/// `{"type":"assistant","message":{...}}` or Cortex Code's bare `{"role":"assistant",...}`.
+fn assistant_text(v: &serde_json::Value) -> Option<String> {
+    let msg = v.get("message").unwrap_or(v);
+    if v.get("type").and_then(|t| t.as_str()) != Some("assistant")
+        && msg.get("role").and_then(|r| r.as_str()) != Some("assistant")
+    {
+        return None;
+    }
+    let text = match msg.get("content")? {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(blocks) => blocks
+            .iter()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => return None,
+    };
+    (!text.trim().is_empty()).then_some(text)
 }
 
 /// Only a FAILED verdict keeps the agent going; VERIFIED and UNVERIFIED stay silent. A FAILED

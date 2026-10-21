@@ -1524,6 +1524,72 @@ fn claude_hook_reads_the_final_message_from_the_transcript() {
     assert_eq!(line["agent_reported_blocker"], true);
 }
 
+/// A Cortex Code session in `<home>/.snowflake/cortex/conversations/`: `<id>.json` with the
+/// messages either in `history` (`legacy`) or in `<id>.history.jsonl`. Returns the two paths.
+/// Layout from cortex-replay's parser (github.com/dataprofessor/cortex-replay, src/parser.mjs);
+/// not captured from a real install.
+fn cortex_session(home: &Path, id: &str, last: &str, legacy: bool) -> (String, String) {
+    let dir = home.join(".snowflake/cortex/conversations");
+    fs::create_dir_all(&dir).unwrap();
+    let history = [
+        serde_json::json!({"role": "user", "content": [{"type": "text", "text": "fix calc"}]}),
+        serde_json::json!({"role": "assistant", "content": [{"type": "text", "text": "Fixed it, all tests pass."}]}),
+        serde_json::json!({"role": "assistant", "content": [{"type": "text", "text": last}],
+            "user_sent_time": "2026-10-21T10:01:00Z"}),
+        serde_json::json!({"role": "assistant", "content": [{"type": "tool_use",
+            "tool_use": {"tool_use_id": "t1", "name": "bash", "input": {}}}]}),
+    ];
+    let meta = serde_json::json!({
+        "session_id": id, "title": "t",
+        "history": if legacy { history.to_vec() } else { vec![] },
+    });
+    let json = dir.join(format!("{id}.json"));
+    fs::write(&json, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+    let jsonl = dir.join(format!("{id}.history.jsonl"));
+    if !legacy {
+        let text: String = history.iter().map(|l| format!("{l}\n")).collect();
+        fs::write(&jsonl, text).unwrap();
+    }
+    (
+        json.to_string_lossy().into_owned(),
+        jsonl.to_string_lossy().into_owned(),
+    )
+}
+
+/// Cortex Code's Stop input has no `last_assistant_message`: the claim comes from its own
+/// transcript layout, and the receipt names Cortex Code.
+#[test]
+fn cortex_code_stop_reads_the_claim_from_its_session_files() {
+    let d = project(CHECKS);
+    let home = tempfile::tempdir().unwrap();
+    let said = "I can't make it pass: it contradicts the spec.";
+    let (json, jsonl) = cortex_session(home.path(), "c1", said, false);
+    let (legacy, _) = cortex_session(home.path(), "c2", said, true);
+    for transcript in [json, jsonl, legacy] {
+        let input = serde_json::json!({
+            "session_id": "c1",
+            "transcript_path": transcript,
+            "cwd": d.path(),
+            "permission_mode": "default",
+            "hook_event_name": "Stop",
+        })
+        .to_string();
+        let log = d.path().join("hook.log");
+        let _ = fs::remove_file(&log);
+        let (code, out) = claude_hook(&input, &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())]);
+        // The last text reports a blocker, so the FAILED work may stop.
+        assert_eq!((code, out.trim()), (0, ""), "{transcript}");
+        let line: serde_json::Value =
+            serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
+        assert_eq!(line["agent_reported_blocker"], true, "{transcript}");
+        let receipt: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(line["receipt"].as_str().unwrap()).unwrap())
+                .unwrap();
+        assert_eq!(receipt["claim"], said, "{transcript}");
+        assert_eq!(receipt["worker"]["agent"], "cortex-code");
+    }
+}
+
 #[test]
 fn claude_hook_treats_a_missing_transcript_as_no_claim() {
     let d = project(CHECKS);

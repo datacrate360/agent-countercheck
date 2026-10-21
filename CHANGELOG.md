@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fix: the Stop hook reads Cortex Code's final message, and the receipt names Cortex Code.** Cortex Code's Stop
+  input has no `last_assistant_message`, and its transcript isn't Claude Code's JSON Lines, so every Cortex Code
+  receipt had no claim, and an agent honestly reporting "this can't pass, because …" was still pushed back until the
+  loop guard let it go. The hook now also reads Cortex Code's session files (`<id>.json` with a `history` array, or
+  `<id>.history.jsonl`), and records the agent as `cortex-code` when the transcript is under `.snowflake/cortex/`.
+  Docs now say that Snowflake's CLI page lists Stop as unable to block. Still not tried in a real Cortex Code session.
 - **Docs: lock the test runner's settings, not just the tests.** With only `tests/**` protected, an agent could skip
   or deselect a failing test from outside `tests/` (a `conftest.py` in any folder, `addopts` in `pyproject.toml` or
   `pytest.ini`) and get VERIFIED. The README setup and `docs/checks.md` now protect the test-only config files and pin

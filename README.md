@@ -93,7 +93,7 @@ The code behind each rule, one run step by step, and where new work plugs in: [d
 | You use | How Countercheck plugs in |
 |---|---|
 | Claude Code | `Stop` hook: `countercheck hook claude-stop` ([step 4a](#4a-claude-code-and-cortex-code)) |
-| Cortex Code (Snowflake) | same hook format as Claude Code (not yet tried on a real install) |
+| Cortex Code (Snowflake) | same hooks as Claude Code ([what differs](docs/hooks/claude-code.md#cortex-code); not yet tried on a real install) |
 | Hermes Agent | `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | Codex, Cursor, Copilot, Aider, OpenClaw, your scripts | run `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); dedicated hooks planned |
 | CI | `countercheck verify --base origin/main`; fail the job on any exit code but `0` ([step 4d](#4d-ci)) |
