@@ -95,12 +95,16 @@ pub fn resolve_writes(spec: &PlannedCheck, repo: &Path) -> Result<Vec<PathBuf>, 
     }
     let home = std::env::var("HOME").map_err(|_| "writes: HOME is not set".to_string())?;
     let user = std::env::var("USER").unwrap_or_default();
-    let uid = Command::new("/usr/bin/id")
-        .arg("-u")
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
+    let uid = if spec.writes.iter().any(|t| t.contains("{uid}")) {
+        Command::new("/usr/bin/id")
+            .arg("-u")
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
     let real_home = resolve_existing(Path::new(&home));
     let real_repo = resolve_existing(repo);
     let mut out = Vec::new();

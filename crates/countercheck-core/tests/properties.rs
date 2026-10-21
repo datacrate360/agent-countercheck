@@ -695,6 +695,27 @@ proptest! {
     }
 }
 
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// Line counts behave like `git diff --stat`: nothing for an unchanged file, the net change
+    /// in line count is added - removed, swapping the sides swaps the counts, and neither count
+    /// exceeds the file it came from.
+    #[test]
+    fn watched_line_counts_are_a_real_diff(
+        a in proptest::collection::vec("[abc]{0,2}", 0..20),
+        b in proptest::collection::vec("[abc]{0,2}", 0..20),
+    ) {
+        let (ta, tb) = (format!("{}\n", a.join("\n")), format!("{}\n", b.join("\n")));
+        let (la, lb) = (ta.lines().count() as i64, tb.lines().count() as i64);
+        prop_assert_eq!(watched::line_delta(ta.as_bytes(), ta.as_bytes()), Some((0, 0)));
+        let (add, rem) = watched::line_delta(ta.as_bytes(), tb.as_bytes()).unwrap();
+        prop_assert_eq!(add as i64 - rem as i64, lb - la);
+        prop_assert!(add as i64 <= lb && rem as i64 <= la);
+        prop_assert_eq!(watched::line_delta(tb.as_bytes(), ta.as_bytes()), Some((rem, add)));
+    }
+}
+
 // ---- forbid scope = "added" (issue #17) ----
 
 proptest! {

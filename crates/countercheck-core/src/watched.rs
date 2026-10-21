@@ -18,7 +18,6 @@
 use crate::protect::{self, Change, Protected};
 use crate::receipt::Verdict;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// At most this many changes are stored on the receipt; `total` always counts them all.
 pub const MAX_SHOWN: usize = 100;
@@ -88,30 +87,44 @@ pub struct Watched {
     pub changes: Vec<WatchedChange>,
 }
 
-/// Lines added and removed between two versions of a file, counted by line text (so a moved line
-/// counts as neither). `None` when either side is binary or too large.
+/// Longest a line diff may take before it settles for a valid but less minimal one.
+const DIFF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Lines added and removed between two versions of a file, like `git diff --stat`: a Myers line
+/// diff, so a moved line counts as one removed and one added. Line endings are ignored (a file
+/// that only changed CRLF to LF is no change). `None` when either side is binary or too large.
 pub fn line_delta(was: &[u8], now: &[u8]) -> Option<(u64, u64)> {
-    let lines = |b: &[u8]| -> Option<HashMap<String, i64>> {
+    let text = |b: &[u8]| -> Option<Vec<String>> {
         if b.len() > MAX_COUNT_BYTES || b.contains(&0) {
             return None;
         }
-        let mut m: HashMap<String, i64> = HashMap::new();
-        for line in String::from_utf8_lossy(b).lines() {
-            *m.entry(line.trim_end_matches('\r').to_string())
-                .or_default() += 1;
-        }
-        Some(m)
+        Some(
+            String::from_utf8_lossy(b)
+                .lines()
+                .map(|l| l.trim_end_matches('\r').to_string())
+                .collect(),
+        )
     };
-    let (was, now) = (lines(was)?, lines(now)?);
-    let mut added = 0u64;
-    let mut removed = 0u64;
-    for (line, n) in &now {
-        let before = was.get(line).copied().unwrap_or(0);
-        added += u64::try_from((n - before).max(0)).unwrap_or(0);
-    }
-    for (line, n) in &was {
-        let after = now.get(line).copied().unwrap_or(0);
-        removed += u64::try_from((n - after).max(0)).unwrap_or(0);
+    let (was, now) = (text(was)?, text(now)?);
+    let ops = similar::capture_diff_slices_deadline(
+        similar::Algorithm::Myers,
+        &was,
+        &now,
+        Some(std::time::Instant::now() + DIFF_DEADLINE),
+    );
+    let (mut added, mut removed) = (0u64, 0u64);
+    for op in ops {
+        match op {
+            similar::DiffOp::Equal { .. } => {}
+            similar::DiffOp::Delete { old_len, .. } => removed += old_len as u64,
+            similar::DiffOp::Insert { new_len, .. } => added += new_len as u64,
+            similar::DiffOp::Replace {
+                old_len, new_len, ..
+            } => {
+                removed += old_len as u64;
+                added += new_len as u64;
+            }
+        }
     }
     Some((added, removed))
 }
@@ -270,12 +283,17 @@ mod tests {
     }
 
     #[test]
-    fn line_delta_counts_by_text() {
+    fn line_delta_counts_like_git_diff_stat() {
         assert_eq!(line_delta(b"a\nb\nc\n", b"a\nb\nc\n"), Some((0, 0)));
         assert_eq!(
             line_delta(b"a\nb\n", b"b\na\n"),
-            Some((0, 0)),
-            "a moved line is no change"
+            Some((1, 1)),
+            "a moved line is a change, like git diff --stat"
+        );
+        assert_eq!(
+            line_delta(b"a\nb\nc\nd\n", b"a\nX\nc\nY\nd\n"),
+            Some((2, 1)),
+            "b replaced by X, Y inserted"
         );
         assert_eq!(line_delta(b"a\nb\n", b"a\nX\nb\n"), Some((1, 0)));
         assert_eq!(line_delta(b"a\nb\n", b"a\n"), Some((0, 1)));

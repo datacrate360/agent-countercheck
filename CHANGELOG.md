@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`watched` line counts are a real line diff**, the same numbers as `git diff --stat` (a moved line now counts as
+  one removed and one added; before, lines were matched by text and a move counted as nothing).
+- `writes` asks for the user id only when a path uses `{uid}`.
 - **New: `writes = [...]` on a `[[check]]`** ([#18](https://github.com/datacrate360/agent-countercheck/issues/18)).
   Lets one check write to a fixed location under the macOS sandbox (e.g. `/var/tmp/hermes-pytest-{uid}`), so a test
   runner with a hard-coded scratch path no longer forces `--sandbox none`. Absolute paths with `{uid}`, `{user}`,
