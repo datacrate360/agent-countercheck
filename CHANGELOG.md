@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Fix: a write the macOS sandbox refused got the "no internet" hint**
+  ([#16](https://github.com/datacrate360/agent-countercheck/issues/16)). "Operation not permitted" counted as a
+  network error, but the sandbox prints the same words for a refused file write, so a test runner writing to a fixed
+  path like `/var/tmp/...` was told to set `network = true`, which can't help. When the output names the refused
+  path (Python, sh, mkdir, Node), the hint now says the check tried to write there and how to fix it; a bare
+  "Operation not permitted" with no path, which a refused connection to an IP address prints too, gets a hint naming
+  both causes. Hints only: verdicts are unchanged.
 - **Fix: the Stop hook reads Cortex Code's final message, and the receipt names Cortex Code.** Cortex Code's Stop
   input has no `last_assistant_message`, and its transcript isn't Claude Code's JSON Lines, so every Cortex Code
   receipt had no claim, and an agent honestly reporting "this can't pass, because …" was still pushed back until the

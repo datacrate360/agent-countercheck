@@ -364,14 +364,28 @@ pub fn run_check(
     }
     // Only when the command itself failed (not when it passed but missed a budget).
     let command_failed = timed_out || exit_code != Some(0);
-    if command_failed
-        && sandbox == Sandbox::Seatbelt
-        && !spec.network
-        && looks_like_network_error(&result.output_tail)
-    {
-        // A hint only: the verdict never changes, or a worker could fail on purpose behind a
-        // blocked network call to turn FAILED into something softer.
-        result.output_tail.push_str(NO_INTERNET_HINT);
+    // Hints only: the verdict never changes, or a worker could fail on purpose behind a blocked
+    // call to turn FAILED into something softer. Computed on the output before any hint is added.
+    if command_failed && sandbox == Sandbox::Seatbelt {
+        let out = &result.output_tail;
+        let denied = denied_write_path(out);
+        let network = !spec.network && looks_like_network_error(out);
+        // "Operation not permitted" with no path and no other sign: a refused connection to an
+        // IP address and a refused write print exactly this, so say both rather than guess.
+        let unclear = denied.is_none() && !network && has_bare_denial(out);
+        if let Some(path) = denied {
+            result.output_tail.push_str(&write_denied_hint(&path));
+        }
+        if network {
+            result.output_tail.push_str(NO_INTERNET_HINT);
+        }
+        if unclear {
+            result.output_tail.push_str(if spec.network {
+                UNCLEAR_DENIAL_HINT
+            } else {
+                UNCLEAR_DENIAL_NETWORK_HINT
+            });
+        }
     }
     Ok(result)
 }
@@ -379,8 +393,7 @@ pub fn run_check(
 /// Error text that usually means a blocked or failed connection (Python, Node, curl, Go, Java).
 /// Only decides whether to show a hint, never the verdict, so a guess is fine here.
 fn looks_like_network_error(output: &str) -> bool {
-    const SIGNS: [&str; 13] = [
-        "operation not permitted",
+    const SIGNS: [&str; 12] = [
         "nodename nor servname",
         "name or service not known",
         "temporary failure in name resolution",
@@ -394,9 +407,70 @@ fn looks_like_network_error(output: &str) -> bool {
         "unknownhostexception",
         "dial tcp",
     ];
+    // Not "Operation not permitted": the sandbox prints it for a refused file write too (see
+    // `has_bare_denial`).
     let lower = output.to_lowercase();
     SIGNS.iter().any(|s| lower.contains(s))
 }
+
+/// A line saying "Operation not permitted" (or `EPERM`) with no path in it.
+fn has_bare_denial(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| is_permission_denial(&line.to_lowercase()) && path_in(line).is_none())
+}
+
+/// The sandbox's refusal, in the words of the C library, Python, Node and the shells.
+fn is_permission_denial(lower_line: &str) -> bool {
+    lower_line.contains("operation not permitted") || lower_line.contains("eperm")
+}
+
+/// The file a refused write names, if the output has one: a line with "Operation not permitted"
+/// (or `EPERM`) and an absolute path, e.g. Python `PermissionError: [Errno 1] Operation not
+/// permitted: '/var/tmp/x'`, sh `sh: /var/tmp/x: Operation not permitted`, Node `EPERM: operation
+/// not permitted, open '/var/tmp/x'`. Node prints the path on its own `path:` line too.
+fn denied_write_path(output: &str) -> Option<String> {
+    let lines: Vec<&str> = output.lines().collect();
+    lines.iter().enumerate().find_map(|(i, line)| {
+        if !is_permission_denial(&line.to_lowercase()) {
+            return None;
+        }
+        path_in(line).or_else(|| {
+            // Node: `path: '/var/tmp/x'` a few lines below the error line.
+            lines
+                .iter()
+                .skip(i + 1)
+                .take(6)
+                .find_map(|l| l.trim_start().strip_prefix("path:").and_then(path_in))
+        })
+    })
+}
+
+/// The first absolute path in a line (quoted or followed by `:`/`,`), not part of a URL.
+fn path_in(line: &str) -> Option<String> {
+    line.split(|c: char| c.is_whitespace() || matches!(c, '\'' | '"' | ',' | '(' | ')'))
+        .map(|t| t.trim_end_matches(':'))
+        .find(|t| t.len() > 1 && t.starts_with('/') && !t.starts_with("//"))
+        .map(|t| t.chars().take(200).collect())
+}
+
+fn write_denied_hint(path: &str) -> String {
+    format!(
+        "\n[countercheck] this check tried to write outside the check folder ({path}); the sandbox allows \
+         writes only in the check folder and the temp dir. Point the tool at $TMPDIR if it can be \
+         changed, or run with --sandbox none (the receipt says so)"
+    )
+}
+
+/// Added when the sandbox refused something and the output doesn't say what.
+pub const UNCLEAR_DENIAL_NETWORK_HINT: &str = "\n[countercheck] the sandbox refused something this check \
+    did (\"Operation not permitted\"): a connection to the internet, or a write outside the check folder and the \
+    temp dir. If it needs the internet, set `network = true` on it in .countercheck/checks.toml; if it writes to a \
+    fixed path, point it at $TMPDIR or run with --sandbox none (the receipt says so)";
+/// The same, for a check that already has `network = true` (so only a write can be refused).
+pub const UNCLEAR_DENIAL_HINT: &str = "\n[countercheck] the sandbox refused something this check did \
+    (\"Operation not permitted\"), probably a write outside the check folder and the temp dir; point it at \
+    $TMPDIR or run with --sandbox none (the receipt says so)";
 
 /// Added to a failed check that ran without internet access.
 pub const NO_INTERNET_HINT: &str = "\n[countercheck] this check ran without internet access (sandbox); \
@@ -469,6 +543,54 @@ fn read_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refused_write_is_told_apart_from_a_refused_connection() {
+        // Real output from macOS's sandbox (countercheck 0.5.3, macOS 27).
+        let writes = [
+            "PermissionError: [Errno 1] Operation not permitted: '/var/tmp/cc-probe-x'",
+            "sh: /var/tmp/cc-probe-y: Operation not permitted",
+            "mkdir: /var/tmp/cc-probe-dir: Operation not permitted",
+            "Error: EPERM: operation not permitted, open '/var/tmp/cc-probe-z'\n  errno: -1,\n  code: 'EPERM',\n  syscall: 'open',\n  path: '/var/tmp/cc-probe-z'\n}",
+        ];
+        let expected = [
+            Some("/var/tmp/cc-probe-x"),
+            Some("/var/tmp/cc-probe-y"),
+            Some("/var/tmp/cc-probe-dir"),
+            Some("/var/tmp/cc-probe-z"),
+        ];
+        for (out, want) in writes.iter().zip(expected) {
+            assert_eq!(denied_write_path(out).as_deref(), want, "{out}");
+        }
+        for out in writes {
+            assert!(
+                !looks_like_network_error(out),
+                "a write is not a network error: {out}"
+            );
+        }
+        // No path, no other sign: a refused connection to an IP and a refused write (issue #16's
+        // runner) print the same, so neither the write nor the network hint, only "unclear".
+        for out in [
+            "runner crashed: PermissionError(1, 'Operation not permitted')",
+            "PermissionError: [Errno 1] Operation not permitted",
+        ] {
+            assert_eq!(denied_write_path(out), None, "{out}");
+            assert!(!looks_like_network_error(out), "{out}");
+            assert!(has_bare_denial(out), "{out}");
+        }
+        // Refused connections by name: the network hint, and no write hint.
+        let connects = [
+            "urllib.error.URLError: <urlopen error [Errno 8] nodename nor servname provided, or not known>",
+            "curl: (6) Could not resolve host: example.com",
+            "Error: getaddrinfo ENOTFOUND example.com",
+        ];
+        for out in connects {
+            assert!(looks_like_network_error(out), "{out}");
+            assert_eq!(denied_write_path(out), None, "{out}");
+        }
+        // A URL is not a path.
+        assert_eq!(path_in("fetch https://example.com/a failed"), None);
+    }
 
     #[test]
     fn git_for_windows_sh_is_looked_for_next_to_git() {

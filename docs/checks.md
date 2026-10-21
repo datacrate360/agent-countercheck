@@ -80,7 +80,11 @@ network = true
 - When a check fails while it ran without the internet, Countercheck adds a hint saying so. The verdict stays
   FAILED: a failure that might be caused by the missing internet is still a failure until the check file says the
   check may use it.
-- The hint only appears when the output looks like a connection error (blocked, can't resolve, unreachable).
+- The hint only appears when the output looks like a connection error (can't resolve, unreachable).
+- **Writes outside the check folder** (and the temp dir) are refused too. When the output names the refused path
+  (`Operation not permitted: '/var/tmp/x'`, `EPERM … open '/var/tmp/x'`), the hint says the check tried to write
+  there, not that it lacked the internet. A bare "Operation not permitted" with no path is what both a refused
+  connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict.
 - On Linux and Windows there is no sandbox yet, so checks always have the internet there, and the hint never shows.
 
 ### Lock the test runner's settings
