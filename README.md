@@ -351,7 +351,9 @@ same folder and `ui` / `report` show which was which. Each agent session keeps i
 | `hook` | Run as an agent hook: `session-start`, `claude-stop` (Claude Code, Cortex Code), `hermes-pre-verify` (Hermes Agent). | `countercheck hook claude-stop` |
 
 Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
-`--cost-usd`, `--out <folder>`, `--json`. All options: `countercheck help <command>`.
+`--cost-usd`, `--out <folder>`, `--json`, `--checks-from <suite>@<commit>:<path>` (checks kept outside the
+repository, for projects you don't control: [docs/checks.md](docs/checks.md#checks-from-outside-the-repository)).
+All options: `countercheck help <command>`.
 
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
 locked in the base revision, none ran, or with `uncovered`/`watched_mode = "unverified"` a changed file no check

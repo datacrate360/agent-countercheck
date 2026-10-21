@@ -68,6 +68,8 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
         },
         sandbox,
         out: std::env::var_os("COUNTERCHECK_RECEIPTS").map(PathBuf::from),
+        checks_from: None,
+        checks_sha256: None,
     };
     let (receipt, path) = verify::verify(&opts)?;
     let decision = decide(&receipt, blocker);

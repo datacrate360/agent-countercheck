@@ -11,6 +11,9 @@ the checks came from the base revision and all of them passed.
 is right for uncommitted work. If the work was committed, pass where it started (`--base origin/main` in CI). Agent
 hooks find it themselves with `countercheck hook session-start` (README "Agent hooks").
 
+**Checks for a repository you don't control** (an upstream project that won't take a `.countercheck/` folder, or one
+team suite for many repositories): see [Checks from outside the repository](#checks-from-outside-the-repository).
+
 | Type | Use it when | Table |
 |---|---|---|
 | [Command](#command) | a command can tell right from wrong (tests, linters, builds) | `[[check]]` |
@@ -379,3 +382,36 @@ watched_mode = "note"               # optional: "note" (default) or "unverified"
   the list. Not listed: `.countercheck/**` and build junk.
 - Agent hooks push back only on FAILED: watched changes are for the person reading the receipt.
 - The receipt keeps up to 100 changes plus the totals; `show`, `report` and `ui` list them.
+
+## Checks from outside the repository
+
+Countercheck normally trusts only the check file committed in the repository at the base revision. To verify work on a
+repository you can't add `.countercheck/` to, keep the checks somewhere else and **pin** them on the command line:
+
+```sh
+# A suite repository at a fixed commit (a full 40- or 64-character id; branch and tag names move, so they're refused):
+countercheck verify --base origin/main --checks-from ~/suites@3f9c2e1d…:hermes-agent/checks.toml
+
+# Or a single file, pinned by its SHA-256 (shasum -a 256 checks.toml):
+countercheck verify --base origin/main --checks-from ~/suites/hermes.toml --checks-sha256 ab12…
+```
+
+```text
+  checks:   external: /Users/me/suites@3f9c2e1d4a5b:hermes-agent/checks.toml (locked), sandbox: macos-seatbelt
+```
+
+- **Why the pin, not the location:** a file outside the repository is not outside an agent's reach (it has a shell). A
+  commit id or a hash you type can't be changed by the agent during its run. **Without a pin, the verdict is
+  UNVERIFIED** ("the --checks-from file is not pinned"). If the pinned file changed, `verify` stops with an error.
+- The suite form reads through the same hash-checked reader as the base revision, so a rewritten object in the suite's
+  `.git` is refused. Matrix files, coverage lists and golden references named in the check file are read from the
+  same suite commit, by the same relative path. The single-file form can't name other files (each would need its own
+  pin): use a suite repository for those.
+- **External replaces, never merges.** If the repository has its own `.countercheck/checks.toml`, it is ignored, and
+  `checks_source` on the receipt says so.
+- `--base` stays the target repository's real base (e.g. `origin/main`): protected files are put back from it, and
+  changes, `uncovered` and `watched` are measured against it.
+- A `--checks-from` file inside the repository being verified is refused.
+- The receipt records it: `checks_external = { kind, source, sha256, pinned }`.
+- Command line only for now; agent hooks keep using the repository's own check file. Design:
+  [docs/decisions/0002-external-checks.md](decisions/0002-external-checks.md).

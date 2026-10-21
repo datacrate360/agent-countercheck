@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **New: `--checks-from`, checks kept outside the repository** ([#20](https://github.com/datacrate360/agent-countercheck/issues/20),
+  [ADR-0002](docs/decisions/0002-external-checks.md)). Verify work on a repository you don't control:
+  `--checks-from <suite repo>@<full commit id>:<path>` (read through the hash-checked object reader; branch and tag
+  names refused) or `--checks-from <file> --checks-sha256 <hex>`. The pin, not the location, locks the checks: an
+  unpinned file gives UNVERIFIED, a changed pinned file an error, a file inside the repository is refused. External
+  checks replace the repository's own (never merged), and the receipt records the source (`checks_external`,
+  optional field). Command line only.
 - **`watched` line counts are a real line diff**, the same numbers as `git diff --stat` (a moved line now counts as
   one removed and one added; before, lines were matched by text and a move counted as nothing).
 - `writes` asks for the user id only when a path uses `{uid}`.

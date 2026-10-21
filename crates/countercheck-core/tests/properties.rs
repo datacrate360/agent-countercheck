@@ -5,7 +5,7 @@ use countercheck_core::claim::reports_blocker;
 use countercheck_core::config::{self, ALWAYS_PROTECTED, MAX_CHECKS_BYTES, MAX_TIMEOUT_SECS};
 use countercheck_core::protect::{Change, Protected, ProtectedChange};
 use countercheck_core::receipt::{
-    self, CheckResult, ClaimStatus, Receipt, RepoInfo, SCHEMA, Verdict, Worker,
+    self, CheckResult, ClaimStatus, ExternalChecks, Receipt, RepoInfo, SCHEMA, Verdict, Worker,
 };
 use countercheck_core::uncovered::{self, Mode as UncoveredMode, Uncovered};
 use countercheck_core::watched::{self, Mode as WatchedMode, Watched, WatchedChange};
@@ -150,6 +150,17 @@ fn watched_section() -> impl Strategy<Value = Watched> {
         })
 }
 
+fn external() -> impl Strategy<Value = ExternalChecks> {
+    (text(), text(), "[0-9a-f]{64}", any::<bool>()).prop_map(|(kind, source, sha256, pinned)| {
+        ExternalChecks {
+            kind,
+            source,
+            sha256,
+            pinned,
+        }
+    })
+}
+
 fn receipt() -> impl Strategy<Value = Receipt> {
     (
         (text(), text(), text(), text(), text(), any::<bool>()),
@@ -164,6 +175,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
             text(),
             text(),
             proptest::collection::vec(text(), 0..3),
+            proptest::option::of(external()),
         ),
         (
             proptest::collection::vec(protected_change(), 0..3),
@@ -179,7 +191,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 (created_at, version, base_rev, base_commit, head_commit, dirty),
                 (agent, model, cost_usd),
                 (claim, claim_status, checks_locked),
-                (checks_source, sandbox, tree_sha256, linked),
+                (checks_source, sandbox, tree_sha256, linked, checks_external),
                 (protected_changes, checks, verdict, reasons, uncovered, watched),
             )| Receipt {
                 schema: SCHEMA.to_string(),
@@ -202,6 +214,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 claim_status,
                 checks_locked,
                 checks_source,
+                checks_external,
                 sandbox,
                 tree_sha256,
                 linked,
@@ -272,7 +285,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 38;
+const EDITS: usize = 39;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -338,6 +351,17 @@ fn edit(r: &mut Receipt, which: usize) {
         30 => r.verdict = other_verdict(r.verdict),
         31 => first_check(r).network ^= true,
         36 => first_check(r).writes.push("/var/tmp/x".into()),
+        37 => match &mut r.checks_external {
+            Some(e) => e.pinned ^= true,
+            None => {
+                r.checks_external = Some(ExternalChecks {
+                    kind: "file".into(),
+                    source: "/s.toml".into(),
+                    sha256: "0".repeat(64),
+                    pinned: false,
+                })
+            }
+        },
         32 => match &mut r.uncovered {
             Some(u) => u.total = u.total.wrapping_add(1),
             None => {
