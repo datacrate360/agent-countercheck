@@ -16,6 +16,10 @@ pub enum Sandbox {
     None,
     /// macOS Seatbelt: no network, writes only inside the snapshot and temp folders.
     Seatbelt,
+    /// Linux: Landlock confines writes; with `namespaces`, also a loopback-only network and a
+    /// PID namespace (`countercheck sandbox-exec`).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Landlock { namespaces: bool },
 }
 
 impl Sandbox {
@@ -26,8 +30,55 @@ impl Sandbox {
             Sandbox::Seatbelt => {
                 "macos-seatbelt (no internet, localhost only; writes only in the check folder)"
             }
+            Sandbox::Landlock { namespaces: true } => {
+                "linux-landlock (no internet, localhost only; writes only in the check folder)"
+            }
+            Sandbox::Landlock { namespaces: false } => {
+                "linux-landlock (writes only in the check folder; internet NOT blocked: this system doesn't allow user namespaces)"
+            }
         }
     }
+
+    /// Writes outside the check folder are refused.
+    pub fn confines_writes(self) -> bool {
+        !matches!(self, Sandbox::None)
+    }
+
+    /// The internet is blocked (localhost still works).
+    pub fn blocks_internet(self) -> bool {
+        matches!(
+            self,
+            Sandbox::Seatbelt | Sandbox::Landlock { namespaces: true }
+        )
+    }
+}
+
+/// The best sandbox this system has: Seatbelt on macOS, Landlock on Linux, else none.
+pub fn auto_sandbox() -> Sandbox {
+    if seatbelt_works() {
+        return Sandbox::Seatbelt;
+    }
+    linux_auto()
+}
+
+#[cfg(target_os = "linux")]
+fn linux_auto() -> Sandbox {
+    let Ok(exe) = std::env::current_exe() else {
+        return Sandbox::None;
+    };
+    let caps = crate::linux_sandbox::probe(&exe);
+    if caps.landlock {
+        Sandbox::Landlock {
+            namespaces: caps.namespaces,
+        }
+    } else {
+        Sandbox::None
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_auto() -> Sandbox {
+    Sandbox::None
 }
 
 /// True when sandbox-exec can apply a profile here (it can't inside another sandbox).
@@ -346,6 +397,30 @@ pub fn run_check(
                 .arg(&program);
             c
         }
+        Sandbox::Landlock { namespaces } => {
+            // The helper enforces the timeout itself, so it can kill everything the check
+            // started (it is their subreaper) before it exits.
+            let exe = std::env::current_exe().map_err(|e| format!("countercheck binary: {e}"))?;
+            let mut c = Command::new(exe);
+            c.arg("sandbox-exec")
+                .arg("--work")
+                .arg(workdir)
+                .arg("--tmp")
+                .arg(tmp)
+                .arg("--timeout-secs")
+                .arg(spec.timeout_secs.to_string());
+            for w in writes {
+                c.arg("--write").arg(w);
+            }
+            if spec.network {
+                c.arg("--network");
+            }
+            if namespaces {
+                c.arg("--namespaces");
+            }
+            c.arg("--").arg(&program);
+            c
+        }
     };
     add_run(&mut cmd, spec.shell, &spec.run);
     cmd.current_dir(workdir)
@@ -376,8 +451,14 @@ pub fn run_check(
     // Unix: the check leads its own process group (set before it started).
     #[cfg(windows)]
     let job = watch_tree(&child);
+    // Under the Linux sandbox the helper times the check out itself; this wait is the safety net.
+    let grace = if matches!(sandbox, Sandbox::Landlock { .. }) {
+        15
+    } else {
+        0
+    };
     let status = child
-        .wait_timeout(Duration::from_secs(spec.timeout_secs))
+        .wait_timeout(Duration::from_secs(spec.timeout_secs.saturating_add(grace)))
         .map_err(|e| e.to_string())?;
     let (exit_code, timed_out) = match status {
         Some(s) => {
@@ -403,6 +484,17 @@ pub fn run_check(
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let metric_name = spec.budget.as_ref().map(|b| b.metric.as_str());
     let (output_sha256, output_tail, metric) = read_output(log, metric_name)?;
+    // The Linux helper's own timeout: exit 124 and its line in the output. A check can only fake
+    // this to fail.
+    #[cfg(target_os = "linux")]
+    let (exit_code, timed_out) = if matches!(sandbox, Sandbox::Landlock { .. })
+        && exit_code == Some(i32::from(crate::linux_sandbox::TIMED_OUT))
+        && output_tail.contains(crate::linux_sandbox::TIMEOUT_LINE)
+    {
+        (None, true)
+    } else {
+        (exit_code, timed_out)
+    };
     let mut result = CheckResult {
         name: spec.name.clone(),
         run: spec.run.clone(),
@@ -413,7 +505,7 @@ pub fn run_check(
         output_tail,
         output_sha256,
         network: spec.network,
-        writes: if sandbox == Sandbox::Seatbelt {
+        writes: if sandbox.confines_writes() {
             writes
                 .iter()
                 .map(|p| p.to_string_lossy().into_owned())
@@ -437,13 +529,16 @@ pub fn run_check(
     let command_failed = timed_out || exit_code != Some(0);
     // Hints only: the verdict never changes, or a worker could fail on purpose behind a blocked
     // call to turn FAILED into something softer. Computed on the output before any hint is added.
-    if command_failed && sandbox == Sandbox::Seatbelt {
+    if command_failed && sandbox.confines_writes() {
         let out = &result.output_tail;
-        let denied = denied_write_path(out);
-        let network = !spec.network && looks_like_network_error(out);
-        // "Operation not permitted" with no path and no other sign: a refused connection to an
-        // IP address and a refused write print exactly this, so say both rather than guess.
-        let unclear = denied.is_none() && !network && has_bare_denial(out);
+        // Landlock refuses a write with EACCES ("Permission denied"), Seatbelt with EPERM.
+        let linux = matches!(sandbox, Sandbox::Landlock { .. });
+        let denied = denied_write_path(out, linux);
+        let network = sandbox.blocks_internet() && !spec.network && looks_like_network_error(out);
+        // "Operation not permitted" with no path and no other sign: under Seatbelt a refused
+        // connection to an IP address and a refused write print exactly this, so say both.
+        let unclear =
+            sandbox == Sandbox::Seatbelt && denied.is_none() && !network && has_bare_denial(out);
         if let Some(path) = denied {
             result.output_tail.push_str(&write_denied_hint(&path));
         }
@@ -488,22 +583,24 @@ fn looks_like_network_error(output: &str) -> bool {
 fn has_bare_denial(output: &str) -> bool {
     output
         .lines()
-        .any(|line| is_permission_denial(&line.to_lowercase()) && path_in(line).is_none())
+        .any(|line| is_permission_denial(&line.to_lowercase(), false) && path_in(line).is_none())
 }
 
 /// The sandbox's refusal, in the words of the C library, Python, Node and the shells.
-fn is_permission_denial(lower_line: &str) -> bool {
-    lower_line.contains("operation not permitted") || lower_line.contains("eperm")
+fn is_permission_denial(lower_line: &str, linux: bool) -> bool {
+    lower_line.contains("operation not permitted")
+        || lower_line.contains("eperm")
+        || (linux && (lower_line.contains("permission denied") || lower_line.contains("eacces")))
 }
 
 /// The file a refused write names, if the output has one: a line with "Operation not permitted"
 /// (or `EPERM`) and an absolute path, e.g. Python `PermissionError: [Errno 1] Operation not
 /// permitted: '/var/tmp/x'`, sh `sh: /var/tmp/x: Operation not permitted`, Node `EPERM: operation
 /// not permitted, open '/var/tmp/x'`. Node prints the path on its own `path:` line too.
-fn denied_write_path(output: &str) -> Option<String> {
+fn denied_write_path(output: &str, linux: bool) -> Option<String> {
     let lines: Vec<&str> = output.lines().collect();
     lines.iter().enumerate().find_map(|(i, line)| {
-        if !is_permission_denial(&line.to_lowercase()) {
+        if !is_permission_denial(&line.to_lowercase(), linux) {
             return None;
         }
         path_in(line).or_else(|| {
@@ -632,7 +729,7 @@ mod tests {
             Some("/var/tmp/cc-probe-z"),
         ];
         for (out, want) in writes.iter().zip(expected) {
-            assert_eq!(denied_write_path(out).as_deref(), want, "{out}");
+            assert_eq!(denied_write_path(out, false).as_deref(), want, "{out}");
         }
         for out in writes {
             assert!(
@@ -646,7 +743,7 @@ mod tests {
             "runner crashed: PermissionError(1, 'Operation not permitted')",
             "PermissionError: [Errno 1] Operation not permitted",
         ] {
-            assert_eq!(denied_write_path(out), None, "{out}");
+            assert_eq!(denied_write_path(out, false), None, "{out}");
             assert!(!looks_like_network_error(out), "{out}");
             assert!(has_bare_denial(out), "{out}");
         }
@@ -658,7 +755,7 @@ mod tests {
         ];
         for out in connects {
             assert!(looks_like_network_error(out), "{out}");
-            assert_eq!(denied_write_path(out), None, "{out}");
+            assert_eq!(denied_write_path(out, false), None, "{out}");
         }
         // A URL is not a path.
         assert_eq!(path_in("fetch https://example.com/a failed"), None);

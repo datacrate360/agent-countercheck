@@ -27,6 +27,7 @@ section. Ideas and use cases are welcome as issues.
 | Protected files in Git LFS: real content from the local LFS store, hash-checked (#11) | v0.5.2 |
 | macOS/Linux: background processes a check leaves running are stopped when it ends (process group killed after every check) | v0.5.3 |
 | `watched` paths: every change to files the agent may edit is listed on the receipt, optionally UNVERIFIED (#19); `[[forbid]] scope = "added"`: only lines new since the base (#17); sandbox hints tell a refused write from a refused connection (#16); Cortex Code Stop hook reads its session files | v0.6.0 |
+| Linux sandbox: Landlock confines writes; user + network + PID namespaces block the internet (localhost allowed) and stop everything a check started, `setsid` included; a subreaper does it where namespaces are blocked. No root needed | next |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |
@@ -65,7 +66,6 @@ section. Ideas and use cases are welcome as issues.
   distinct counts, table hashes); capture golden outputs from the old system once.
 - **Blind spot: hard-coded answers.** Locked tests stop test edits, not code that copies the expected value.
   Ideas: flag diffs that add literals copied from protected tests; hidden checks the agent never sees.
-- **Linux sandbox** (bubblewrap / Landlock).
 - **Windows on ARM64** build (`aarch64-pc-windows-msvc`; the x86_64 build runs under emulation today).
 - **Receipt index**: a rebuildable local index (e.g. SQLite) over the JSON receipts for "which targets failed this
   week?" questions. JSON receipts stay the source of truth.

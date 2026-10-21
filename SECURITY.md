@@ -21,6 +21,8 @@ We aim to reply within a few days and to credit reporters who want credit.
 
 ## Known limits (not vulnerabilities)
 
-- The macOS sandbox is Seatbelt (`sandbox-exec`); other platforms have no sandbox yet.
+- The macOS sandbox is Seatbelt (`sandbox-exec`); the Linux sandbox is Landlock plus user, network and PID namespaces
+  (`countercheck sandbox-exec`). Where a Linux system blocks unprivileged user namespaces, checks can reach the
+  internet (writes stay confined) and the receipt says so. Windows has no sandbox yet.
 - Folders listed under `link` come from the worker's tree and are not part of the checked snapshot; receipts say so.
 - Receipts are sealed with a hash, not yet signed.

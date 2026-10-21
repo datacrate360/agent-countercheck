@@ -384,12 +384,19 @@ Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, ar
 | Platform | Checks run in | Internet during checks | Writes outside the check folder |
 |---|---|---|---|
 | macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` on that check | blocked |
-| Linux | a normal process (sandbox planned) | allowed | allowed |
+| Linux | Landlock, plus private user, network and PID namespaces where the system allows them (no root needed) | blocked (localhost allowed) with namespaces; **allowed where user namespaces are blocked**, and the receipt says so | blocked |
 | Windows | a normal process (sandbox planned) | allowed | allowed |
 
-On Linux and Windows the receipt says there was no sandbox; run Countercheck inside a container or VM with networking
+Everything a check starts is stopped when it ends, including processes that detach with `setsid`: on Linux by a PID
+namespace or a subreaper, on Windows by a Job Object, on macOS by killing the check's process group. The receipt's
+`sandbox` field always says what was enforced. On Windows, run Countercheck inside a container or VM with networking
 off when you need that isolation. The main protections (locked checks, restored tests, clean copy, sealed receipts)
 work on every OS ([FAQ](#faq)).
+
+Linux needs kernel 5.13+ for Landlock (6.7+ for signal and socket scoping); some servers and Docker's default profile
+block unprivileged user namespaces, which is when the internet stays open. Allow them with
+`sysctl kernel.apparmor_restrict_unprivileged_userns=0` (Ubuntu) or run the container with a seccomp profile that
+permits `unshare`.
 
 ## FAQ
 
@@ -550,8 +557,8 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 ## Status
 
-v0.6 ([CHANGELOG](CHANGELOG.md)). macOS has the sandbox; Linux and Windows run checks without one (the receipt says
-so). Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, Linux/Windows sandboxes, more agent
+v0.6 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows runs checks without one (the receipt says
+so). Not yet: signed receipts, a per-host network allow-list, cost read from agent logs, a Windows sandbox, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Contribute: make it fit your domain

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **New: a sandbox on Linux.** Checks run through `countercheck sandbox-exec`, with no root needed:
+  **Landlock** confines writes to the check folder, its temp dir and `writes = [...]` (and, on kernels 6.7+, stops
+  signals and abstract sockets reaching outside processes); where the system allows unprivileged user namespaces, a
+  private **network namespace** with only loopback up blocks the internet (localhost works; `network = true` opts a
+  check out) and a **PID namespace** stops everything a check started when it ends. Where namespaces are blocked
+  (Docker's default profile, some hardened servers) writes are still confined, the internet is not, and the receipt's
+  `sandbox` says exactly that; a **subreaper** then finds and kills detached processes. `--sandbox auto` picks it
+  on Linux; `--sandbox landlock` requires it. The write and no-internet hints work under it too.
+- **Fix: a check's detached processes (`setsid`, double fork) are stopped on Linux** when it ends or times out.
 - **New: `--checks-from`, checks kept outside the repository** ([#20](https://github.com/datacrate360/agent-countercheck/issues/20),
   [ADR-0002](docs/decisions/0002-external-checks.md)). Verify work on a repository you don't control:
   `--checks-from <suite repo>@<full commit id>:<path>` (read through the hash-checked object reader; branch and tag

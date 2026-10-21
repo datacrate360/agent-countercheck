@@ -12,6 +12,8 @@ mod external;
 mod git;
 mod golden;
 mod hook;
+#[cfg(target_os = "linux")]
+mod linux_sandbox;
 mod report;
 mod runner;
 mod scan;
@@ -40,6 +42,8 @@ enum SandboxArg {
     Auto,
     /// No network, writes only inside the check folder (macOS).
     Seatbelt,
+    /// Writes only inside the check folder; no network where user namespaces are allowed (Linux).
+    Landlock,
     /// Run checks as a normal process.
     None,
 }
@@ -81,6 +85,27 @@ enum Cmd {
         /// The SHA-256 the --checks-from file must have (pins it).
         #[arg(long, value_name = "HEX", requires = "checks_from")]
         checks_sha256: Option<String>,
+    },
+    /// (internal) Run one check inside the Linux sandbox; started by `verify`.
+    #[command(hide = true)]
+    SandboxExec {
+        /// Print what the sandbox can do here and exit.
+        #[arg(long)]
+        probe: bool,
+        #[arg(long)]
+        work: Option<PathBuf>,
+        #[arg(long)]
+        tmp: Option<PathBuf>,
+        #[arg(long = "write")]
+        writes: Vec<PathBuf>,
+        #[arg(long)]
+        network: bool,
+        #[arg(long)]
+        namespaces: bool,
+        #[arg(long, default_value_t = 600)]
+        timeout_secs: u64,
+        #[arg(last = true)]
+        program: Vec<String>,
     },
     /// Write a starter .countercheck/checks.toml.
     Init {
@@ -149,6 +174,25 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<u8, String> {
     match cli.command {
+        Cmd::SandboxExec {
+            probe,
+            work,
+            tmp,
+            writes,
+            network,
+            namespaces,
+            timeout_secs,
+            program,
+        } => sandbox_exec(
+            probe,
+            work,
+            tmp,
+            writes,
+            network,
+            namespaces,
+            timeout_secs,
+            program,
+        ),
         Cmd::Verify {
             repo,
             base,
@@ -163,7 +207,16 @@ fn run(cli: Cli) -> Result<u8, String> {
             checks_sha256,
         } => {
             let sandbox = match sandbox {
-                SandboxArg::Auto if runner::seatbelt_works() => runner::Sandbox::Seatbelt,
+                SandboxArg::Auto if runner::auto_sandbox() != runner::Sandbox::None => {
+                    let s = runner::auto_sandbox();
+                    if matches!(s, runner::Sandbox::Landlock { namespaces: false }) {
+                        eprintln!(
+                            "note: this system doesn't allow user namespaces, so checks can reach the internet \
+                             (writes are still confined; the receipt records this)."
+                        );
+                    }
+                    s
+                }
                 SandboxArg::Auto if cfg!(windows) => {
                     eprintln!(
                         "note: no check sandbox on Windows yet; checks run as a normal process \
@@ -179,6 +232,15 @@ fn run(cli: Cli) -> Result<u8, String> {
                     runner::Sandbox::None
                 }
                 SandboxArg::Seatbelt => runner::Sandbox::Seatbelt,
+                SandboxArg::Landlock => match runner::auto_sandbox() {
+                    s @ runner::Sandbox::Landlock { .. } => s,
+                    _ => {
+                        return Err(
+                            "the Linux sandbox (Landlock) isn't available here; use --sandbox none"
+                                .to_string(),
+                        );
+                    }
+                },
                 SandboxArg::None => runner::Sandbox::None,
             };
             if sandbox == runner::Sandbox::Seatbelt && cfg!(windows) {
@@ -296,4 +358,48 @@ fn run(cli: Cli) -> Result<u8, String> {
             }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+fn sandbox_exec(
+    probe: bool,
+    work: Option<PathBuf>,
+    tmp: Option<PathBuf>,
+    writes: Vec<PathBuf>,
+    network: bool,
+    namespaces: bool,
+    timeout_secs: u64,
+    program: Vec<String>,
+) -> Result<u8, String> {
+    if probe {
+        return Ok(linux_sandbox::probe_main());
+    }
+    let (Some(work), Some(tmp)) = (work, tmp) else {
+        return Err("sandbox-exec needs --work and --tmp".to_string());
+    };
+    Ok(linux_sandbox::run_main(linux_sandbox::Run {
+        work,
+        tmp,
+        writes,
+        network,
+        timeout_secs,
+        namespaces,
+        program,
+    }))
+}
+
+#[cfg(not(target_os = "linux"))]
+#[allow(clippy::too_many_arguments)]
+fn sandbox_exec(
+    _probe: bool,
+    _work: Option<PathBuf>,
+    _tmp: Option<PathBuf>,
+    _writes: Vec<PathBuf>,
+    _network: bool,
+    _namespaces: bool,
+    _timeout_secs: u64,
+    _program: Vec<String>,
+) -> Result<u8, String> {
+    Err("sandbox-exec is the Linux sandbox; it only runs on Linux".to_string())
 }
