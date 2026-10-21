@@ -2536,6 +2536,7 @@ fn forbid_added_catches_a_copied_old_line_and_scope_all_is_unchanged() {
 // ---- extra write locations per check (issue #18) ----
 
 /// `verify` that is expected to stop with an error: (exit code, stderr).
+#[cfg(target_os = "macos")]
 fn verify_fails(dir: &Path) -> (Option<i32>, String) {
     let out = Command::new(BIN)
         .args(["verify", "--repo"])
