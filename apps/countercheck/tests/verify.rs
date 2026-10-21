@@ -2766,6 +2766,8 @@ fn with_namespaces_the_internet_is_blocked_but_localhost_works() {
     );
     assert_eq!(r["checks"][1]["passed"], true, "{r:#}");
     assert_eq!(r["checks"][2]["passed"], true, "{r:#}");
+}
+
 // ---- checks from outside the repository (issue #20, ADR-0002) ----
 
 /// A suite repository with `suites/proj.toml` (CHECKS) committed: (dir, full commit id).
