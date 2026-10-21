@@ -23,6 +23,7 @@ section. Ideas and use cases are welcome as issues.
 | Renamed to Agent Countercheck (`agent-countercheck` on GitHub, PyPI, Homebrew; command still `countercheck`) | v0.4.0 |
 | `ui` / `report` in DataCrate360's teal and coral; fix: live page no longer shows "disconnected" after a new receipt | v0.4.0 |
 | Receipts list changed files no check covers (`covers`, `uncovered = "unverified"`, #6) | v0.5.0 |
+| Security: changes decided from file bytes, base read from hash-checked git objects; no writes through symlinked folders (2026-10 audit) | v0.5.1 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |

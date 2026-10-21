@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.5.1 (2026-10-20)
+
+**Upgrade:** security fix. With v0.5.0 and earlier, an agent that changed settings in the project's own `.git` could
+get VERIFIED for broken code with weakened tests. Found in an audit (`docs/audit/2026-10-findings.md`).
+
 
 - **Fix: what changed is decided from the files themselves, and the base from checked git objects.** Countercheck
   used git's index and `git diff` to find changed files, and trusted git to show the base revision. Settings in the
