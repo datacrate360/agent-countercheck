@@ -1,6 +1,6 @@
 # ADR-0002: Checks from outside the repository (`--checks-from`)
 
-Status: proposed (2026-10-21), for [issue #20](https://github.com/datacrate360/agent-countercheck/issues/20).
+Status: accepted (2026-10-21, decisions 1-3 approved by the maintainer), for [issue #20](https://github.com/datacrate360/agent-countercheck/issues/20).
 
 ## The problem
 
