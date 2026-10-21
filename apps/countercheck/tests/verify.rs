@@ -2654,6 +2654,120 @@ fn a_worker_cannot_grant_itself_writes() {
     assert!(r["checks"][0].get("writes").is_none(), "{r:#}");
 }
 
+// ---- the Linux sandbox (Landlock + namespaces) ----
+
+/// What `countercheck sandbox-exec --probe` says this Linux system can do: (landlock, namespaces).
+#[cfg(target_os = "linux")]
+fn linux_caps() -> (bool, bool) {
+    let out = Command::new(BIN)
+        .args(["sandbox-exec", "--probe"])
+        .output()
+        .unwrap();
+    let s = String::from_utf8_lossy(&out.stdout).to_string();
+    (s.contains("landlock=1"), s.contains("namespaces=1"))
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_linux_sandbox_confines_writes_and_says_what_it_enforced() {
+    let (landlock, namespaces) = linux_caps();
+    if !landlock || nested() {
+        eprintln!("skipped: no Landlock on this kernel");
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let leak = outside.path().canonicalize().unwrap().join("leak.txt");
+    let checks = format!(
+        "[[check]]\nname = \"inside\"\nrun = \"mkdir -p a/b && echo x > a/b/c\"\n\
+         [[check]]\nname = \"outside\"\nrun = \"echo x > '{}'\"\n",
+        leak.display()
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let sandbox = r["sandbox"].as_str().unwrap();
+    assert!(sandbox.starts_with("linux-landlock"), "{sandbox}");
+    assert_eq!(sandbox.contains("no internet"), namespaces, "{sandbox}");
+    assert_eq!(r["checks"][0]["passed"], true, "{r:#}");
+    assert_eq!(r["checks"][1]["passed"], false);
+    assert!(!leak.exists());
+    let tail = r["checks"][1]["output_tail"].as_str().unwrap();
+    assert!(
+        tail.contains("tried to write outside the check folder"),
+        "{tail}"
+    );
+    // `writes` opens exactly that location.
+    let checks = format!(
+        "[[check]]\nname = \"allowed\"\nrun = \"echo x > '{}'\"\nwrites = [\"{}\"]\n",
+        leak.display(),
+        outside.path().canonicalize().unwrap().display()
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert!(leak.exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_linux_sandbox_kills_what_a_check_detached_with_setsid() {
+    let (landlock, _) = linux_caps();
+    if !landlock || nested() {
+        eprintln!("skipped: no Landlock on this kernel");
+        return;
+    }
+    // Found by a unique command line, which every PID namespace shows the same way (a pid the
+    // daemon prints would be its pid inside the check's namespace).
+    let marker = format!("{}", 40_000 + std::process::id() % 20_000);
+    let checks = format!(
+        "[[check]]\nname = \"daemon\"\nrun = \"setsid sh -c 'exec sleep {marker}' & sleep 0.5; exit 0\"\n"
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let alive = || {
+        Command::new("pgrep")
+            .args(["-f", &format!("^sleep {marker}$")])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
+    for _ in 0..30 {
+        if !alive() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let _ = Command::new("pkill")
+        .args(["-f", &format!("^sleep {marker}$")])
+        .status();
+    panic!("the setsid daemon (sleep {marker}) survived its check");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn with_namespaces_the_internet_is_blocked_but_localhost_works() {
+    let (landlock, namespaces) = linux_caps();
+    if !landlock || !namespaces || nested() {
+        eprintln!("skipped: no user namespaces here");
+        return;
+    }
+    let checks = "[[check]]\nname = \"internet\"\nrun = \"python3 -c \\\"import socket; socket.create_connection(('1.1.1.1', 443), timeout=5)\\\"\"\n\
+        [[check]]\nname = \"localhost\"\nrun = \"python3 -c \\\"import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); s.listen(); socket.create_connection(s.getsockname(), timeout=5)\\\"\"\n\
+        [[check]]\nname = \"allowed\"\nrun = \"python3 -c \\\"import socket; socket.getaddrinfo('localhost', 80)\\\"\"\nnetwork = true\n";
+    let d = project(checks);
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(r["checks"][0]["passed"], false, "{r:#}");
+    assert!(
+        r["checks"][0]["output_tail"]
+            .as_str()
+            .unwrap()
+            .contains("network = true"),
+        "{r:#}"
+    );
+    assert_eq!(r["checks"][1]["passed"], true, "{r:#}");
+    assert_eq!(r["checks"][2]["passed"], true, "{r:#}");
+}
+
 // ---- checks from outside the repository (issue #20, ADR-0002) ----
 
 /// A suite repository with `suites/proj.toml` (CHECKS) committed: (dir, full commit id).

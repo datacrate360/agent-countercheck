@@ -16,7 +16,7 @@ step by step, and where your change plugs in.
 | **Tests**: kill a surviving mutant, add a property, add a real agent answer to the claim fixtures | yes | [write-tests](.claude/skills/write-tests/SKILL.md) |
 | **Smarter `countercheck init`**: detect more test commands (go, dbt, gradle, …) | yes | [write-tests](.claude/skills/write-tests/SKILL.md) |
 | **A check type** (discuss in an issue first) | yes | [add-check-type](.claude/skills/add-check-type/SKILL.md) |
-| **Bigger items**: Linux sandbox, signed receipts, GitHub Action | yes | [docs/ROADMAP.md](docs/ROADMAP.md), open an issue first |
+| **Bigger items**: Windows sandbox, signed receipts, GitHub Action | yes | [docs/ROADMAP.md](docs/ROADMAP.md), open an issue first |
 
 The guides are skills in `.claude/skills/`: Claude Code loads them automatically, other agents can read them (plain
 Markdown), and they work as checklists for people too.
@@ -32,7 +32,9 @@ git clone -b DEV https://github.com/datacrate360/agent-countercheck && cd agent-
 cargo build --release
 ```
 
-Rust 1.90+. macOS runs checks in its sandbox; Linux and Windows run them without one (the receipt says so).
+Rust 1.90+. macOS and Linux run checks in their sandbox; Windows runs them without one (the receipt says so). Linux
+sandbox tests need a kernel with Landlock (5.13+); the namespace tests skip themselves where user namespaces are
+blocked (Docker's default profile): `docker run --security-opt seccomp=unconfined` runs them.
 
 **Windows:** install [Rust](https://rustup.rs) (MSVC toolchain) and [Git for Windows](https://git-scm.com/download/win).
 The end-to-end tests and most checks use Git for Windows' `sh`; Countercheck finds it on `PATH` or next to `git.exe`.

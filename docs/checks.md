@@ -90,12 +90,14 @@ network = true
   (`Operation not permitted: '/var/tmp/x'`, `EPERM … open '/var/tmp/x'`), the hint says the check tried to write
   there, not that it lacked the internet. A bare "Operation not permitted" with no path is what both a refused
   connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict.
-- On Linux and Windows there is no sandbox yet, so checks always have the internet there, and the hint never shows.
+- On Linux the internet is blocked the same way when the system allows unprivileged user namespaces; where it
+  doesn't, checks have the internet and the receipt's `sandbox` says so. Windows has no sandbox yet: checks always
+  have the internet there, and the hint never shows.
 
 ### Checks that write to a fixed path
 
 Some test runners always write to the same place, whatever `TMPDIR` says (a per-user scratch folder like
-`/var/tmp/hermes-pytest-<uid>`). Under the macOS sandbox that write is refused, and the only other way out,
+`/var/tmp/hermes-pytest-<uid>`). Under the macOS or Linux sandbox that write is refused, and the only other way out,
 `--sandbox none`, drops every protection. Allow that one location on that one check:
 
 ```toml
@@ -116,8 +118,8 @@ writes = ["/var/tmp/hermes-pytest-{uid}"]   # this check may also write here (an
   the worker's files or yours.
 - It lives in the locked check file, so a worker can't grant itself a write location. The internet stays blocked
   unless the check also has `network = true`.
-- The receipt shows the resolved locations on that check (`writes allowed: ...`). On Linux and Windows there is no
-  sandbox yet, so nothing restricts writes there and `writes` has no effect.
+- The receipt shows the resolved locations on that check (`writes allowed: ...`). It applies under the macOS and Linux
+  sandboxes; Windows has no sandbox yet, so nothing restricts writes there and `writes` has no effect.
 
 ### Lock the test runner's settings
 

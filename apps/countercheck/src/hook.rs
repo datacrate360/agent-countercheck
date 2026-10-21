@@ -49,12 +49,10 @@ fn read_payload() -> Result<Option<serde_json::Value>, String> {
 /// Run the checks for one hook call: the shared core behind every agent adapter.
 fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
     let blocker = input.claim.as_deref().is_some_and(reports_blocker);
-    let sandbox = if std::env::var("COUNTERCHECK_SANDBOX").is_ok_and(|v| v == "none")
-        || !runner::seatbelt_works()
-    {
+    let sandbox = if std::env::var("COUNTERCHECK_SANDBOX").is_ok_and(|v| v == "none") {
         runner::Sandbox::None
     } else {
-        runner::Sandbox::Seatbelt
+        runner::auto_sandbox()
     };
     let base = session_base(&input.cwd, &input.session);
     let opts = verify::Options {

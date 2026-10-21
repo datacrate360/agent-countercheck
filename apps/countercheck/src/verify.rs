@@ -217,7 +217,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // Extra write locations, checked before anything runs (only the sandbox restricts writes).
     let mut writes = Vec::new();
     for spec in &planned {
-        writes.push(if opts.sandbox == runner::Sandbox::Seatbelt {
+        writes.push(if opts.sandbox.confines_writes() {
             runner::resolve_writes(spec, &root)?
         } else {
             Vec::new()

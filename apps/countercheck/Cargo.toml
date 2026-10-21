@@ -27,6 +27,13 @@ getrandom = { workspace = true }
 
 # Windows: `link` folders (node_modules, .venv) become directory junctions, which need no admin
 # rights or Developer Mode (a safe API over the reparse-point calls; our crates stay unsafe-free).
+# Linux: the check sandbox (`countercheck sandbox-exec`). Landlock confines writes without root;
+# user, network and PID namespaces give a loopback-only network and kill everything a check started.
+# Both crates are safe APIs; our crates stay unsafe-free.
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+nix = { version = "0.31", features = ["sched", "process", "signal", "socket", "user", "fs"] }
+
 [target.'cfg(windows)'.dependencies]
 junction = "1"
 # Windows: each check runs in a Job Object, so a timeout kills every process it started (MSYS

@@ -52,6 +52,23 @@ jobs:
         run: sh recipes/oracle-to-snowflake/test/run-test.sh "$PWD/target/debug/countercheck"
       - name: Install script syntax
         run: sh -n install.sh && sh -n packaging/homebrew/formula.sh
+      # The Linux sandbox has two modes: Landlock only (where user namespaces are blocked, e.g.
+      # Ubuntu's AppArmor default or Docker), and Landlock + namespaces (no internet, PID namespace).
+      # The tests above ran in whichever mode the runner has; run the sandbox tests in both.
+      - name: Linux sandbox, probe as the runner comes
+        run: cargo build -q && target/debug/countercheck sandbox-exec --probe
+      - name: Linux sandbox tests with user namespaces allowed
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          target/debug/countercheck sandbox-exec --probe
+          cargo test -q -p countercheck --test verify -- linux_sandbox with_namespaces --nocapture
+      - name: Linux sandbox tests with user namespaces blocked
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1 || true
+          sudo sysctl -w kernel.unprivileged_userns_clone=0 || true
+          sudo sysctl -w user.max_user_namespaces=0 || true
+          target/debug/countercheck sandbox-exec --probe
+          cargo test -q -p countercheck --test verify -- linux_sandbox with_namespaces --nocapture
 
   windows:
     name: test (windows)
