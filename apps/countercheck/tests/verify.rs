@@ -416,6 +416,36 @@ fn a_failed_check_without_internet_gets_a_hint_and_stays_failed() {
     );
 }
 
+/// A write the sandbox refused gets a write hint naming the path, not the internet hint
+/// (issue #16: "Operation not permitted" is also what a refused write prints). Still FAILED.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_refused_write_gets_a_write_hint_not_the_internet_hint() {
+    if nested() {
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().canonicalize().unwrap().join("scratch.txt");
+    let checks = format!(
+        "[[check]]\nname = \"py\"\nrun = \"python3 -c \\\"open('{t}', 'w').write('x')\\\"\"\n\
+         [[check]]\nname = \"sh\"\nrun = \"echo x > '{t}'\"\n",
+        t = target.display()
+    );
+    let d = project(&checks);
+    let (code, json) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{json:#}");
+    for c in json["checks"].as_array().unwrap() {
+        let tail = c["output_tail"].as_str().unwrap();
+        assert!(
+            tail.contains("tried to write outside the check folder"),
+            "{tail}"
+        );
+        assert!(tail.contains(&target.display().to_string()), "{tail}");
+        assert!(!tail.contains("without internet access"), "{tail}");
+        assert!(!tail.contains("network = true"), "{tail}");
+    }
+}
+
 /// An ordinary failure under the sandbox gets no internet hint (it would only mislead the agent).
 #[cfg(target_os = "macos")]
 #[test]
