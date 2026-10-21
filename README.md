@@ -388,7 +388,9 @@ Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, ar
 | Windows | a normal process (sandbox planned) | allowed | allowed |
 
 Everything a check starts is stopped when it ends, including processes that detach with `setsid`: on Linux by a PID
-namespace or a subreaper, on Windows by a Job Object, on macOS by killing the check's process group. The receipt's
+namespace or a subreaper, on Windows by a Job Object, on macOS by killing the check's process group and then finding
+what detached from it by its working folder or its hold on the check's output (a process that also leaves the check
+folder and closes its output can still escape on macOS; the sandbox limits what it can do). The receipt's
 `sandbox` field always says what was enforced. On Windows, run Countercheck inside a container or VM with networking
 off when you need that isolation. The main protections (locked checks, restored tests, clean copy, sealed receipts)
 work on every OS ([FAQ](#faq)).

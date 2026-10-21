@@ -2975,3 +2975,63 @@ fn a_checks_file_is_locked_only_by_its_pin() {
     assert_eq!(code, 1, "{err}");
     assert!(err.contains("can't name other files"), "{err}");
 }
+
+/// macOS: a daemon a check detached with `setsid` (double fork, new session, out of the process
+/// group) is found by its working folder or its hold on the check's output, and stopped.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_setsid_daemon_is_stopped_when_its_check_ends_on_macos() {
+    if nested() {
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let dir = outside.path().canonicalize().unwrap();
+    let daemon = "import os\n\
+        pid = os.fork()\n\
+        if pid == 0:\n    \
+            os.setsid()\n    \
+            if os.fork() == 0:\n        \
+                open(os.environ['PID_FILE'], 'w').write(str(os.getpid()))\n        \
+                os.execvp('sleep', ['sleep', '300'])\n    \
+            os._exit(0)\n\
+        os.waitpid(pid, 0)\n";
+    for sandbox in ["auto", "none"] {
+        let pid_file = dir.join(format!("daemon-{sandbox}.pid"));
+        let checks = format!(
+            "[[check]]\nname = \"daemon\"\nrun = \"PID_FILE='{}' python3 tests/daemon.py; sleep 0.5\"\nwrites = [\"{}\"]\n",
+            pid_file.display(),
+            dir.display()
+        );
+        let d = project(&checks);
+        fs::write(d.path().join("tests/daemon.py"), daemon).unwrap();
+        sh(d.path(), "git add -A && git commit -qm daemon");
+        let args: &[&str] = if sandbox == "none" {
+            &["--sandbox", "none"]
+        } else {
+            &[]
+        };
+        let (code, r) = countercheck(d.path(), args);
+        assert_eq!(code, 0, "{sandbox}: {r:#}");
+        let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
+        let running = || {
+            let out = Command::new("ps")
+                .args(["-o", "stat=", "-p", &pid])
+                .output()
+                .unwrap();
+            let stat = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            !stat.is_empty() && !stat.starts_with('Z')
+        };
+        let mut gone = false;
+        for _ in 0..30 {
+            if !running() {
+                gone = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        if !gone {
+            let _ = Command::new("kill").args(["-9", &pid]).status();
+            panic!("{sandbox}: the setsid daemon {pid} survived its check");
+        }
+    }
+}
