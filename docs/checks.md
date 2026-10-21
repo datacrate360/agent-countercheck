@@ -368,8 +368,9 @@ watched_mode = "note"               # optional: "note" (default) or "unverified"
   - 2 watched file(s) changed (review them): M tests/test_bootstrap.py (+73 -0), A tests/test_happy_eyeballs.py (+40 -0)
 ```
 
-- `A` added, `M` modified, `D` deleted. Line counts compare the file with the base by line text (a moved line
-  counts as neither); binary files and files over 5 MiB get no counts.
+- `A` added, `M` modified, `D` deleted. Line counts come from a line diff with the base, the same numbers as
+  `git diff --stat` (a moved line is one removed and one added; line endings are ignored). Binary files and files
+  over 5 MiB get no counts.
 - **Adding a test is normal; modifying or deleting an existing one is the signal.** `watched_mode = "unverified"`
   turns a VERIFIED into UNVERIFIED (exit 3) when an existing watched file was modified or deleted. New files never do,
   and a FAILED stays FAILED.

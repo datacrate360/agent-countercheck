@@ -76,7 +76,7 @@ pub fn validate(check: &str, list: &[String]) -> Result<(), String> {
 /// Fill in the placeholders. `user` and `uid` must be plain names/numbers (checked here), so a
 /// strange environment can't smuggle a path in.
 pub fn expand(t: &str, uid: &str, user: &str, home: &str) -> Result<String, String> {
-    if uid.is_empty() || !uid.bytes().all(|b| b.is_ascii_digit()) {
+    if t.contains("{uid}") && (uid.is_empty() || !uid.bytes().all(|b| b.is_ascii_digit())) {
         return Err(format!(
             "writes \"{t}\": the user id \"{uid}\" is not a number"
         ));
@@ -186,6 +186,8 @@ mod tests {
         assert!(expand("/tmp/{user}", "501", "../x", "/Users/sri").is_err());
         assert!(expand("/tmp/{user}", "501", "a/b", "/Users/sri").is_err());
         assert!(expand("{home}/x", "501", "sri", "relative").is_err());
+        // The user id is only needed when {uid} is used.
+        assert_eq!(expand("/tmp/x", "", "sri", "/Users/sri").unwrap(), "/tmp/x");
         // An odd user name doesn't matter when {user} isn't used.
         assert!(expand("/tmp/{uid}", "501", "a/b", "/Users/sri").is_ok());
     }

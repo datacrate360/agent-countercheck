@@ -22,6 +22,8 @@ globset = { workspace = true }
 regex = { workspace = true }
 # Golden csv comparison.
 csv = { workspace = true }
+# Line diff for `watched` line counts (Myers, like git).
+similar = { workspace = true }
 
 [dev-dependencies]
 proptest = "1"
