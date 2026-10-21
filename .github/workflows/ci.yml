@@ -44,6 +44,10 @@ jobs:
         run: cargo test --workspace
       - name: Examples give the expected verdicts
         run: sh examples/ml-eval-threshold/run-example.sh "$PWD/target/debug/countercheck"
+      - name: pytest for the Python example
+        run: python3 -m venv "$RUNNER_TEMP/py" && "$RUNNER_TEMP/py/bin/pip" install -q pytest && echo "$RUNNER_TEMP/py/bin" >> "$GITHUB_PATH"
+      - name: The Python example gives the expected verdicts
+        run: sh examples/python-pytest/run-example.sh "$PWD/target/debug/countercheck"
       - name: Recipes give the expected verdicts
         run: sh recipes/oracle-to-snowflake/test/run-test.sh "$PWD/target/debug/countercheck"
       - name: Install script syntax

@@ -20,7 +20,8 @@ hooks find it themselves with `countercheck hook session-start` (README "Agent h
 | [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
 | [Coverage](#coverage) | every item in a list you keep must show up in the worker's files (tables, procedures, levels, pages) | `[[coverage]]` |
 
-Also: [Which files the checks cover](#which-files-the-checks-cover) lists changed files no check looks at.
+Also: [Which files the checks cover](#which-files-the-checks-cover) lists changed files no check looks at, and
+[Lock the test runner's settings](#lock-the-test-runners-settings) closes a gap every test command has.
 
 [examples/data-migration](../examples/data-migration) uses all of them on a small made-up migration. For a real
 Oracle → Snowflake setup with Cortex Code, see the recipe
@@ -81,6 +82,49 @@ network = true
   check may use it.
 - The hint only appears when the output looks like a connection error (blocked, can't resolve, unreachable).
 - On Linux and Windows there is no sandbox yet, so checks always have the internet there, and the hint never shows.
+
+### Lock the test runner's settings
+
+`protected = ["tests/**"]` puts back edited tests, but test runners also read settings from files **outside**
+`tests/`. An agent can switch a failing test off there, and the checks pass with `tests/` untouched. With pytest,
+each of these turned a real bug's FAILED into VERIFIED (tested, [examples/python-pytest](../examples/python-pytest/)):
+
+| The agent adds or edits | Effect |
+|---|---|
+| `conftest.py` in the root, or in **any** folder pytest scans (`src/conftest.py`) | marks every test as skipped |
+| `pyproject.toml`: `addopts = "--deselect tests/test_x.py::test_y"` | the failing test never runs |
+| `pytest.ini` / `tox.ini` / `setup.cfg`: `addopts = -k "not y"` | the same |
+
+Fix it in two parts: protect the files that only configure tests, and pin the runner's settings in the locked
+command, so files you can't protect are ignored.
+
+```toml
+protected = ["tests/**", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg"]
+
+[[check]]
+name = "tests"
+run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= tests"
+```
+
+- `-c tests/pytest.ini`: settings come from a protected file (put `pythonpath = .` and your other settings there);
+  `pyproject.toml` and any new `pytest.ini` are ignored.
+- `--rootdir=.` keeps paths relative to the project. `--confcutdir=tests` loads only `conftest.py` files under
+  `tests/`. `-o addopts=` drops extra options from anywhere. `tests` at the end runs that folder, whatever
+  `testpaths` says.
+- **Don't protect `pyproject.toml` or `package.json`.** They also list dependencies; putting them back would undo an
+  honest new dependency and fail the checks for no reason.
+
+**Other runners have the same gap.** Find where the runner reads its settings and either protect that file (if it only
+configures tests) or name the settings in the command:
+
+| Runner | Settings outside the tests | In the command |
+|---|---|---|
+| jest / vitest | `jest.config.*`, `vitest.config.*`, `package.json` (`"jest"`) | `npx jest --config tests/jest.config.js` |
+| go test | build tags, `TestMain` in any test file | protect `**/*_test.go` |
+| cargo test | `#[ignore]` in source files, `.cargo/config.toml` | protect `.cargo/**`; `cargo test -- --include-ignored` |
+
+A [budget](#budget) on the number of tests that ran (the runner's summary, printed by a protected script as
+`METRIC tests=<n>`) catches skipped tests whatever the trick.
 
 ## Matrix
 

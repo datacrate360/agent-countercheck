@@ -1,0 +1,14 @@
+# A Python project tested with pytest. pytest also reads settings from files outside tests/ (a conftest.py in any
+# folder it scans, pytest.ini, tox.ini, setup.cfg, pyproject.toml), and an agent can skip or deselect a test there.
+# So: protect the test-only config files, and pin pytest's settings in the locked command.
+protected = ["tests/**", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg"]
+
+# -c tests/pytest.ini     settings come from the protected file; pyproject.toml / a new pytest.ini are ignored
+# --rootdir=.             paths stay relative to the project, not to tests/
+# --confcutdir=tests      only conftest.py files under tests/ are loaded
+# -o addopts=             no extra options, wherever they come from
+# tests                   run the tests folder, not whatever testpaths says
+[[check]]
+name = "tests"
+run = "python3 -m pytest -q -p no:cacheprovider -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= tests"
+timeout_secs = 120

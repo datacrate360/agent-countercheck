@@ -195,12 +195,14 @@ The starter check **fails on purpose** ("replace me with your test command") unt
 you already run, usually the ones in your CI:
 
 ```toml
-protected = ["tests/**"]          # files the agent may not change; .countercheck/** is always protected
+# files the agent may not change (.countercheck/** is always protected), including test config outside tests/
+protected = ["tests/**", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg"]
 link = [".venv"]                  # optional: git-ignored dependency folders the checks need (read-only)
 
 [[check]]
 name = "tests"
-run = "pytest -q"                 # any command; runs with `sh -c` in a clean copy of the project
+# any command; runs with `sh -c` in a clean copy. The flags make pytest ignore settings the agent could change:
+run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= tests"
 timeout_secs = 600
 
 [[check]]
@@ -217,6 +219,11 @@ git add .countercheck/checks.toml && git commit -m "Countercheck checks"
 
 - **You own the tests.** Countercheck never writes them, and the agent being graded shouldn't either. An agent can
   help draft tests in a separate step that you review and commit ([FAQ](#faq)).
+- **Lock the test runner's settings, not just the tests.** pytest also reads `conftest.py` (from any folder),
+  `pytest.ini` and `pyproject.toml`; an agent can skip a test there without touching `tests/`. The setup above blocks
+  that. It reads pytest's settings from `tests/pytest.ini` (create it: `[pytest]` and `pythonpath = .`, plus your
+  settings) ([why, and other runners](docs/checks.md#lock-the-test-runners-settings),
+  [example](examples/python-pytest/)).
 - **No tests yet?** Countercheck never says VERIFIED without proof, but a command that runs zero tests and exits 0
   looks like a pass. Use pytest (it fails on zero tests) or a minimum count ([FAQ](#faq)).
 - **Beyond unit tests:** forbidden text, every item converted, output matches a reference, a number within limits,
