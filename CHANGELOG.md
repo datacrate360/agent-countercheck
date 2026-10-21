@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.2 (2026-10-21)
 
 - **Fix: protected files stored in Git LFS work again** ([#11](https://github.com/datacrate360/agent-countercheck/issues/11)).
   Since v0.5.1 the base is read from git's own objects, which for an LFS file is the small pointer, so an untouched
