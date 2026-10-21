@@ -323,6 +323,130 @@ fn not_started(spec: &PlannedCheck, why: String) -> CheckResult {
     }
 }
 
+/// Seconds in `ps -o etime` format (`[[dd-]hh:]mm:ss`).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn etime_secs(s: &str) -> Option<u64> {
+    let (days, rest) = match s.split_once('-') {
+        Some((d, r)) => (d.parse::<u64>().ok()?, r),
+        None => (0, s),
+    };
+    let mut total = 0u64;
+    for part in rest.split(':') {
+        total = total
+            .checked_mul(60)?
+            .checked_add(part.parse::<u64>().ok()?)?;
+    }
+    days.checked_mul(86_400)?.checked_add(total)
+}
+
+/// Processes adopted by launchd (ppid 1), owned by `uid`, younger than `max_age` seconds: the
+/// only ones a just-finished check can have detached. From `ps -A -o pid=,ppid=,uid=,etime=`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn orphan_candidates(ps: &str, uid: u32, max_age: u64, me: u32) -> Vec<u32> {
+    ps.lines()
+        .filter_map(|l| {
+            let mut f = l.split_whitespace();
+            let pid = f.next()?.parse::<u32>().ok()?;
+            let ppid = f.next()?.parse::<u32>().ok()?;
+            let owner = f.next()?.parse::<u32>().ok()?;
+            let age = etime_secs(f.next()?)?;
+            (ppid == 1 && owner == uid && age <= max_age && pid != me).then_some(pid)
+        })
+        .collect()
+}
+
+/// The candidates that belong to the check, from `lsof -F pfin -d cwd,0,1,2`: working folder
+/// inside one of `roots`, or stdin/stdout/stderr on the check's output file.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn confirmed_detached(lsof: &str, roots: &[String], log_inode: u64) -> Vec<u32> {
+    let mut out = Vec::new();
+    let (mut pid, mut fd) = (None, String::new());
+    let inside = |p: &str| {
+        roots.iter().any(|r| {
+            p == r
+                || p.strip_prefix(r.as_str())
+                    .is_some_and(|x| x.starts_with('/'))
+        })
+    };
+    for line in lsof.lines() {
+        let (k, v) = line.split_at(line.len().min(1));
+        match k {
+            "p" => pid = v.parse::<u32>().ok(),
+            "f" => fd = v.to_string(),
+            "i" if matches!(fd.as_str(), "0" | "1" | "2")
+                && log_inode != 0
+                && v.parse::<u64>().ok() == Some(log_inode) =>
+            {
+                out.extend(pid)
+            }
+            "n" if fd == "cwd" && inside(v) => out.extend(pid),
+            _ => {}
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// Stop processes a check detached from its process group (macOS). A process that also left the
+/// check folder and closed its output can still escape; the sandbox limits what it can do.
+#[cfg(target_os = "macos")]
+fn sweep_detached(dirs: &[&Path], log_inode: u64, ran_secs: u64) {
+    use std::os::unix::fs::MetadataExt;
+    let Some(uid) = dirs
+        .first()
+        .and_then(|d| d.metadata().ok())
+        .map(|m| m.uid())
+    else {
+        return;
+    };
+    let roots: Vec<String> = dirs
+        .iter()
+        .filter_map(|d| d.canonicalize().ok())
+        .map(|d| d.to_string_lossy().into_owned())
+        .collect();
+    for _ in 0..5 {
+        let Ok(ps) = Command::new("/bin/ps")
+            .args(["-A", "-o", "pid=,ppid=,uid=,etime="])
+            .output()
+        else {
+            return;
+        };
+        let candidates = orphan_candidates(
+            &String::from_utf8_lossy(&ps.stdout),
+            uid,
+            ran_secs.saturating_add(2),
+            std::process::id(),
+        );
+        if candidates.is_empty() {
+            return;
+        }
+        let list = candidates
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let Ok(lsof) = Command::new("/usr/sbin/lsof")
+            .args(["-nP", "-w", "-F", "pfin", "-d", "cwd,0,1,2", "-p", &list])
+            .output()
+        else {
+            return;
+        };
+        let hits = confirmed_detached(&String::from_utf8_lossy(&lsof.stdout), &roots, log_inode);
+        if hits.is_empty() {
+            return;
+        }
+        for p in hits {
+            let _ = Command::new("/bin/kill")
+                .args(["-9", &p.to_string()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 /// Kill the check and everything it started.
 #[cfg(unix)]
 fn kill_tree(child: &mut std::process::Child) {
@@ -385,6 +509,12 @@ pub fn run_check(
         Err(why) => return Ok(not_started(spec, why)),
     };
     let log = tempfile::tempfile_in(tmp).map_err(|e| format!("temp file: {e}"))?;
+    // The output file's inode: a detached process that kept the check's stdout is found by it.
+    #[cfg(target_os = "macos")]
+    let log_inode = {
+        use std::os::unix::fs::MetadataExt;
+        log.metadata().map(|m| m.ino()).unwrap_or(0)
+    };
     let out = log.try_clone().map_err(|e| e.to_string())?;
     let err = log.try_clone().map_err(|e| e.to_string())?;
 
@@ -481,6 +611,10 @@ pub fn run_check(
             (None, true)
         }
     };
+    // macOS has no subreaper or PID namespace: find what the check detached (`setsid`, double
+    // fork) by its working folder or its hold on the check's output, and stop it.
+    #[cfg(target_os = "macos")]
+    sweep_detached(&[workdir, tmp], log_inode, started.elapsed().as_secs());
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let metric_name = spec.budget.as_ref().map(|b| b.metric.as_str());
     let (output_sha256, output_tail, metric) = read_output(log, metric_name)?;
@@ -712,6 +846,30 @@ fn read_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detached_processes_are_found_by_folder_or_output_only() {
+        assert_eq!(etime_secs("00:07"), Some(7));
+        assert_eq!(etime_secs("01:02:03"), Some(3723));
+        assert_eq!(etime_secs("2-00:00:01"), Some(172_801));
+        assert_eq!(etime_secs("x"), None);
+        let ps = "  10     1   501      00:03\n  11     1   501      05:00\n  12    99   501      00:01\n  13     1     0      00:01\n  14     1   501      00:01\n";
+        // Young orphans of this user only, never this process.
+        assert_eq!(orphan_candidates(ps, 501, 4, 14), vec![10]);
+        let roots = vec![
+            "/private/var/x/work".to_string(),
+            "/private/var/x/tmp".to_string(),
+        ];
+        let lsof = "p10\nfcwd\nn/private/var/x/work/sub\np11\nfcwd\nn/Users/me\nf1\ni777\np12\nfcwd\nn/private/var/x/workshop\np13\nfcwd\nn/\nf2\ni555\n";
+        // 10: cwd inside; 11: holds the output (inode 777); 12: a sibling folder, not inside;
+        // 13: another file.
+        assert_eq!(confirmed_detached(lsof, &roots, 777), vec![10, 11]);
+        assert_eq!(
+            confirmed_detached(lsof, &roots, 0),
+            vec![10],
+            "no inode, no match by it"
+        );
+    }
 
     #[test]
     fn a_refused_write_is_told_apart_from_a_refused_connection() {
