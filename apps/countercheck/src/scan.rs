@@ -33,10 +33,13 @@ fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
 }
 
 /// Run every `[[forbid]]` entry over the clean copy. Each file is read at most once.
+/// `base` gives a file's bytes at the base revision (`None` when it isn't there); it is only asked
+/// for files a `scope = "added"` rule scans.
 pub fn forbid_all(
     specs: &[ForbidSpec],
     work: &Path,
     files: &[String],
+    base: &mut dyn FnMut(&str) -> Option<Vec<u8>>,
 ) -> Result<Vec<CheckResult>, String> {
     let started = Instant::now();
     let rules = specs.iter().map(Rule::new).collect::<Result<Vec<_>, _>>()?;
@@ -51,12 +54,21 @@ pub fn forbid_all(
         let path = work.join(f);
         let too_big = fs::metadata(&path).map_or(true, |m| m.len() > forbid::MAX_FILE_BYTES);
         let bytes = if too_big { None } else { fs::read(&path).ok() };
+        let base_bytes = if bytes.is_some()
+            && wanted
+                .iter()
+                .any(|&i| rules.get(i).is_some_and(Rule::added_only))
+        {
+            base(f)
+        } else {
+            None
+        };
         for i in wanted {
             let (Some(rule), Some(scan)) = (rules.get(i), scans.get_mut(i)) else {
                 continue;
             };
             match &bytes {
-                Some(b) => scan.add_file(rule, f, b),
+                Some(b) => scan.add_file(rule, f, b, base_bytes.as_deref()),
                 None => scan.skip(f),
             }
         }

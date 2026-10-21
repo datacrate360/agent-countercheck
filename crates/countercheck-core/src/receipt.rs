@@ -104,6 +104,10 @@ pub struct Receipt {
     /// receipts, so their seals still verify.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uncovered: Option<crate::uncovered::Uncovered>,
+    /// Changes to watched files (only when the check file has `watched`). Absent on older
+    /// receipts, so their seals still verify.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watched: Option<crate::watched::Watched>,
     pub verdict: Verdict,
     pub reasons: Vec<String>,
 }
@@ -273,6 +277,19 @@ impl Receipt {
                 }
             ));
         }
+        if let Some(w) = self.watched.as_ref().filter(|w| w.total > 0) {
+            s.push_str(&format!(
+                "  watched:  {} file(s) changed ({} existing modified or deleted); review them:\n",
+                w.total, w.existing_changed
+            ));
+            for c in &w.changes {
+                s.push_str(&format!("            {}\n", c.describe()));
+            }
+            let more = w.total.saturating_sub(w.changes.len());
+            if more > 0 {
+                s.push_str(&format!("            and {more} more\n"));
+            }
+        }
         if let Some(cost) = self.worker.cost_usd {
             s.push_str(&format!("  cost:     ${cost:.4} (reported)\n"));
         }
@@ -329,6 +346,7 @@ mod tests {
             linked: vec![],
             protected_changes: vec![],
             uncovered: None,
+            watched: None,
             checks: vec![],
             verdict: Verdict::Unverified,
             reasons: vec![],
@@ -467,6 +485,7 @@ mod tests {
             linked: vec![],
             protected_changes: vec![],
             uncovered: None,
+            watched: None,
             checks: vec![result(false)],
             verdict: Verdict::Failed,
             reasons: vec![],
@@ -514,6 +533,7 @@ mod tests {
                 linked: vec![],
                 protected_changes: vec![],
                 uncovered: None,
+                watched: None,
                 checks: vec![],
                 verdict: Verdict::Unverified,
                 reasons: vec![],

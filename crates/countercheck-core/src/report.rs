@@ -330,6 +330,22 @@ fn run_html(e: &Entry, open: bool) -> String {
         h.push_str("</ul>");
     }
 
+    if let Some(w) = r.watched.as_ref().filter(|w| w.total > 0) {
+        let _ = write!(
+            h,
+            "<p><b>Watched files changed</b> ({}; {} existing modified or deleted; review them):</p><ul>",
+            w.total, w.existing_changed
+        );
+        for c in &w.changes {
+            let _ = write!(h, "<li><code>{}</code></li>", escape(&c.describe()));
+        }
+        let more = w.total.saturating_sub(w.changes.len());
+        if more > 0 {
+            let _ = write!(h, "<li>and {more} more</li>");
+        }
+        h.push_str("</ul>");
+    }
+
     if let Some(u) = r.uncovered.as_ref().filter(|u| u.total > 0) {
         let _ = write!(
             h,
@@ -417,6 +433,7 @@ mod tests {
             linked: vec![],
             protected_changes: vec![],
             uncovered: None,
+            watched: None,
             checks,
             verdict,
             reasons: vec!["check \"t\" failed".to_string()],

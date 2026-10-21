@@ -5,7 +5,7 @@ use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::gitobj::{self, Diff, Files};
 use countercheck_core::protect::{Change, Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
-use countercheck_core::uncovered;
+use countercheck_core::{uncovered, watched};
 use std::path::PathBuf;
 
 /// Matrix files and coverage item lists may be larger than the check file (up to 10,000 items).
@@ -113,6 +113,30 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         }
         protected_changes.push(pc);
     }
+    // Watched files: the worker's version (in the clean copy) against the base, by line text.
+    let watched = if checks.watched.is_empty() {
+        None
+    } else {
+        let globs = Protected::labeled(&checks.watched, "watched pattern")?;
+        let mut counts = |path: &str, change: Change| -> Option<(u64, u64)> {
+            let was = match change {
+                Change::Added => Vec::new(),
+                _ => base.read_real(path).ok().flatten()?,
+            };
+            let now = match change {
+                Change::Deleted => Vec::new(),
+                _ => std::fs::read(work.join(snapshot::safe_rel(path).ok()?)).ok()?,
+            };
+            watched::line_delta(&was, &now)
+        };
+        Some(watched::find(
+            &changes,
+            &globs,
+            &protected,
+            checks.watched_mode,
+            &mut counts,
+        ))
+    };
     let tree_sha256 = snapshot::tree_hash(&work)?;
     let mut linked = Vec::new();
     for name in &checks.link {
@@ -125,7 +149,15 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let mut scan_results = Vec::new();
     if !checks.forbids.is_empty() || !checks.coverages.is_empty() {
         let files = scan::files(&work)?;
-        scan_results.extend(scan::forbid_all(&checks.forbids, &work, &files)?);
+        // `scope = "added"` compares with the base. An unreadable base file counts as absent,
+        // so every line is new: stricter, never looser.
+        let mut base_file = |p: &str| base.read_real(p).ok().flatten();
+        scan_results.extend(scan::forbid_all(
+            &checks.forbids,
+            &work,
+            &files,
+            &mut base_file,
+        )?);
         scan_results.extend(scan::coverage_all(
             &checks.coverages,
             &locked_texts,
@@ -192,6 +224,10 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         Some(u) => uncovered::apply(verdict, reasons, u),
         None => (verdict, reasons),
     };
+    let (verdict, reasons) = match &watched {
+        Some(w) => watched::apply(verdict, reasons, w),
+        None => (verdict, reasons),
+    };
     let claim_status = receipt::claim_status(opts.claim.as_deref(), verdict);
     let receipt = Receipt {
         schema: receipt::SCHEMA.to_string(),
@@ -216,6 +252,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         protected_changes,
         checks: results,
         uncovered,
+        watched,
         verdict,
         reasons,
     }

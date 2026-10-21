@@ -8,6 +8,7 @@ use countercheck_core::receipt::{
     self, CheckResult, ClaimStatus, Receipt, RepoInfo, SCHEMA, Verdict, Worker,
 };
 use countercheck_core::uncovered::{self, Mode as UncoveredMode, Uncovered};
+use countercheck_core::watched::{self, Mode as WatchedMode, Watched, WatchedChange};
 use proptest::prelude::*;
 
 // ---- generators ----
@@ -103,6 +104,40 @@ fn uncovered_section() -> impl Strategy<Value = Uncovered> {
         })
 }
 
+fn watched_section() -> impl Strategy<Value = Watched> {
+    (
+        prop_oneof![Just(WatchedMode::Note), Just(WatchedMode::Unverified)],
+        proptest::collection::vec(
+            (
+                text(),
+                change(),
+                proptest::option::of(0u64..50),
+                proptest::option::of(0u64..50),
+            ),
+            0..3,
+        ),
+        0usize..5,
+    )
+        .prop_map(|(mode, items, extra)| {
+            let changes: Vec<WatchedChange> = items
+                .into_iter()
+                .map(|(path, change, a, r)| WatchedChange {
+                    path,
+                    change,
+                    lines_added: a,
+                    lines_removed: r,
+                })
+                .collect();
+            let existing = changes.iter().filter(|c| c.touches_existing()).count();
+            Watched {
+                mode,
+                total: changes.len() + extra,
+                existing_changed: existing + extra / 2,
+                changes,
+            }
+        })
+}
+
 fn receipt() -> impl Strategy<Value = Receipt> {
     (
         (text(), text(), text(), text(), text(), any::<bool>()),
@@ -124,6 +159,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
             verdict(),
             proptest::collection::vec(text(), 0..3),
             proptest::option::of(uncovered_section()),
+            proptest::option::of(watched_section()),
         ),
     )
         .prop_map(
@@ -132,7 +168,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 (agent, model, cost_usd),
                 (claim, claim_status, checks_locked),
                 (checks_source, sandbox, tree_sha256, linked),
-                (protected_changes, checks, verdict, reasons, uncovered),
+                (protected_changes, checks, verdict, reasons, uncovered, watched),
             )| Receipt {
                 schema: SCHEMA.to_string(),
                 id: String::new(),
@@ -160,6 +196,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 protected_changes,
                 checks,
                 uncovered,
+                watched,
                 verdict,
                 reasons,
             },
@@ -222,7 +259,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 35;
+const EDITS: usize = 37;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -304,6 +341,35 @@ fn edit(r: &mut Receipt, which: usize) {
                     mode: UncoveredMode::Unverified,
                     total: 1,
                     paths: vec!["p".into()],
+                })
+            }
+        },
+        34 => match &mut r.watched {
+            Some(w) => w.existing_changed = w.existing_changed.wrapping_add(1),
+            None => {
+                r.watched = Some(Watched {
+                    mode: WatchedMode::Note,
+                    total: 0,
+                    existing_changed: 0,
+                    changes: vec![],
+                })
+            }
+        },
+        35 => match &mut r.watched {
+            Some(w) if !w.changes.is_empty() => {
+                w.changes[0].lines_added = Some(w.changes[0].lines_added.map_or(0, |n| n + 1))
+            }
+            _ => {
+                r.watched = Some(Watched {
+                    mode: WatchedMode::Unverified,
+                    total: 1,
+                    existing_changed: 1,
+                    changes: vec![WatchedChange {
+                        path: "tests/a.py".into(),
+                        change: Change::Modified,
+                        lines_added: None,
+                        lines_removed: None,
+                    }],
                 })
             }
         },
@@ -574,6 +640,93 @@ proptest! {
     }
 }
 
+// ---- watched (issue #19) ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1024))]
+
+    /// Watched changes never make a verdict better, and only an existing file modified or
+    /// deleted (mode unverified) can turn VERIFIED into UNVERIFIED.
+    #[test]
+    fn watched_never_improves_a_verdict(v in verdict(), w in watched_section()) {
+        let (out, reasons) = watched::apply(v, vec!["r".into()], &w);
+        match v {
+            Verdict::Verified => prop_assert!(out == Verdict::Verified || out == Verdict::Unverified),
+            other => prop_assert_eq!(out, other),
+        }
+        if out != v {
+            prop_assert!(w.mode == WatchedMode::Unverified && w.existing_changed > 0);
+        }
+        prop_assert_eq!(&reasons[0], "r");
+        prop_assert_eq!(reasons.len(), if w.total > 0 { 2 } else { 1 });
+    }
+
+    /// Only changed, watched, unprotected files are listed, sorted, without duplicates.
+    #[test]
+    fn watched_lists_only_unprotected_watched_changes(
+        ch in changes(), watch in patterns(), prot in patterns(),
+    ) {
+        let protected = Protected::new(&prot).map_err(TestCaseError::fail)?;
+        let globs = Protected::new(&watch).map_err(TestCaseError::fail)?;
+        let w = watched::find(&ch, &globs, &protected, WatchedMode::Note, |_, _| None);
+        for c in &w.changes {
+            prop_assert!(ch.iter().any(|(k, p)| p == &c.path && *k == c.change));
+            prop_assert!(!protected.matches(&c.path) && globs.matches(&c.path));
+        }
+        let mut sorted: Vec<String> = w.changes.iter().map(|c| c.path.clone()).collect();
+        sorted.sort();
+        sorted.dedup();
+        prop_assert_eq!(sorted.len(), w.changes.len());
+        prop_assert!(w.existing_changed <= w.total);
+    }
+}
+
+// ---- forbid scope = "added" (issue #17) ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// "added" never reports more than "all", and a file identical to its base reports nothing.
+    #[test]
+    fn added_scope_is_never_looser_than_its_base_allows(
+        old in proptest::collection::vec("[ab ]{0,4}", 0..12),
+        new in proptest::collection::vec("[ab ]{0,4}", 0..12),
+    ) {
+        use countercheck_core::forbid::{ForbidSpec, Rule, Scan};
+        let mut spec = ForbidSpec {
+            name: "n".into(),
+            pattern: "a".into(),
+            paths: vec!["**".into()],
+            message: None,
+            case_insensitive: false,
+            scope: countercheck_core::forbid::Scope::Added,
+        };
+        let added = Rule::new(&spec).map_err(TestCaseError::fail)?;
+        spec.scope = countercheck_core::forbid::Scope::All;
+        let all = Rule::new(&spec).map_err(TestCaseError::fail)?;
+        let (old, new) = (old.join("\n"), new.join("\n"));
+        let count = |rule: &Rule, now: &str, base: Option<&str>| {
+            let mut s = Scan::default();
+            s.add_file(rule, "f", now.as_bytes(), base.map(str::as_bytes));
+            s.total
+        };
+        prop_assert!(count(&added, &new, Some(&old)) <= count(&all, &new, None));
+        prop_assert_eq!(count(&added, &old, Some(&old)), 0);
+        prop_assert_eq!(count(&added, &new, None), count(&all, &new, None));
+        // Exactly the extra copies: new hits minus old hits, per distinct line, never negative.
+        let per = |t: &str| {
+            let mut m = std::collections::HashMap::<String, usize>::new();
+            for l in t.lines().filter(|l| l.contains('a')) {
+                *m.entry(l.to_string()).or_default() += 1;
+            }
+            m
+        };
+        let (o, n) = (per(&old), per(&new));
+        let want: usize = n.iter().map(|(l, c)| c.saturating_sub(*o.get(l).unwrap_or(&0))).sum();
+        prop_assert_eq!(count(&added, &new, Some(&old)), want);
+    }
+}
+
 // ---- config ----
 
 /// Pieces that make up plausible (and broken) check files.
@@ -789,12 +942,13 @@ proptest! {
             paths: vec!["**".into()],
             message: None,
             case_insensitive: false,
+            scope: Default::default(),
         };
         let rule = Rule::new(&spec).map_err(TestCaseError::fail)?;
         let text = lines.join("\n");
         prop_assume!(!text.contains('\0'));
         let mut scan = Scan::default();
-        scan.add_file(&rule, "f", text.as_bytes());
+        scan.add_file(&rule, "f", text.as_bytes(), None);
         let want = text.lines().filter(|l| l.contains(&needle)).count();
         prop_assert_eq!(scan.total, want);
         prop_assert!(scan.shown.len() <= MAX_HITS_SHOWN);

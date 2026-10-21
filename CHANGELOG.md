@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **New: `watched` paths** ([#19](https://github.com/datacrate360/agent-countercheck/issues/19)). Files the agent may
+  change, but every change is listed on the receipt (`A`/`M`/`D` with line counts) and in `show`, `report` and `ui`:
+  the middle ground between `protected` (put back) and unprotected (silent). `watched_mode = "unverified"` turns a
+  VERIFIED into UNVERIFIED when an existing watched file was modified or deleted; adding files never does. Read from
+  the base like every rule; protected wins when a path is both. New optional receipt field `watched`, so older
+  receipts still verify.
+- **New: `scope = "added"` on `[[forbid]]`** ([#17](https://github.com/datacrate360/agent-countercheck/issues/17)).
+  Only lines new since the base count, compared by text with the same file at the base revision: an existing
+  legitimate `pytest.skip(` no longer forces the rule to be weakened, while a new skip, a copied old one, or a new
+  file still fails. Moving a line doesn't count. Default (`"all"`) is unchanged.
 - **Fix: a write the macOS sandbox refused got the "no internet" hint**
   ([#16](https://github.com/datacrate360/agent-countercheck/issues/16)). "Operation not permitted" counted as a
   network error, but the sandbox prints the same words for a refused file write, so a test runner writing to a fixed

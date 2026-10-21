@@ -20,7 +20,8 @@ hooks find it themselves with `countercheck hook session-start` (README "Agent h
 | [Budget](#budget) | a number the command prints must stay within a limit (time, size, frame rate, error rate) | `[[check]]` + `budget` |
 | [Coverage](#coverage) | every item in a list you keep must show up in the worker's files (tables, procedures, levels, pages) | `[[coverage]]` |
 
-Also: [Which files the checks cover](#which-files-the-checks-cover) lists changed files no check looks at, and
+Also: [Which files the checks cover](#which-files-the-checks-cover) lists changed files no check looks at,
+[Watched files](#watched-files-changes-allowed-always-listed) lists every change to files you want to review, and
 [Lock the test runner's settings](#lock-the-test-runners-settings) closes a gap every test command has.
 
 [examples/data-migration](../examples/data-migration) uses all of them on a small made-up migration. For a real
@@ -175,9 +176,10 @@ pattern = '\(\+\)|\bDECODE\s*\(|\bROWNUM\b'     # a regex
 paths = ["snowflake/**/*.sql"]                     # globs, same matcher as `protected`
 message = "Convert these to Snowflake syntax."    # optional, shown to the agent on failure
 case_insensitive = true                            # optional, default false
+scope = "added"                                    # optional: only lines added since the base (default "all")
 ```
 
-- On the receipt it is a check named `forbid: <name>`.
+- On the receipt it is a check named `forbid: <name>` (`forbid (added lines): <name>` with `scope = "added"`).
 - The pattern is matched line by line ([regex syntax](https://docs.rs/regex/latest/regex/#syntax); it always runs
   in linear time). Use single quotes in TOML so backslashes stay as written.
 - A failure lists up to 20 hits as `path:line: text` (lines cut to 200 characters) and the total count, then the
@@ -185,6 +187,33 @@ case_insensitive = true                            # optional, default false
 - Binary files and files over 5 MiB are skipped and listed as skipped.
 - When no file matches `paths`, the check passes and says "nothing to scan".
 - An invalid regex is refused when the check file is read.
+
+### Only new lines: `scope = "added"`
+
+Real code often already has the lines you want to forbid in *new* code: a legitimate `pytest.skip(...)` for a missing
+database, an error message printed to stderr. A whole-file rule fails on those, so it gets weakened until it no
+longer catches the agent's new skip. With `scope = "added"`, a line counts only if it's new compared with the base:
+
+```toml
+[[forbid]]
+name = "no newly skipped tests"
+pattern = 'pytest\.mark\.(skip|xfail)\b|pytest\.skip\('
+paths = ["tests/**"]
+scope = "added"
+```
+
+```text
+  [FAIL] forbid (added lines): no newly skipped tests
+         | 1 new (added since the base) forbidden line(s) in 1 file(s); 12 file(s) scanned
+         | tests/test_pricing.py:41:     pytest.skip("flaky")
+```
+
+- Lines are compared **by text with the same file at the base revision**: a matching line counts when the worker's
+  file has more copies of that exact line than the base did. Moving a line doesn't count; copying an existing
+  forbidden line does. A changed line is a new line. New files count in full.
+- The base is read from git's objects (checked against their ids), and protected files are put back before the scan,
+  so editing a protected file can't make a line look old.
+- Without `scope` (or `scope = "all"`) every line counts, as before.
 
 ## Golden
 
@@ -291,3 +320,33 @@ covers = ["frontend/src/**", "frontend/package.json"]
 - Agent hooks push back only on FAILED. Uncovered files are for the person reading the receipt: the agent can't fix them
   by itself, because only a new commit to `checks.toml` changes `covers`.
 - The receipt keeps up to 100 paths plus the total; `show`, `report` and `ui` list them.
+
+## Watched files: changes allowed, always listed
+
+`protected` puts a file back, so honest work that has to update a test double fails. Leaving the file unprotected lets
+the agent change an assertion or a fake without the receipt saying a word. `watched` sits in between: the change
+stays, and the receipt lists it.
+
+```toml
+protected = ["**/conftest.py", ".github/workflows/**"]
+watched = ["tests/**"]              # changes allowed, always listed
+watched_mode = "note"               # optional: "note" (default) or "unverified"
+```
+
+```text
+  watched:  2 file(s) changed (1 existing modified or deleted); review them:
+            M tests/test_bootstrap.py (+73 -0)
+            A tests/test_happy_eyeballs.py (+40 -0)
+  - 2 watched file(s) changed (review them): M tests/test_bootstrap.py (+73 -0), A tests/test_happy_eyeballs.py (+40 -0)
+```
+
+- `A` added, `M` modified, `D` deleted. Line counts compare the file with the base by line text (a moved line
+  counts as neither); binary files and files over 5 MiB get no counts.
+- **Adding a test is normal; modifying or deleting an existing one is the signal.** `watched_mode = "unverified"`
+  turns a VERIFIED into UNVERIFIED (exit 3) when an existing watched file was modified or deleted. New files never do,
+  and a FAILED stays FAILED.
+- A path that is both protected and watched is protected (put back, listed under "protected").
+- `watched` and `watched_mode` come from the check file at the base revision, so a worker can't take its own edits off
+  the list. Not listed: `.countercheck/**` and build junk.
+- Agent hooks push back only on FAILED: watched changes are for the person reading the receipt.
+- The receipt keeps up to 100 changes plus the totals; `show`, `report` and `ui` list them.

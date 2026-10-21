@@ -319,7 +319,8 @@ and other web pages can't read it). It uses port 7357, or any free port if that 
 and running it again opens the one already running for the project.
 
 `countercheck report` writes `.countercheck/receipts/report.html` with every saved run, newest first: the verdict,
-what the agent said, each check with its output, protected files it changed, changed files no check covers, whether
+what the agent said, each check with its output, protected files it changed, watched files it changed, changed files no
+check covers, whether
 the seal is intact, and for matrix checks a grid of targets × checks. It loads nothing from the internet and has no
 scripts, so it's safe to attach to a pull request or a CI run.
 
@@ -353,7 +354,8 @@ Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`)
 `--cost-usd`, `--out <folder>`, `--json`. All options: `countercheck help <command>`.
 
 Exit codes: `0` verified · `2` failed (claim contradicted) · `3` unverified (nothing failed, but the checks weren't
-locked in the base revision, none ran, or with `uncovered = "unverified"` a changed file no check covers) · `1` error ·
+locked in the base revision, none ran, or with `uncovered`/`watched_mode = "unverified"` a changed file no check
+covers or an edited watched file) · `1` error ·
 `4` (`countercheck show`) the receipt was edited.
 
 ## Check types
@@ -367,6 +369,7 @@ locked in the base revision, none ran, or with `uncovered = "unverified"` a chan
 | Budget | a number the command prints must stay within limits (time, size, test count) | `[[check]]` + `budget` |
 | Coverage | every item in a list you keep must show up in the agent's files | `[[coverage]]` |
 | Covers | list changed files no check looks at (optionally: UNVERIFIED) | `covers = [...]` on a `[[check]]` |
+| Watched | list every change to files the agent may edit but you want to review, like tests (optionally: UNVERIFIED) | `watched = [...]` |
 
 Every type with an example: [docs/checks.md](docs/checks.md). A runnable example using all of them:
 [examples/data-migration](examples/data-migration). Ready setups for real jobs: [recipes/](recipes).

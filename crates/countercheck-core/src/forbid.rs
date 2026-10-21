@@ -7,7 +7,13 @@
 //! paths = ["src/**/*.js"]          # globs, same matcher as `protected`
 //! message = "Use the logger."      # optional, shown to the agent
 //! case_insensitive = false         # optional
+//! scope = "added"                  # optional: only lines added or changed since the base
 //! ```
+//!
+//! `scope = "added"` compares each file's matching lines with the same file at the base revision
+//! by line text: a matching line counts only when the worker's file has more copies of that exact
+//! line than the base did. Moving a line doesn't hide it, and copying an existing forbidden line
+//! counts as new. New files count in full.
 //!
 //! The `regex` crate matches in linear time, so a pattern from a repository we don't control
 //! can't hang the scan; it is also compiled with a size limit.
@@ -15,6 +21,7 @@
 use crate::protect::Protected;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Files larger than this are skipped (and listed as skipped).
 pub const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
@@ -37,21 +44,49 @@ pub struct ForbidSpec {
     pub message: Option<String>,
     #[serde(default)]
     pub case_insensitive: bool,
+    /// Which lines count: all of them (default) or only lines added or changed since the base.
+    #[serde(default, skip_serializing_if = "Scope::is_default")]
+    pub scope: Scope,
+}
+
+/// Which lines of a file a `[[forbid]]` rule looks at.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Scope {
+    /// Every line (default).
+    #[default]
+    All,
+    /// Only lines added or changed compared with the base revision.
+    Added,
+}
+
+impl Scope {
+    pub fn is_default(&self) -> bool {
+        *self == Scope::All
+    }
 }
 
 impl ForbidSpec {
     /// The name on the receipt.
     pub fn result_name(&self) -> String {
-        format!("forbid: {}", self.name)
+        match self.scope {
+            Scope::All => format!("forbid: {}", self.name),
+            Scope::Added => format!("forbid (added lines): {}", self.name),
+        }
     }
 
     /// What the receipt shows in place of a command.
     pub fn describe(&self) -> String {
         format!(
-            "forbid /{}/{} in {}",
+            "forbid /{}/{} in {}{}",
             self.pattern,
             if self.case_insensitive { "i" } else { "" },
-            self.paths.join(", ")
+            self.paths.join(", "),
+            if self.scope == Scope::Added {
+                " (lines added since the base)"
+            } else {
+                ""
+            }
         )
     }
 }
@@ -92,6 +127,7 @@ pub fn path_globs(what: &str, paths: &[String]) -> Result<Protected, String> {
 pub struct Rule {
     re: Regex,
     globs: Protected,
+    scope: Scope,
 }
 
 impl Rule {
@@ -106,7 +142,13 @@ impl Rule {
         Ok(Self {
             re: compile(&what, &spec.pattern, spec.case_insensitive)?,
             globs: path_globs(&what, &spec.paths)?,
+            scope: spec.scope,
         })
+    }
+
+    /// True when only lines added since the base count.
+    pub fn added_only(&self) -> bool {
+        self.scope == Scope::Added
     }
 
     /// True when `path` (relative to the repository) is one of the files to scan.
@@ -146,17 +188,37 @@ pub struct Scan {
 }
 
 impl Scan {
-    /// Scan one file's bytes. Binary files are skipped.
-    pub fn add_file(&mut self, rule: &Rule, path: &str, bytes: &[u8]) {
+    /// Scan one file's bytes. Binary files are skipped. With `scope = "added"`, `base` is the
+    /// file at the base revision (`None`: a new file, so every line is added).
+    pub fn add_file(&mut self, rule: &Rule, path: &str, bytes: &[u8], base: Option<&[u8]>) {
         if is_binary(bytes) || bytes.len() as u64 > MAX_FILE_BYTES {
             self.skipped.push(path.to_string());
             return;
         }
         self.files_scanned += 1;
+        // Matching lines already in the base, by exact text (line ending ignored): each one
+        // excuses one copy in the worker's file. A binary or huge base excuses nothing.
+        let mut old: HashMap<String, usize> = HashMap::new();
+        if rule.added_only()
+            && let Some(b) = base.filter(|b| !is_binary(b) && b.len() as u64 <= MAX_FILE_BYTES)
+        {
+            for line in String::from_utf8_lossy(b).lines() {
+                if rule.re.is_match(line) {
+                    *old.entry(line.trim_end_matches('\r').to_string())
+                        .or_default() += 1;
+                }
+            }
+        }
         let text = String::from_utf8_lossy(bytes);
         let mut hit_here = false;
         for (i, line) in text.lines().enumerate() {
             if rule.re.is_match(line) {
+                if let Some(n) = old.get_mut(line.trim_end_matches('\r'))
+                    && *n > 0
+                {
+                    *n -= 1;
+                    continue;
+                }
                 hit_here = true;
                 self.total += 1;
                 if self.shown.len() < MAX_HITS_SHOWN {
@@ -186,13 +248,25 @@ impl Scan {
             ));
         } else if passed {
             out.push_str(&format!(
-                "no forbidden lines in {} file(s)\n",
+                "no {}forbidden lines in {} file(s)\n",
+                if spec.scope == Scope::Added {
+                    "new "
+                } else {
+                    ""
+                },
                 self.files_scanned
             ));
         } else {
             out.push_str(&format!(
-                "{} forbidden line(s) in {} file(s); {} file(s) scanned\n",
-                self.total, self.files_with_hits, self.files_scanned
+                "{} {}forbidden line(s) in {} file(s); {} file(s) scanned\n",
+                self.total,
+                if spec.scope == Scope::Added {
+                    "new (added since the base) "
+                } else {
+                    ""
+                },
+                self.files_with_hits,
+                self.files_scanned
             ));
             for h in &self.shown {
                 out.push_str(h);
@@ -243,6 +317,7 @@ mod tests {
             paths: vec!["sql/**/*.sql".into()],
             message: Some("Convert these.".into()),
             case_insensitive: false,
+            scope: Scope::All,
         }
     }
 
@@ -252,8 +327,8 @@ mod tests {
         let lf = b"select 1\nselect NVL(a)\nok\n";
         let crlf = b"select 1\r\nselect NVL(a)\r\nok\r\n";
         let (mut a, mut b) = (Scan::default(), Scan::default());
-        a.add_file(&rule, "sql/a.sql", lf);
-        b.add_file(&rule, "sql/a.sql", crlf);
+        a.add_file(&rule, "sql/a.sql", lf, None);
+        b.add_file(&rule, "sql/a.sql", crlf, None);
         assert_eq!(b.total, 1);
         assert_eq!(a.shown, b.shown);
         assert_eq!(b.shown, vec!["sql/a.sql:2: select NVL(a)"]);
@@ -270,8 +345,9 @@ mod tests {
             &rule,
             "sql/a.sql",
             b"select 1\nwhere a.x = b.x(+)\nand ROWNUM < 5\n",
+            None,
         );
-        scan.add_file(&rule, "sql/b.sql", b"select rownum_total from t\n");
+        scan.add_file(&rule, "sql/b.sql", b"select rownum_total from t\n", None);
         let (passed, out) = scan.report(&s);
         assert!(!passed);
         assert!(
@@ -288,11 +364,11 @@ mod tests {
         let mut s = spec(r"\bdecode\s*\(");
         let text = b"SELECT DECODE(a, 1, 2) FROM t\n";
         let mut scan = Scan::default();
-        scan.add_file(&Rule::new(&s).unwrap(), "sql/a.sql", text);
+        scan.add_file(&Rule::new(&s).unwrap(), "sql/a.sql", text, None);
         assert!(scan.report(&s).0);
         s.case_insensitive = true;
         let mut scan = Scan::default();
-        scan.add_file(&Rule::new(&s).unwrap(), "sql/a.sql", text);
+        scan.add_file(&Rule::new(&s).unwrap(), "sql/a.sql", text, None);
         assert!(!scan.report(&s).0);
     }
 
@@ -301,7 +377,7 @@ mod tests {
         let s = spec("x");
         let rule = Rule::new(&s).unwrap();
         let mut scan = Scan::default();
-        scan.add_file(&rule, "sql/a.sql", "x\n".repeat(45).as_bytes());
+        scan.add_file(&rule, "sql/a.sql", "x\n".repeat(45).as_bytes(), None);
         let (passed, out) = scan.report(&s);
         assert!(!passed);
         assert_eq!(
@@ -321,6 +397,7 @@ mod tests {
             &rule,
             "sql/a.sql",
             format!("x{}\n", "y".repeat(500)).as_bytes(),
+            None,
         );
         let line = scan.shown[0].clone();
         assert_eq!(line.len(), "sql/a.sql:1: ".len() + 200 + 3, "{line}");
@@ -332,7 +409,7 @@ mod tests {
         let s = spec("x");
         let rule = Rule::new(&s).unwrap();
         let mut scan = Scan::default();
-        scan.add_file(&rule, "sql/a.bin", b"x\0x");
+        scan.add_file(&rule, "sql/a.bin", b"x\0x", None);
         scan.skip("sql/big.sql");
         let (passed, out) = scan.report(&s);
         assert!(passed);
@@ -384,5 +461,65 @@ mod tests {
         assert_eq!(s.describe(), "forbid /a|b/ in sql/**/*.sql");
         s.case_insensitive = true;
         assert_eq!(s.describe(), "forbid /a|b/i in sql/**/*.sql");
+    }
+
+    #[test]
+    fn added_scope_counts_only_lines_new_since_the_base() {
+        let mut sp = spec(r"pytest\.skip\(");
+        sp.paths = vec!["tests/**".into()];
+        sp.scope = Scope::Added;
+        let rule = Rule::new(&sp).unwrap();
+        let base = b"def test_a():\n    pytest.skip(\"no db\")\n\ndef test_b():\n    assert x\n";
+        let scan = |now: &[u8], base: Option<&[u8]>| {
+            let mut s = Scan::default();
+            s.add_file(&rule, "tests/t.py", now, base);
+            s
+        };
+        // Unchanged, or the old skip moved: nothing new.
+        assert_eq!(scan(base, Some(base)).total, 0);
+        let moved = b"def test_b():\n    assert x\n\ndef test_a():\n    pytest.skip(\"no db\")\n";
+        assert_eq!(scan(moved, Some(base)).total, 0);
+        // A new skip, and a copy of the existing one, both count; the hit names the new line.
+        let added = b"def test_a():\n    pytest.skip(\"no db\")\n\ndef test_b():\n    pytest.skip(\"flaky\")\n    assert x\n";
+        let s = scan(added, Some(base));
+        assert_eq!(s.total, 1);
+        assert_eq!(s.shown, vec!["tests/t.py:5:     pytest.skip(\"flaky\")"]);
+        let copied = b"def test_a():\n    pytest.skip(\"no db\")\n\ndef test_b():\n    pytest.skip(\"no db\")\n";
+        assert_eq!(scan(copied, Some(base)).total, 1);
+        // A new file counts in full; CRLF in the worker's file doesn't make an old line new.
+        assert_eq!(scan(base, None).total, 1);
+        let crlf = b"def test_a():\r\n    pytest.skip(\"no db\")\r\n";
+        assert_eq!(scan(crlf, Some(base)).total, 0);
+        // Scope "all" (default) counts the old line too.
+        let mut all = sp.clone();
+        all.scope = Scope::All;
+        let all_rule = Rule::new(&all).unwrap();
+        let mut s = Scan::default();
+        s.add_file(&all_rule, "tests/t.py", base, Some(base));
+        assert_eq!(s.total, 1);
+        // The receipt name and description say the scope.
+        assert_eq!(sp.result_name(), "forbid (added lines): oracle");
+        assert!(sp.describe().ends_with("(lines added since the base)"));
+        assert_eq!(all.result_name(), "forbid: oracle");
+    }
+
+    #[test]
+    fn a_binary_base_excuses_nothing_and_scope_is_written_only_when_set() {
+        let mut sp = spec(r"skip\(");
+        sp.scope = Scope::Added;
+        let rule = Rule::new(&sp).unwrap();
+        let mut s = Scan::default();
+        s.add_file(&rule, "sql/t.sql", b"skip(1)\n", Some(b"\0\nskip(1)\n"));
+        assert_eq!(s.total, 1, "a binary base can't make a line look old");
+        // A huge base isn't read either.
+        let mut huge = vec![b'a'; MAX_FILE_BYTES as usize];
+        huge.extend_from_slice(b"\nskip(1)\n");
+        let mut s = Scan::default();
+        s.add_file(&rule, "sql/t.sql", b"skip(1)\n", Some(&huge));
+        assert_eq!(s.total, 1);
+        // The default scope is left out of a serialized spec; "added" is written.
+        assert_eq!(serde_json::to_value(&sp).unwrap()["scope"], "added");
+        sp.scope = Scope::All;
+        assert!(serde_json::to_value(&sp).unwrap().get("scope").is_none());
     }
 }
