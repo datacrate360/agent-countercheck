@@ -15,6 +15,7 @@ serde = { workspace = true }
 # float_roundtrip: a receipt read back must hash the same, or `show` calls it BROKEN.
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 toml = { workspace = true }
+sha1 = { workspace = true }
 sha2 = { workspace = true }
 globset = { workspace = true }
 # Linear-time matching: forbid/coverage patterns come from a repository we don't control.

@@ -25,6 +25,7 @@ pub mod claim;
 pub mod config;
 pub mod coverage;
 pub mod forbid;
+pub mod gitobj;
 pub mod golden;
 pub mod matrix;
 pub mod protect;

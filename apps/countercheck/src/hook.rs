@@ -205,9 +205,11 @@ fn has_checks(root: &Path, session: &str) -> bool {
         return true;
     }
     let base = session_base(root, session);
-    [base.as_str(), "HEAD"]
-        .iter()
-        .any(|rev| matches!(git::show(root, rev, FILE), Ok(Some(_))))
+    [base.as_str(), "HEAD"].iter().any(|rev| {
+        git::resolve_commit(root, rev)
+            .and_then(|c| git::Revision::load(root, &c))
+            .is_ok_and(|r| r.files().contains_key(FILE))
+    })
 }
 
 /// Claude Code `Stop` (Cortex Code reads the same format): stdin is the Stop hook JSON; stdout is

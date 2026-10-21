@@ -232,6 +232,53 @@ pub fn tree_hash(dest: &Path) -> Result<String, String> {
     Ok(countercheck_core::sha256_hex(joined.as_bytes()))
 }
 
+/// The git blob id of every file in the snapshot, to compare with a revision by bytes. Symlinks
+/// count by their target; `as_text` are symlinks Windows made into text files (see
+/// [`copy_files`]), which still count as symlinks.
+pub fn file_ids(
+    dest: &Path,
+    format: countercheck_core::gitobj::Format,
+    as_text: &[String],
+) -> Result<countercheck_core::gitobj::Files, String> {
+    let mut out = countercheck_core::gitobj::Files::new();
+    let mut dirs = vec![dest.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        let rd = fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for entry in rd {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let ft = entry.file_type().map_err(|e| e.to_string())?;
+            let rel = rel_slash(dest, &path);
+            let (symlink, bytes) = if ft.is_dir() {
+                dirs.push(path);
+                continue;
+            } else if ft.is_symlink() {
+                let target = fs::read_link(&path).map_err(|e| format!("{rel}: {e}"))?;
+                (true, link_target_bytes(&target))
+            } else {
+                let bytes = fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
+                (as_text.contains(&rel), bytes)
+            };
+            let id = countercheck_core::gitobj::object_id(format, "blob", &bytes);
+            out.insert(rel, countercheck_core::gitobj::FileId { symlink, id });
+        }
+    }
+    Ok(out)
+}
+
+/// A symlink's target as git stores it: the raw bytes on Unix, with `/` on Windows.
+fn link_target_bytes(target: &Path) -> Vec<u8> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        target.as_os_str().as_bytes().to_vec()
+    }
+    #[cfg(not(unix))]
+    {
+        target.to_string_lossy().replace('\\', "/").into_bytes()
+    }
+}
+
 fn walk(base: &Path, dir: &Path, out: &mut Vec<(String, String)>) -> Result<(), String> {
     let rd = fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for entry in rd {
