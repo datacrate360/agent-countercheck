@@ -100,6 +100,8 @@ pub struct Revision {
     format: Format,
     files: Files,
     cat: Cat,
+    /// The local Git LFS store (`<git common dir>/lfs/objects`).
+    lfs: PathBuf,
 }
 
 impl Revision {
@@ -139,7 +141,18 @@ impl Revision {
                 }
             }
         }
-        Ok(Self { format, files, cat })
+        let common = run_text(root, &["rev-parse", "--git-common-dir"]).map(PathBuf::from)?;
+        let common = if common.is_absolute() {
+            common
+        } else {
+            root.join(common)
+        };
+        Ok(Self {
+            format,
+            files,
+            cat,
+            lfs: common.join("lfs").join("objects"),
+        })
     }
 
     pub fn format(&self) -> Format {
@@ -158,6 +171,41 @@ impl Revision {
         };
         let id = f.id.clone();
         self.cat.read(&id, "blob").map(Some)
+    }
+
+    /// Like [`Revision::read`], but a file stored in Git LFS gives its real content from the local
+    /// LFS store, checked against the pointer's SHA-256 and size (content-addressed, so a changed
+    /// store is refused like a changed git object). An error when the content isn't on this
+    /// computer.
+    pub fn read_real(&mut self, path: &str) -> Result<Option<Vec<u8>>, String> {
+        let Some(body) = self.read(path)? else {
+            return Ok(None);
+        };
+        let Some(p) = gitobj::lfs_pointer(&body) else {
+            return Ok(Some(body));
+        };
+        let (Some(a), Some(b)) = (p.oid.get(..2), p.oid.get(2..4)) else {
+            return Err(format!("{path}: bad Git LFS pointer"));
+        };
+        let file = self.lfs.join(a).join(b).join(&p.oid);
+        let missing = || {
+            format!(
+                "{path} is stored in Git LFS and its content isn't on this computer; run `git lfs pull`"
+            )
+        };
+        let meta = std::fs::metadata(&file).map_err(|_| missing())?;
+        if !meta.is_file() || meta.len() != p.size || p.size > MAX_OBJECT_BYTES {
+            return Err(format!(
+                "the Git LFS content of {path} does not match its pointer (size), so countercheck can't trust it"
+            ));
+        }
+        let bytes = std::fs::read(&file).map_err(|_| missing())?;
+        if bytes.len() as u64 != p.size || countercheck_core::sha256_hex(&bytes) != p.oid {
+            return Err(format!(
+                "the Git LFS content of {path} does not match its pointer (sha256), so countercheck can't trust it"
+            ));
+        }
+        Ok(Some(bytes))
     }
 }
 
