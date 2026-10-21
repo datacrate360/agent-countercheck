@@ -318,9 +318,14 @@ pub fn run_check(
         .map_err(|e| e.to_string())?;
     let (exit_code, timed_out) = match status {
         Some(s) => {
-            // Windows: closing the job also stops what the check left running in the background.
+            // Stop what the check left running in the background (a server, a `sleep &`), so it
+            // can't outlive the check, its timeout or the run. Windows: closing the job. Unix:
+            // killing the check's process group; the group id can't be reused while any of its
+            // processes is alive, so this only reaches what the check started.
             #[cfg(windows)]
             drop(job);
+            #[cfg(unix)]
+            kill_tree(&mut child);
             (s.code(), false)
         }
         None => {

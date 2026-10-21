@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: on macOS and Linux, processes a check leaves running in the background are stopped when the check ends.**
+  A check that started a server or `sleep 300 &` and exited could pass while that process kept running (and kept
+  its port open) after `verify` finished, beyond the check's timeout. Each check already ran in its own process
+  group, but the group was only killed on timeout; now it is killed after every check, as Windows already did with
+  its Job Object. Reported by Perch Scan. A process that deliberately leaves the group (`setsid`) can still escape
+  on Unix; the macOS sandbox and a container remain the way to contain a hostile check.
+
 ## v0.5.2 (2026-10-21)
 
 - **Fix: protected files stored in Git LFS work again** ([#11](https://github.com/datacrate360/agent-countercheck/issues/11)).
