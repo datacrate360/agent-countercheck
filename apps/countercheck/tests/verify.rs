@@ -1759,7 +1759,9 @@ fn symlinks_in_the_tree_reach_the_clean_copy() {
             "{out}"
         );
     } else {
-        assert!(out.starts_with("hi"), "{out}");
+        // A line of its own, not the first one: a CI runner's shell may print a warning first
+        // (Git Bash: "could not find /tmp, please create!").
+        assert!(out.lines().any(|l| l.trim_end() == "hi"), "{out}");
     }
 }
 
