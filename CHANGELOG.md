@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Fix: on macOS, processes a check detached with `setsid` (double fork, new session) are stopped when it ends.**
+  macOS has no subreaper or PID namespace, so after each check a cheap `ps` lists young orphans of this user, and a
+  targeted `lsof` confirms which ones have their working folder in the check folder or still hold the check's output;
+  those are killed. A process that also leaves the folder and closes its output can still escape (documented).
 - **New: a sandbox on Linux.** Checks run through `countercheck sandbox-exec`, with no root needed:
   **Landlock** confines writes to the check folder, its temp dir and `writes = [...]` (and, on kernels 6.7+, stops
   signals and abstract sockets reaching outside processes); where the system allows unprivileged user namespaces, a
