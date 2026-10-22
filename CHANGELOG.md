@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.8.0 (2026-10-22)
+
+A check sandbox on Windows (partial, no admin needed), so every OS now has one.
 
 - **New: a sandbox on Windows, for `pwsh` and `cmd` checks** ([ADR-0003](docs/decisions/0003-windows-sandbox.md)).
   Checks run through `countercheck sandbox-exec` with a **write-restricted token**, no admin needed: writes only in
