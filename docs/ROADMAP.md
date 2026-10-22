@@ -30,6 +30,7 @@ section. Ideas and use cases are welcome as issues.
 | Linux sandbox: Landlock confines writes; user + network + PID namespaces block the internet (localhost allowed) and stop everything a check started, `setsid` included; a subreaper does it where namespaces are blocked. No root needed | v0.7.0 |
 | `--checks-from`: checks kept outside the repository, pinned by a suite commit or SHA-256 (#20, ADR-0002); `writes = [...]` per check (#18); macOS stops processes a check detached with `setsid`; `watched` line counts like `git diff --stat` | v0.7.0 |
 | Windows sandbox (partial, no admin): a write-restricted token confines writes for `pwsh`/`cmd` checks; `sh` checks run unsandboxed and are marked per check; internet not blocked (ADR-0003) | v0.8.0 |
+| Windows full sandbox, experimental (ADR-0004): `countercheck windows-setup` (admin once) runs checks as a low-rights account with no internet; every shell sandboxed, Git's `sh` included. A logo and brand set (`docs/assets/brand/`) | v0.9.0 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |

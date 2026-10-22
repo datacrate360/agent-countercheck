@@ -155,7 +155,7 @@ Pick one. Every option gives you the same `countercheck` command.
 Check it worked:
 
 ```sh
-countercheck --version        # countercheck 0.8.0
+countercheck --version        # countercheck 0.9.0
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win)**: Countercheck calls `git`, and checks run
@@ -544,7 +544,7 @@ Yes, MIT-licensed. See [Contribute](#contribute-make-it-fit-your-domain) to add 
 
 A referee has to be right, so Countercheck is tested harder than most tools its size:
 
-- **269 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **272 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, the macOS sandbox, both agent hooks, every check type), and **property
   tests** that throw thousands of generated inputs at the verdict and seal logic (e.g. a receipt's seal breaks if any
   one of 35 fields changes; `decide` never says VERIFIED when a check failed).
@@ -581,8 +581,8 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 ## Status
 
-v0.8 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows has a partial one (writes confined for
-`pwsh`/`cmd` checks; the internet is open and `sh` checks run unsandboxed, and the receipt says so). Not yet: signed
+v0.9 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows has a partial one by default (writes confined
+for `pwsh`/`cmd` checks) and a full one after `countercheck windows-setup` (experimental). Not yet: signed
 receipts, a per-host network allow-list, cost read from agent logs, internet blocking on Windows, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 

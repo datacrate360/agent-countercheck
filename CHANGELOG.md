@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.9.0 (2026-10-22)
+
+The full sandbox on Windows (opt-in, experimental) and a logo.
 
 - **New (Windows, experimental): the full check sandbox, an opt-in admin setup** ([ADR-0004](docs/decisions/0004-windows-runner-account.md)).
   `countercheck windows-setup` (once, as administrator; `--remove` undoes it) creates a low-rights `countercheck-runner`
