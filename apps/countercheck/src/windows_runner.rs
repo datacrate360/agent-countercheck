@@ -127,7 +127,7 @@ if ($u) {
   Enable-LocalUser -Name $name
 } else {
   New-LocalUser -Name $name -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires `
-    -Description 'Agent Countercheck: runs checks with no internet (countercheck windows-setup)' | Out-Null
+    -Description 'Agent Countercheck runner (no internet)' | Out-Null
 }
 $sid = (Get-LocalUser -Name $name).SID.Value
 $users = Get-LocalGroup -SID 'S-1-5-32-545'
@@ -236,7 +236,7 @@ fn encoded(script: &str) -> String {
 /// exit code 1.
 fn wrapped(script: &str) -> String {
     format!(
-        "try {{\n{script}\n}} catch {{\n  Write-Output (\"error: \" + $_.Exception.Message)\n  exit 1\n}}\n"
+        "$ProgressPreference = 'SilentlyContinue'\ntry {{\n{script}\n}} catch {{\n  Write-Output (\"error: \" + $_.Exception.Message)\n  exit 1\n}}\n"
     )
 }
 

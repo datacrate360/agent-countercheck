@@ -385,7 +385,8 @@ Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, ar
 |---|---|---|---|
 | macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` on that check | blocked |
 | Linux | Landlock, plus private user, network and PID namespaces where the system allows them (no root needed) | blocked (localhost allowed) with namespaces; **allowed where user namespaces are blocked**, and the receipt says so | blocked |
-| Windows | a write-restricted token in a Job Object for `shell = "pwsh"` and `"cmd"` checks (no admin needed; [ADR-0003](docs/decisions/0003-windows-sandbox.md)); **`sh` checks run without it** (Git for Windows' `sh` can't start in it): each says so on the receipt, and the run's label says `partial` | **allowed**, and the receipt says so (the only unprivileged way, an AppContainer, can't run most toolchains) | blocked in the sandbox (drives without permissions, like FAT/exFAT, excepted) |
+| Windows (default) | a write-restricted token in a Job Object for `shell = "pwsh"` and `"cmd"` checks (no admin needed; [ADR-0003](docs/decisions/0003-windows-sandbox.md)); **`sh` checks run without it** (Git for Windows' `sh` can't start in it): each says so on the receipt, and the run's label says `partial` | **allowed**, and the receipt says so (the only unprivileged way, an AppContainer, can't run most toolchains) | blocked in the sandbox (drives without permissions, like FAT/exFAT, excepted) |
+| Windows, after `countercheck windows-setup` (admin, once) | the same restricted token and Job Object, run as a low-rights `countercheck-runner` account ([ADR-0004](docs/decisions/0004-windows-runner-account.md)): **every shell, `sh` included** | **blocked** by a firewall rule for that account (localhost allowed) unless `network = true` | blocked |
 
 Everything a check starts is stopped when it ends, including processes that detach with `setsid`: on Linux by a PID
 namespace or a subreaper, on Windows by a Job Object, on macOS by killing the check's process group and then finding
@@ -394,6 +395,21 @@ folder and closes its output can still escape on macOS; the sandbox limits what 
 `sandbox` field always says what was enforced. On Windows, run Countercheck inside a container or VM with networking
 off when you also need the internet blocked. The main protections (locked checks, restored tests, clean copy, sealed receipts)
 work on every OS ([FAQ](#faq)).
+
+**Windows full sandbox (opt-in, admin once):**
+
+```powershell
+countercheck windows-setup                       # in an administrator PowerShell, once per machine
+countercheck windows-setup --allow-read C:\Users\me\AppData\Local\Programs\Python   # a toolchain in your profile
+countercheck windows-setup --remove              # undo everything
+```
+
+It creates a low-rights local account, `countercheck-runner` (in `Users` only, hidden from the sign-in screen), and a
+firewall rule that blocks that account's internet but not localhost. `--sandbox auto` then runs every check as that
+account (the receipt says `windows-runner`); without the setup, the default above stays. The account can't read your
+profile, so toolchains installed there (a per-user Python, a repository's `.venv` target) need `--allow-read` once.
+A check with `network = true` runs as you (the account has no internet). Details and limits:
+[ADR-0004](docs/decisions/0004-windows-runner-account.md).
 
 Linux needs kernel 5.13+ for Landlock (6.7+ for signal and socket scoping); some servers and Docker's default profile
 block unprivileged user namespaces, which is when the internet stays open. Allow them with
