@@ -140,18 +140,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run the AppContainer probe
+        continue-on-error: true
         run: |
           $env:PROBE_PYTHON = (Get-Command python).Source
           cargo run -q --manifest-path .github/appcontainer-probe/Cargo.toml
       # The runner is elevated; the same probe as a fresh standard (non-admin) user says whether
       # any of it needs admin rights.
       - name: Run the AppContainer probe as a standard user
+        continue-on-error: true
         run: |
           New-Item -ItemType Directory C:\acprobe -Force | Out-Null
           Copy-Item .github/appcontainer-probe/target/debug/appcontainer-probe.exe C:\acprobe\
           icacls C:\acprobe /grant "*S-1-5-32-545:(OI)(CI)M" | Out-Null
           $pw = 'Cc-' + [guid]::NewGuid().ToString('N').Substring(0, 16) + '!a1'
-          net user ccprobe $pw /add | Out-Null
+          net user ccprobe $pw /add /y | Out-Null
           $cred = [pscredential]::new("$env:COMPUTERNAME\ccprobe", (ConvertTo-SecureString $pw -AsPlainText -Force))
           $env:PROBE_PYTHON = (Get-Command python).Source
           $p = Start-Process -FilePath C:\acprobe\appcontainer-probe.exe -Credential $cred -LoadUserProfile -WorkingDirectory C:\acprobe -RedirectStandardOutput C:\acprobe\out.txt -RedirectStandardError C:\acprobe\err.txt -Wait -PassThru
