@@ -482,15 +482,16 @@ internet or write outside the check folder.
 | Linux | Landlock + namespaces: writes only in the check folder; no internet (localhost allowed) where user namespaces are allowed | the receipt says which |
 | Windows | write-restricted token for `pwsh`/`cmd` checks: writes only in the check folder; **internet not blocked** (the only unprivileged way, an AppContainer, can't run most toolchains); `sh` checks run unsandboxed and are marked so per check | the receipt says which; the Job Object stops a check's processes |
 
-**So without a sandbox, can the agent cheat on Linux or Windows?**
+**Where the sandbox is partial, can the agent cheat?**
 
-![What each kind of cheating runs into, by OS. Caught on macOS, Linux and Windows: editing a protected test, weakening checks.toml, committing edits to move the base, saying done without running anything, claiming tests pass when they fail, editing the receipt afterwards. Caught on macOS only (the sandbox): fetching the answer online during a check, writing outside the check folder. Not caught anywhere: mistakes your checks don't test.](docs/img/what-it-catches.svg)
+![What each kind of cheating runs into, by OS. Caught on macOS, Linux and Windows: editing a protected test, weakening checks.toml, committing edits to move the base, saying done without running anything, claiming tests pass when they fail, editing the receipt afterwards. Fetching the answer online during a check: caught on macOS, on Linux where user namespaces are allowed, not on Windows. Writing outside the check folder: caught on macOS and Linux, on Windows for pwsh and cmd checks but not sh checks. Not caught anywhere: mistakes your checks don't test.](docs/img/what-it-catches.svg)
 
 The common cheats are caught on every OS: edited tests are restored from the base revision, `checks.toml` is read
 from the locked base, committing edits doesn't move that base (the `session-start` hook), and every check is re-run
 in a clean copy. The sandbox adds protection against code written to misbehave *during* the check (fetching the
-expected answer online, leaving files outside the folder). Until Linux and Windows have one, run Countercheck in a
-container or VM with networking off when that matters.
+expected answer online, leaving files outside the folder). Where it can't block something (the internet on Windows,
+`sh` checks on Windows, Linux without user namespaces), the receipt says so; run Countercheck in a container or VM
+with networking off when that matters.
 
 **Why does grading run offline?**
 So the same work always gets the same verdict, and nobody can fetch the answer at grading time. In the benchmark, the
