@@ -2788,7 +2788,9 @@ fn windows_sandbox_works() -> bool {
         .output()
         .unwrap();
     let ok = String::from_utf8_lossy(&out.stdout).contains("restricted=1");
-    if std::env::var_os("CI").is_some() {
+    // Printed so a run with --nocapture shows each sandbox test really used the sandbox.
+    eprintln!("windows sandbox probe: restricted={}", u8::from(ok));
+    if std::env::var_os("CI").is_some() || std::env::var_os("GITHUB_ACTIONS").is_some() {
         assert!(
             ok,
             "the Windows sandbox probe failed on CI: {}{}",

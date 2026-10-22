@@ -89,6 +89,10 @@ jobs:
         run: cargo build -q; target/debug/countercheck.exe sandbox-exec --probe
       - name: Test
         run: cargo test --workspace
+      # The same Windows sandbox tests again with their output shown, so the log proves each one
+      # ran in the sandbox (`windows sandbox probe: restricted=1`) instead of skipping.
+      - name: Windows sandbox tests, output shown
+        run: cargo test -q -p countercheck --test verify -- windows_sandbox sh_checks_run_unsandboxed --nocapture
       # The example's check runs `python3`; Windows' Python is `python`, so give sh a python3 if needed.
       - name: python3 for the example
         shell: bash
