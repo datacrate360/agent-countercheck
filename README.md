@@ -385,7 +385,7 @@ Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, ar
 |---|---|---|---|
 | macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` on that check | blocked |
 | Linux | Landlock, plus private user, network and PID namespaces where the system allows them (no root needed) | blocked (localhost allowed) with namespaces; **allowed where user namespaces are blocked**, and the receipt says so | blocked |
-| Windows | a write-restricted token in a Job Object for `shell = "pwsh"` and `"cmd"` checks (no admin needed; [ADR-0003](docs/decisions/0003-windows-sandbox.md)); **`sh` checks run without it** (Git for Windows' `sh` can't start in it): each says so on the receipt, and the run's label says `partial` | **allowed**, and the receipt says so (blocking it while keeping localhost needs admin rights on Windows) | blocked in the sandbox (drives without permissions, like FAT/exFAT, excepted) |
+| Windows | a write-restricted token in a Job Object for `shell = "pwsh"` and `"cmd"` checks (no admin needed; [ADR-0003](docs/decisions/0003-windows-sandbox.md)); **`sh` checks run without it** (Git for Windows' `sh` can't start in it): each says so on the receipt, and the run's label says `partial` | **allowed**, and the receipt says so (the only unprivileged way, an AppContainer, can't run most toolchains) | blocked in the sandbox (drives without permissions, like FAT/exFAT, excepted) |
 
 Everything a check starts is stopped when it ends, including processes that detach with `setsid`: on Linux by a PID
 namespace or a subreaper, on Windows by a Job Object, on macOS by killing the check's process group and then finding
@@ -480,7 +480,7 @@ internet or write outside the check folder.
 |---|---|---|
 | macOS | Seatbelt (`sandbox-exec`): no internet (localhost allowed), writes only in the check folder | `network = true` opens the internet for one check |
 | Linux | Landlock + namespaces: writes only in the check folder; no internet (localhost allowed) where user namespaces are allowed | the receipt says which |
-| Windows | write-restricted token for `pwsh`/`cmd` checks: writes only in the check folder; **internet not blocked** (that needs admin rights on Windows); `sh` checks run unsandboxed and are marked so per check | the receipt says which; the Job Object stops a check's processes |
+| Windows | write-restricted token for `pwsh`/`cmd` checks: writes only in the check folder; **internet not blocked** (the only unprivileged way, an AppContainer, can't run most toolchains); `sh` checks run unsandboxed and are marked so per check | the receipt says which; the Job Object stops a check's processes |
 
 **So without a sandbox, can the agent cheat on Linux or Windows?**
 

@@ -93,7 +93,10 @@ fn main() {
 
     let python = std::env::var("PROBE_PYTHON").unwrap_or_default();
     // Results go to a file in a folder granted to the container.
-    let out_dir = std::env::temp_dir().join(format!("acprobe-{}", std::process::id()));
+    let out_dir = std::env::var_os("PROBE_OUT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join(format!("acprobe-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&out_dir);
     let make_script = |setup: &str| {
         format!(
@@ -187,6 +190,11 @@ Probe 'write the user temp folder' {{ Set-Content -Path (Join-Path $env:TEMP 'ap
         "loopback exemption added: {:?}",
         add.as_ref().map(|o| (o.status.code(), String::from_utf8_lossy(&o.stdout).trim().to_string()))
     );
+    let listed = std::process::Command::new("CheckNetIsolation.exe")
+        .args(["LoopbackExempt", "-s"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase().contains(&sid.to_lowercase()));
+    println!("loopback exemption listed afterwards: {listed:?}");
     run("no capabilities + loopback exemption", &[]);
     let _ = std::process::Command::new("CheckNetIsolation.exe")
         .args(["LoopbackExempt", "-d", &format!("-p={sid}")])

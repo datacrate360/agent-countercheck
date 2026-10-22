@@ -15,8 +15,9 @@
 //! 4. Run the check with its timeout, stop what is left, remove the grants on `writes`.
 //!
 //! Not done, and the sandbox label says so: blocking the internet. Windows' unprivileged option
-//! (an AppContainer) also blocks localhost between processes, which web tests need, and lifting
-//! that (a loopback exemption) or a firewall rule needs admin rights. See
+//! (an AppContainer) blocks it and keeps localhost within the container, but can't read
+//! toolchains outside Program Files (a Python in the user's folders, the repository's
+//! `node_modules`) or run Git for Windows' `sh`; a firewall rule needs admin rights. See
 //! docs/decisions/0003-windows-sandbox.md.
 //!
 //! What each machine gives is checked by `--probe` (a real refused write), and if a step fails

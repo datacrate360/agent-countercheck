@@ -51,10 +51,10 @@ impl Sandbox {
                 "linux-landlock (writes only in the check folder; internet NOT blocked: this system doesn't allow user namespaces)"
             }
             Sandbox::RestrictedToken => {
-                "windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows needs admin rights to block it and keep localhost)"
+                "windows-restricted-token (writes only in the check folder; internet NOT blocked)"
             }
             Sandbox::RestrictedTokenPartial => {
-                "windows-restricted-token, partial: sh checks ran unsandboxed (Git for Windows can't run in a restricted token); pwsh/cmd checks: writes only in the check folder; internet NOT blocked: Windows needs admin rights to block it and keep localhost"
+                "windows-restricted-token, partial: sh checks ran unsandboxed (Git for Windows can't run in a restricted token); pwsh/cmd checks: writes only in the check folder; internet NOT blocked"
             }
         }
     }

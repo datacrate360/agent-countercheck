@@ -10,8 +10,8 @@
   checks still run in the sandbox and only the `sh` checks run without it, each marked on the receipt
   (`"sandboxed": false` and `"unsandboxed_reason"`, new optional fields; `NOT sandboxed` in the text receipt) and the
   run's label says `windows-restricted-token, partial: sh checks ran unsandboxed (...)`; set `shell = "cmd"` or
-  `"pwsh"` on a check to sandbox it. **The internet is not blocked** on Windows (that needs
-  admin rights there while keeping localhost); the receipt's `sandbox` says `windows-restricted-token (...; internet
+  `"pwsh"` on a check to sandbox it. **The internet is not blocked** on Windows (the only unprivileged way, an AppContainer, can't run most toolchains; a
+  firewall rule needs admin); the receipt's `sandbox` says `windows-restricted-token (...; internet
   NOT blocked ...)`. `--sandbox auto` picks it when a probe write is really refused; `--sandbox windows` requires it
   (and refuses a run with `sh` checks).
   If it can't be set up at run time, the check fails rather than running unconfined.

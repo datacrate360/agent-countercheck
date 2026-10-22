@@ -156,6 +156,7 @@ jobs:
           net user ccprobe $pw /add /y | Out-Null
           $cred = [pscredential]::new("$env:COMPUTERNAME\ccprobe", (ConvertTo-SecureString $pw -AsPlainText -Force))
           $env:PROBE_PYTHON = (Get-Command python).Source
+          $env:PROBE_OUT = 'C:\acprobe'
           $p = Start-Process -FilePath C:\acprobe\appcontainer-probe.exe -Credential $cred -LoadUserProfile -WorkingDirectory C:\acprobe -RedirectStandardOutput C:\acprobe\out.txt -RedirectStandardError C:\acprobe\err.txt -Wait -PassThru
           "exit: $($p.ExitCode)"
           Get-Content C:\acprobe\out.txt, C:\acprobe\err.txt -ErrorAction SilentlyContinue

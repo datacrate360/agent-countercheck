@@ -94,7 +94,7 @@ network = true
   doesn't, checks have the internet and the receipt's `sandbox` says so. On Windows the sandbox confines writes of
   `shell = "pwsh"` and `"cmd"` checks; `sh` checks run without it (Git for Windows' `sh` can't start in it), each
   marked `"sandboxed": false` with the reason on the receipt (`NOT sandboxed` in the text), and the run's label says
-  `partial: sh checks ran unsandboxed`. Use `cmd` or `pwsh` for the checks you want confined. It but doesn't block the internet (that needs admin rights there; [ADR-0003](decisions/0003-windows-sandbox.md)); the
+  `partial: sh checks ran unsandboxed`. Use `cmd` or `pwsh` for the checks you want confined. It doesn't block the internet (the only unprivileged way, an AppContainer, can't run most toolchains; [ADR-0003](decisions/0003-windows-sandbox.md)); the
   receipt's `sandbox` says so, and the no-internet hint never shows. Refused writes get the write hint there too
   (sh's and Python's "Permission denied", PowerShell's "Access to the path ... is denied", cmd's bare "Access is
   denied.").

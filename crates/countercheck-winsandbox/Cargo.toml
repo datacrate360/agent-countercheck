@@ -16,6 +16,7 @@ unsafe_op_in_unsafe_fn = "deny"
 dbg_macro = "warn"
 todo = "warn"
 undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

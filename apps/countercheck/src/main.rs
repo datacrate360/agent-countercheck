@@ -1,4 +1,5 @@
 //! `countercheck`: checks whether an AI worker's "done" is really done, and writes a receipt.
+#![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,

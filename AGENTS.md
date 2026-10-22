@@ -36,7 +36,13 @@ Follow the matching guide in `.claude/skills/` (Claude Code loads them automatic
 ## Golden rules
 
 1. **Never crash.** Non-test code has no `unwrap`/`expect`/`panic!`/`todo!`/`unreachable!` (denied at each crate
-   root); `unsafe` is forbidden (only `crates/countercheck-winsandbox` holds reviewed Win32 FFI). Return a plain-English error.
+   root); `unsafe` is forbidden (`#![forbid(unsafe_code)]`). **One exception, not a precedent:**
+   `crates/countercheck-winsandbox`, the Win32 calls of the Windows sandbox that no safe crate offers (ADR-0003),
+   under these rules: `unsafe` only in its Windows-only `sys` module (`cfg(windows)`; forbidden on every other OS
+   and in its other modules); each block as small as possible, one unsafe operation, with a `// SAFETY:` comment
+   saying why it is sound (`clippy::undocumented_unsafe_blocks` and `clippy::multiple_unsafe_ops_per_block` are
+   errors there); only safe functions leave the crate. New FFI goes there under the same rules, after the maintainer
+   agrees; never in another crate. Return a plain-English error.
 2. **The worker never grades itself.** Checks come from the base revision. Protected files are restored from base.
    Never add an option that lets the worker's tree change what is checked without the receipt saying so.
 3. **Honest verdicts.** Only `verified` when locked checks ran and passed. Anything Countercheck can't prove is

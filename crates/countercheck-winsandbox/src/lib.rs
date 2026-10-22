@@ -1,8 +1,12 @@
 //! countercheck's Windows check sandbox: the Win32 calls it needs, behind a safe API.
 //!
-//! The rest of the workspace forbids `unsafe`. This crate is the one exception, kept small so it
-//! can be reviewed line by line: no published crate offers these calls with a safe API that we
-//! would trust as a referee's security boundary (see docs/decisions/0003-windows-sandbox.md).
+//! The rest of the workspace forbids `unsafe`. This crate is the one exception (AGENTS.md, golden
+//! rule 1), kept small so it can be reviewed line by line: no published crate offers these calls
+//! with a safe API that we would trust as a referee's security boundary (ADR-0003). Its rules:
+//! `unsafe` only in the Windows-only `sys` module (forbidden everywhere else, and on every other
+//! OS); every block does one unsafe thing and says why it is sound (`// SAFETY:`; clippy's
+//! `undocumented_unsafe_blocks` and `multiple_unsafe_ops_per_block` are errors here); only safe
+//! functions are public.
 //!
 //! What it does, unprivileged (no admin, no Developer Mode):
 //! - [`sddl`] (pure, every OS): add and remove one allow entry in a file's permissions, written

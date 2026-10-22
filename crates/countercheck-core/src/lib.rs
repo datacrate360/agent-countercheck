@@ -14,6 +14,7 @@
 //! - [`writes`]: extra write locations a check may use under the macOS sandbox.
 //!
 //! Nothing here touches the file system, processes or the network; the `countercheck` binary does that.
+#![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,

@@ -81,8 +81,13 @@ impl Drop for Local {
 /// `p` must point at a valid NUL-terminated UTF-16 string that stays alive during the call.
 unsafe fn from_wide_nul(p: *const u16) -> String {
     let mut len = 0usize;
-    // SAFETY: the caller guarantees a NUL terminator, so every read up to it is in bounds.
-    while unsafe { *p.add(len) } != 0 {
+    loop {
+        let at = p.wrapping_add(len);
+        // SAFETY: the caller guarantees a NUL terminator; `at` is at or before it (we stop at
+        // the first NUL), so it is in bounds and initialized.
+        if unsafe { *at } == 0 {
+            break;
+        }
         len += 1;
     }
     // SAFETY: `len` elements starting at `p` were just read one by one, so they are valid.
@@ -124,9 +129,11 @@ unsafe fn sid_to_string(sid: PSID) -> io::Result<String> {
 fn own_token() -> io::Result<Handle> {
     let mut token: HANDLE = std::ptr::null_mut();
     let access = TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_QUERY | TOKEN_ADJUST_DEFAULT;
-    // SAFETY: GetCurrentProcess returns a pseudo handle that needs no closing; `token` is a
-    // valid out pointer.
-    let ok = unsafe { OpenProcessToken(GetCurrentProcess(), access, &mut token) };
+    // SAFETY: GetCurrentProcess takes no arguments and returns a pseudo handle that needs no
+    // closing.
+    let me = unsafe { GetCurrentProcess() };
+    // SAFETY: `me` is the current-process pseudo handle; `token` is a valid out pointer.
+    let ok = unsafe { OpenProcessToken(me, access, &mut token) };
     if ok == 0 {
         return Err(io::Error::last_os_error());
     }
@@ -158,9 +165,11 @@ pub fn current_sids() -> io::Result<(String, String)> {
     let token = own_token()?;
     let user_buf = token_info(&token, TokenUser)?;
     let user_ptr = user_buf.as_ptr().cast::<TOKEN_USER>();
-    // SAFETY: GetTokenInformation(TokenUser) filled `user_buf` with a TOKEN_USER whose SID
-    // points inside the same buffer, which is alive here.
-    let user = unsafe { sid_to_string((*user_ptr).User.Sid) }?;
+    // SAFETY: GetTokenInformation(TokenUser) filled `user_buf` (8-byte aligned, alive here) with
+    // a TOKEN_USER, so reading its field is in bounds.
+    let user_sid = unsafe { (*user_ptr).User.Sid };
+    // SAFETY: the SID points inside `user_buf`, which is alive for the call.
+    let user = unsafe { sid_to_string(user_sid) }?;
     let groups_buf = token_info(&token, TokenGroups)?;
     let groups = groups_buf.as_ptr().cast::<TOKEN_GROUPS>();
     // SAFETY: GetTokenInformation(TokenGroups) filled the buffer with a TOKEN_GROUPS.
@@ -168,8 +177,10 @@ pub fn current_sids() -> io::Result<(String, String)> {
     // SAFETY: `Groups` is a variable-length array of `count` entries inside the buffer.
     let first = unsafe { std::ptr::addr_of!((*groups).Groups) }.cast::<SID_AND_ATTRIBUTES>();
     for i in 0..count {
-        // SAFETY: `i < count`, so the entry is inside the array Windows wrote.
-        let g = unsafe { &*first.add(i) };
+        let entry = first.wrapping_add(i);
+        // SAFETY: `i < count`, so `entry` is inside the array Windows wrote in `groups_buf`,
+        // which is aligned and alive for the borrow.
+        let g = unsafe { &*entry };
         if g.Attributes & SE_GROUP_LOGON_ID == SE_GROUP_LOGON_ID {
             // SAFETY: the SID points inside `groups_buf`, which is alive here.
             let logon = unsafe { sid_to_string(g.Sid) }?;

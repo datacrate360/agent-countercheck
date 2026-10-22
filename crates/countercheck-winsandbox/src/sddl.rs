@@ -4,6 +4,7 @@
 //! The text comes from `ConvertSecurityDescriptorToStringSecurityDescriptorW` with only the DACL
 //! asked for, e.g. `D:PAI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;S-1-5-21-1-2-3-1001)`. Anything we
 //! don't understand is an error, never a guess: the caller then doesn't touch the file.
+#![forbid(unsafe_code)]
 
 /// Longest DACL text accepted (a file with thousands of entries is not ours to edit).
 const MAX_LEN: usize = 256 * 1024;
