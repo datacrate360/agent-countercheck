@@ -15,7 +15,7 @@ give, without admin rights:
 
 | Mechanism | Writes | Internet | Localhost between processes | Admin? | Reads the user's toolchain |
 |---|---|---|---|---|---|
-| **AppContainer** (Edge, Store apps) | confined | blocked without `internetClient` (measured) | **works within one container** (measured, no exemption); to other processes it needs the loopback exemption (admin per Microsoft's docs; see Evidence) | profile: no | no: only folders that grant `ALL APPLICATION PACKAGES` or the container's SID (System32, Program Files); measured: Python in `C:\hostedtoolcache` can't be started; also `%LOCALAPPDATA%\Programs\Python`, the repository's `node_modules` |
+| **AppContainer** (Edge, Store apps) | confined | blocked without `internetClient` (measured) | **works within one container** (measured as admin, no exemption); to other processes it needs the loopback exemption, which a standard user could add for their own container (measured) | profile: no | no: only folders that grant `ALL APPLICATION PACKAGES` or the container's SID (System32, Program Files); measured: Python in `C:\hostedtoolcache` can't be started; also `%LOCALAPPDATA%\Programs\Python`, the repository's `node_modules` |
 | **Write-restricted token** (`CreateRestrictedToken(WRITE_RESTRICTED)`, Chromium's GPU process, Windows services) | confined to objects that grant a restricting SID | not blocked | works | no | yes, unchanged |
 | Low integrity level | confined, except folders labelled low (`AppData\LocalLow`, `%TEMP%\Low`) | not blocked | works | no | yes |
 | Windows Filtering Platform / firewall rules | - | blocked per program or SID | works | **yes** | - |
@@ -117,7 +117,14 @@ CI on `windows-latest` (Windows Server, Git 2.56.0.windows.2), PR #29:
   `RESTRICTED` among the restricting SIDs.
 - **Restricted token, second run**: `pwsh` and `cmd` checks pass; MSYS `bash` still dies (`CreateFileMapping <user
   SID>.1, Win32 error 5` / `couldn't create signal pipe, Win32 error 5`): the per-check `sh` rule above.
-- **Restricted token, final commit**: RESULT_PENDING
+- **Restricted token, final**: [CI run 39716343023, job 119619357141](https://github.com/datacrate360/agent-countercheck/actions/runs/39716343023/job/119619357141)
+  (commit `c567ac4`, `windows-latest`): the probe printed `restricted=1`; `tests\verify.rs` ran 99 tests, 99 passed,
+  0 failed, 0 ignored, among them every Windows sandbox test (writes refused outside with the hint, `writes` opens
+  exactly its folder and is undone, localhost between processes works, the internet is reachable as the label says,
+  detached and timed-out processes are stopped, `sh` checks marked unsandboxed while `cmd` stays confined, a failed
+  setup fails the check); the winsandbox, core, ui and unit test binaries passed too. Later commits only add a
+  `--nocapture` CI step that prints each sandbox test's probe result, silence the probe's own refused write, and add
+  a test for that.
 - **AppContainer** (`eval/windows-evidence`, as the runner's admin account), PowerShell probes inside the container:
 
   | Setup | internet 1.1.1.1:443 | localhost, same process | localhost, another process (same container) | Git `sh` | Python in `C:\hostedtoolcache` |
@@ -126,7 +133,13 @@ CI on `windows-latest` (Windows Server, Git 2.56.0.windows.2), PR #29:
   | `internetClient` + `privateNetworkClientServer` | ok | ok | ok | fails | can't be started |
   | no capabilities + loopback exemption | blocked | ok | ok | fails | can't be started |
 
-  The same probe as a fresh standard (non-admin) user: STANDARD_USER_PENDING
+  The same probe as a fresh standard (non-admin) user (`net session` fails), [CI job](https://github.com/datacrate360/agent-countercheck/actions/runs/39716343023/job/119619357282):
+  the container profile is created without admin; Git `sh` fails the same way and Python in `C:\hostedtoolcache`
+  can't be started; **adding the loopback exemption succeeded** (`CheckNetIsolation LoopbackExempt -a` printed "OK."
+  and listed the container afterwards), so it is not admin-only for a profile the user owns. The network probes are
+  **inconclusive** as that user: PowerShell ran in ConstrainedLanguage mode inside the container ("Only core types are
+  supported in this language mode"), so they never reached the network. Measuring them needs a probe that isn't
+  PowerShell (an AppContainer mode would need that work anyway).
 
 ## Next step (not in this PR)
 

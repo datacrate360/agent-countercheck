@@ -236,8 +236,10 @@ fn probe_write_refused() -> Result<bool, String> {
         .map(PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_file())
         .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32\cmd.exe"));
+    // The refused write is the point; `2>NUL` keeps cmd's "Access is denied." off the console, so
+    // `--probe` prints only its answer.
     let line = format!(
-        "\"{}\" /D /C \"echo x>allowed\\a.txt & echo x>denied\\b.txt\"",
+        "\"{}\" /D /C \"echo x>allowed\\a.txt & (echo x>denied\\b.txt) 2>NUL\"",
         cmd.display()
     );
     run_restricted(&line, dir.path(), &sid, Duration::from_secs(30))?;

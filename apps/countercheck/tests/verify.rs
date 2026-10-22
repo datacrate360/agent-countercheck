@@ -3124,6 +3124,27 @@ run = 'echo x> "{cmd}"'
     assert!(err.contains("shell = \"pwsh\" or \"cmd\""), "{err}");
 }
 
+/// `--probe` prints only its answer: the deliberately refused write's "Access is denied." stays off
+/// the console.
+#[cfg(windows)]
+#[test]
+fn the_windows_sandbox_probe_prints_only_its_answer() {
+    if !windows_sandbox_works() {
+        return;
+    }
+    let out = Command::new(BIN)
+        .args(["sandbox-exec", "--probe"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "restricted=1",
+        "{out:?}"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("Access is denied"), "{err}");
+}
+
 /// If the sandbox can't be set up, the check fails; it never runs with less than the label says.
 #[cfg(windows)]
 #[test]
