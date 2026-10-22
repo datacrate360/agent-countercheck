@@ -1,6 +1,7 @@
 # ADR-0004: Windows full sandbox, an opt-in admin setup
 
-Status: proposed (2026-10-22), for the maintainer to approve. Follows [ADR-0003](0003-windows-sandbox.md).
+Status: accepted (2026-10-22, by the maintainer), shipped as **experimental** until tried on real Windows machines
+beyond CI. Follows [ADR-0003](0003-windows-sandbox.md).
 
 ## The problem
 
@@ -97,3 +98,14 @@ CI (`windows-latest` runs as admin): run the existing suite, then `windows-setup
 refused, localhost works; a `network = true` check reaches the internet and is marked; a background process is
 stopped; the probe falls back when the firewall rule is removed; then `windows-setup --remove` leaves no account,
 rule or config. Unit tests: config parsing, the environment block, the password generator.
+
+## Follow-ups (from the approval)
+
+1. **No stored password.** The password is harmless (the account has fewer rights than the agent and no internet),
+   but "a password local users can read" is what an enterprise security review notices first. Options: a per-machine
+   service that starts checks as the account by S4U logon (no password, but a privileged component to secure), or
+   IT-managed credentials in the enterprise packaging (ROADMAP "Enterprise").
+2. **`network = true` checks fully sandboxed.** Today they run as the developer in v0.8.0's mode. A second account
+   without the firewall rule (`countercheck-runner-net`) would give them the same write confinement and `sh` support.
+3. **Try it on real Windows 11 machines** (a non-admin developer after an admin ran the setup, a per-user Python with
+   `--allow-read`, a repository `.venv`) before dropping "experimental".

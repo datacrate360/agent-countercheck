@@ -1,4 +1,9 @@
-# Agent Countercheck
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/lockup-dark.svg">
+    <img alt="Agent Countercheck" src="docs/assets/brand/lockup-light.svg" height="72">
+  </picture>
+</h1>
 
 **Proof that AI agents' work really happened.**
 
@@ -396,7 +401,7 @@ folder and closes its output can still escape on macOS; the sandbox limits what 
 off when you also need the internet blocked. The main protections (locked checks, restored tests, clean copy, sealed receipts)
 work on every OS ([FAQ](#faq)).
 
-**Windows full sandbox (opt-in, admin once):**
+**Windows full sandbox (opt-in, admin once; experimental):**
 
 ```powershell
 countercheck windows-setup                       # in an administrator PowerShell, once per machine

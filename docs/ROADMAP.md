@@ -56,12 +56,31 @@ section. Ideas and use cases are welcome as issues.
    database.
 7. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
 8. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
-9. **Windows sandbox, the rest** (v0.8.0 confines writes for `pwsh`/`cmd` checks): block the internet and cover
-   Git's `sh`, either with an AppContainer mode (needs read grants for toolchains) or an opt-in one-time admin setup
-   with a dedicated user (ADR-0003).
+9. **Windows full sandbox, after the experimental release** (ADR-0004, built: `countercheck windows-setup`): try it on
+   real Windows 11 machines and drop "experimental"; then the two follow-ups: no stored password for the runner
+   account, and `network = true` checks fully sandboxed (a second account without the firewall rule).
 10. **winget and scoop** packages for Windows (today: `install.ps1`, `pip`/`uvx`, or the zip from Releases).
 
 ## Later
+
+### Enterprise (Windows-first)
+
+Most enterprises run Windows, where developers usually have no admin rights but IT can deploy software centrally.
+
+- **Docs: "Countercheck in an enterprise"**: CI as the gate (`verify --base origin/main` on controlled runners), WSL2
+  on Windows laptops (the full Linux sandbox today), and what each receipt `sandbox` label means.
+- **Authenticode-signed `countercheck.exe`** (a code-signing certificate or Azure Trusted Signing): unsigned binaries
+  get SmartScreen warnings and are blocked by AppLocker/WDAC allow-lists in many companies.
+- **Packaging IT can deploy**: winget and an MSI (Intune, Group Policy).
+- **Managed full sandbox**: the Windows admin setup (Next, item 9) packaged for IT to deploy once, so developers
+  never need admin; must handle policies that restrict extra local accounts.
+- **Sandbox policy**: an org or check-file setting like `require_sandbox = "full"`, so a run without the full sandbox
+  is UNVERIFIED instead of VERIFIED (what compliance teams ask for).
+- **Signed receipts** that say who produced a receipt, for audit (see below).
+- Before building the managed sandbox: talk to 2-3 enterprise IT/security people as design partners ("would you
+  deploy this, what would block it?").
+
+### Other
 
 - **More recipes** (data migration, web app, games, video/media, ML models), community-maintained; started in
   `recipes/`.
