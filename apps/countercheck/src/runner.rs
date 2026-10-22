@@ -24,6 +24,11 @@ pub enum Sandbox {
     /// check started (`countercheck sandbox-exec`). The internet is not blocked.
     #[cfg_attr(not(windows), allow(dead_code))]
     RestrictedToken,
+    /// Windows, a run with `sh` checks: no sandbox, because Git for Windows' `sh` (MSYS) can't
+    /// start under a write-restricted token (its shared memory and signal pipes are secured to the
+    /// user account only). Runs like `None`; the label says why.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    NoneForSh,
 }
 
 impl Sandbox {
@@ -42,12 +47,15 @@ impl Sandbox {
             Sandbox::RestrictedToken => {
                 "windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows needs admin rights to block it and keep localhost)"
             }
+            Sandbox::NoneForSh => {
+                "none (Git for Windows' sh can't run in the Windows sandbox; checks with shell = \"pwsh\" or \"cmd\" can)"
+            }
         }
     }
 
     /// Writes outside the check folder are refused.
     pub fn confines_writes(self) -> bool {
-        !matches!(self, Sandbox::None)
+        !matches!(self, Sandbox::None | Sandbox::NoneForSh)
     }
 
     /// The internet is blocked (localhost still works).
@@ -637,7 +645,7 @@ pub fn run_check(
     let err = log.try_clone().map_err(|e| e.to_string())?;
 
     let mut cmd = match sandbox {
-        Sandbox::None => Command::new(&program),
+        Sandbox::None | Sandbox::NoneForSh => Command::new(&program),
         Sandbox::Seatbelt => {
             let mut c = Command::new("/usr/bin/sandbox-exec");
             c.arg("-p")
@@ -848,7 +856,9 @@ pub fn run_check(
         if unclear {
             result
                 .output_tail
-                .push_str(if spec.network || !sandbox.blocks_internet() {
+                .push_str(if sandbox == Sandbox::RestrictedToken {
+                    WINDOWS_DENIAL_HINT
+                } else if spec.network {
                     UNCLEAR_DENIAL_HINT
                 } else {
                     UNCLEAR_DENIAL_NETWORK_HINT
@@ -958,6 +968,11 @@ pub const UNCLEAR_DENIAL_NETWORK_HINT: &str = "\n[countercheck] the sandbox refu
 pub const UNCLEAR_DENIAL_HINT: &str = "\n[countercheck] the sandbox refused something this check did \
     (\"Operation not permitted\"), probably a write outside the check folder and the temp dir; point it at \
     $TMPDIR or allow the location with `writes = [\"...\"]` on the check";
+
+/// The same under the Windows sandbox, which refuses only writes.
+pub const WINDOWS_DENIAL_HINT: &str = "\n[countercheck] the sandbox refused something this check did \
+    (\"Access is denied\"), probably a write outside the check folder and the temp dir; point it at \
+    %TEMP% or allow the location with `writes = [\"...\"]` on the check";
 
 /// Added to a failed check that ran without internet access.
 pub const NO_INTERNET_HINT: &str = "\n[countercheck] this check ran without internet access (sandbox); \

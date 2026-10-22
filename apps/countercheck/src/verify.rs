@@ -17,6 +17,9 @@ pub struct Options {
     pub claim: Option<String>,
     pub worker: Worker,
     pub sandbox: runner::Sandbox,
+    /// The sandbox was asked for by name (`--sandbox windows`): a run it can't confine is an
+    /// error, not a run without it.
+    pub sandbox_required: bool,
     pub out: Option<PathBuf>,
     /// `--checks-from`: the checks come from outside the repository (ADR-0002).
     pub checks_from: Option<String>,
@@ -116,6 +119,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         locked_texts.insert(path, String::from_utf8_lossy(&bytes).into_owned());
     }
     let planned = config::plan(&checks, &locked_texts)?;
+    let sandbox = windows_sh_check(opts, &planned)?;
     let protected = Protected::new(&checks.protected_patterns())?;
 
     // 2. A clean copy of the worker's files.
@@ -131,7 +135,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // Windows sandbox: the run's SID may write here. Granted while both are empty, so every file
     // copied in inherits it and no existing tree is walked.
     #[cfg(windows)]
-    if opts.sandbox == runner::Sandbox::RestrictedToken {
+    if sandbox == runner::Sandbox::RestrictedToken {
         crate::windows_sandbox::grant_scratch(&work, &tmp)?;
     }
     let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
@@ -223,7 +227,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // Extra write locations, checked before anything runs (only the sandbox restricts writes).
     let mut writes = Vec::new();
     for spec in &planned {
-        writes.push(if opts.sandbox.confines_writes() {
+        writes.push(if sandbox.confines_writes() {
             runner::resolve_writes(spec, &root)?
         } else {
             Vec::new()
@@ -232,7 +236,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let mut results = Vec::new();
     for (spec, writes) in planned.iter().zip(&writes) {
         let Some(g) = &spec.golden else {
-            let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox, writes)?;
+            let mut result = runner::run_check(spec, &work, &tmp, sandbox, writes)?;
             note_links_as_text(&mut result, &links_as_text);
             results.push(result);
             continue;
@@ -271,7 +275,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             }
         });
         golden::clear_output(&work, g)?;
-        let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox, writes)?;
+        let mut result = runner::run_check(spec, &work, &tmp, sandbox, writes)?;
         golden::judge(&work, g, &expected, &mut result);
         note_links_as_text(&mut result, &links_as_text);
         results.push(result);
@@ -327,7 +331,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         checks_locked,
         checks_source,
         checks_external,
-        sandbox: opts.sandbox.label().to_string(),
+        sandbox: sandbox.label().to_string(),
         tree_sha256,
         linked,
         protected_changes,
@@ -353,6 +357,40 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
 /// The clean copy against the base, by bytes. A file that differs only by CRLF line endings is
 /// marked [`Diff::LineEndings`].
+/// The sandbox this run gets. Windows: Git for Windows' `sh` can't start under the sandbox's
+/// write-restricted token (MSYS secures its shared memory and signal pipes to the user account
+/// only, and a token that may write there may write everywhere the user can), so a run with an
+/// `sh` check runs without it and the receipt says why; asked for by name, that's an error.
+fn windows_sh_check(
+    opts: &Options,
+    planned: &[config::PlannedCheck],
+) -> Result<runner::Sandbox, String> {
+    if opts.sandbox != runner::Sandbox::RestrictedToken
+        || !planned.iter().any(|c| c.shell == config::Shell::Sh)
+    {
+        if opts.sandbox == runner::Sandbox::RestrictedToken {
+            eprintln!(
+                "note: on Windows checks can reach the internet (writes are still confined; the receipt \
+                 records this)."
+            );
+        }
+        return Ok(opts.sandbox);
+    }
+    if opts.sandbox_required {
+        return Err(
+            "Git for Windows' sh can't run in the Windows sandbox (MSYS secures its shared memory to \
+             your user account only); set shell = \"pwsh\" or \"cmd\" on the sh checks in \
+             .countercheck/checks.toml, or use --sandbox none"
+                .to_string(),
+        );
+    }
+    eprintln!(
+        "note: this project has sh checks, which can't run in the Windows sandbox; checks run as a normal \
+         process (the receipt records this). Checks with shell = \"pwsh\" or \"cmd\" can be sandboxed."
+    );
+    Ok(runner::Sandbox::NoneForSh)
+}
+
 fn compare(
     base: &mut git::Revision,
     copied: &Files,

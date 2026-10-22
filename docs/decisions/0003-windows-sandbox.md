@@ -26,8 +26,10 @@ The AppContainer column was measured on the CI runner (`windows-latest`) by the 
 
 ## Decision
 
-**Writes: a write-restricted token. Process tree: the Job Object, as before. Internet: not blocked, and the receipt
-says so.** The label is `windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows
+**Writes: a write-restricted token, for `pwsh` and `cmd` checks. Process tree: the Job Object, as before. Internet:
+not blocked, and the receipt says so. Git for Windows' `sh`: can't be confined (below); a run with an `sh` check runs
+without the sandbox and the receipt says `none (Git for Windows' sh can't run in the Windows sandbox; checks with
+shell = "pwsh" or "cmd" can)`; `--sandbox windows` refuses such a run.** The label is `windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows
 needs admin rights to block it and keep localhost)`, the same honest shape as Linux without user namespaces.
 
 How it works (`apps/countercheck/src/windows_sandbox.rs`, `countercheck sandbox-exec`, mirroring `linux_sandbox.rs`):
@@ -59,6 +61,21 @@ processes); the loopback exemption (`CheckNetIsolation LoopbackExempt`, `Network
 machine-wide firewall setting that needs admin. And the check can't read the user's own toolchain (a Python in
 `%LOCALAPPDATA%`, the repository's linked `node_modules`) unless we add permission entries to those folders, which
 changes files outside the check on every run. A sandbox that fails honest work would make people turn it off.
+
+## Why Git for Windows' `sh` can't run in it
+
+Measured on CI (second run): with every grant above, MSYS `bash` dies at start with `CreateFileMapping
+<user SID>.1, Win32 error 5` or `couldn't create signal pipe, Win32 error 5`. MSYS gives its per-user shared memory
+and its signal pipes explicit permissions naming only the user, `Administrators` and `SYSTEM`, and every MSYS
+process of the user shares them. A write-restricted process can open them only if one of those SIDs is a restricting
+SID, and each of them also has write on everything in the user's profile, so the restriction would mean nothing. A
+low integrity level fails the same way on objects a normal Git Bash created, and an AppContainer can't open them
+because they don't name the container. So `sh` checks are not confined, and the receipt never claims they are.
+
+Without that limit (a follow-up needing a one-time admin setup, as OpenAI's Codex does on Windows): run checks as a
+dedicated local user created once by an elevated `countercheck setup`, with ACLs giving that user write only in
+the check folder, and a Windows Firewall rule for that user blocking everything but loopback. MSYS then works (its
+objects belong to that user), and the internet can be blocked with localhost kept.
 
 ## The `unsafe` question
 

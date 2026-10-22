@@ -221,6 +221,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             checks_from,
             checks_sha256,
         } => {
+            let sandbox_arg = sandbox;
             let sandbox = match sandbox {
                 SandboxArg::Auto if runner::auto_sandbox() != runner::Sandbox::None => {
                     let s = runner::auto_sandbox();
@@ -228,12 +229,6 @@ fn run(cli: Cli) -> Result<u8, String> {
                         eprintln!(
                             "note: this system doesn't allow user namespaces, so checks can reach the internet \
                              (writes are still confined; the receipt records this)."
-                        );
-                    }
-                    if s == runner::Sandbox::RestrictedToken {
-                        eprintln!(
-                            "note: on Windows checks can reach the internet (writes are still confined; \
-                             the receipt records this)."
                         );
                     }
                     s
@@ -297,6 +292,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                         .to_string(),
                 );
             }
+            let sandbox_required = matches!(sandbox_arg, SandboxArg::Windows);
             let opts = verify::Options {
                 repo,
                 base,
@@ -307,6 +303,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                     cost_usd,
                 },
                 sandbox,
+                sandbox_required,
                 out,
                 checks_from,
                 checks_sha256,

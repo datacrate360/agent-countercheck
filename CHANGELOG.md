@@ -2,12 +2,16 @@
 
 ## Unreleased
 
-- **New: a sandbox on Windows** ([ADR-0003](docs/decisions/0003-windows-sandbox.md)). Checks run through
-  `countercheck sandbox-exec` with a **write-restricted token**, no admin needed: writes only in the check folder, its
-  temp dir and `writes = [...]` locations; reads work as before (Git for Windows' `sh`, Python, node, PowerShell). The
-  existing Job Object still stops everything a check started. **The internet is not blocked** on Windows (that needs
+- **New: a sandbox on Windows, for `pwsh` and `cmd` checks** ([ADR-0003](docs/decisions/0003-windows-sandbox.md)).
+  Checks run through `countercheck sandbox-exec` with a **write-restricted token**, no admin needed: writes only in
+  the check folder, its temp dir and `writes = [...]` locations; reads work as before (Python, node, PowerShell). The
+  existing Job Object still stops everything a check started. **Git for Windows' `sh` can't start in it** (MSYS
+  secures its shared memory and signal pipes to the user account only), so a run with an `sh` check runs without the
+  sandbox and the receipt says `none (Git for Windows' sh can't run in the Windows sandbox; ...)`; set
+  `shell = "cmd"` or `"pwsh"` on checks to get it. **The internet is not blocked** on Windows (that needs
   admin rights there while keeping localhost); the receipt's `sandbox` says `windows-restricted-token (...; internet
-  NOT blocked ...)`. `--sandbox auto` picks it when a probe write is really refused; `--sandbox windows` requires it.
+  NOT blocked ...)`. `--sandbox auto` picks it when a probe write is really refused; `--sandbox windows` requires it
+  (and refuses a run with `sh` checks).
   If it can't be set up at run time, the check fails rather than running unconfined.
 - **New: `writes` on Windows**: `C:/path` (forward slashes) and `{home}` (`USERPROFILE`); the run's permission
   entry on the location is removed after the check.
