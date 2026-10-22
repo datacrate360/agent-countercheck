@@ -2768,6 +2768,264 @@ fn with_namespaces_the_internet_is_blocked_but_localhost_works() {
     assert_eq!(r["checks"][2]["passed"], true, "{r:#}");
 }
 
+// ---- the Windows sandbox (write-restricted token + Job Object) ----
+
+/// What `countercheck sandbox-exec --probe` says about this Windows machine. On CI the sandbox
+/// must work (that runner is where it is proven); elsewhere the tests below skip without it.
+#[cfg(windows)]
+fn windows_sandbox_works() -> bool {
+    let out = Command::new(BIN)
+        .args(["sandbox-exec", "--probe"])
+        .output()
+        .unwrap();
+    let ok = String::from_utf8_lossy(&out.stdout).contains("restricted=1");
+    if std::env::var_os("CI").is_some() {
+        assert!(
+            ok,
+            "the Windows sandbox probe failed on CI: {}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    ok && !nested()
+}
+
+/// The check by name.
+#[cfg(windows)]
+fn by_name(r: &serde_json::Value, name: &str) -> serde_json::Value {
+    r["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == name)
+        .unwrap_or_else(|| panic!("no check {name}: {r:#}"))
+        .clone()
+}
+
+/// `icacls <path>`: the permissions as Windows prints them (unknown SIDs as `S-1-5-21-...`).
+#[cfg(windows)]
+fn icacls(p: &Path) -> String {
+    let out = Command::new("icacls").arg(p).output().unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .skip(1)
+        .filter(|l| !l.contains("Successfully processed"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(windows)]
+#[test]
+fn the_windows_sandbox_confines_writes_and_says_what_it_enforced() {
+    if !windows_sandbox_works() {
+        eprintln!("skipped: the Windows sandbox can't start here");
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let leak = outside.path().join("leak.txt");
+    let ps_leak = outside.path().join("ps-leak.txt");
+    let py_leak = outside.path().join("py-leak.txt");
+    let checks = format!(
+        "[[check]]\nname = \"inside\"\nrun = \"mkdir -p a/b && echo x > a/b/c && echo y > \\\"$TMPDIR/t\\\" && echo z > src/calc.sh\"\n\
+         [[check]]\nname = \"outside\"\nrun = \"echo x > '{leak}'\"\n\
+         [[check]]\nname = \"pwsh outside\"\nshell = \"pwsh\"\nrun = \"Set-Content -Path '{ps}' -Value x\"\n\
+         [[check]]\nname = \"python outside\"\nrun = \"python -c \\\"open(r'{py}', 'w')\\\"\"\n\
+         [[check]]\nname = \"the worker's files\"\nrun = \"echo x > '{repo}/src/calc.sh'\"\n",
+        leak = slash(&leak),
+        ps = slash(&ps_leak),
+        py = slash(&py_leak),
+        repo = "{REPO}",
+    );
+    // The repository's own path is only known once it exists: commit the checks again with it.
+    let p = project("[[check]]\nname = \"c\"\nrun = \"true\"\n");
+    fs::write(
+        p.path().join(".countercheck/checks.toml"),
+        checks.replace("{REPO}", &slash(p.path())),
+    )
+    .unwrap();
+    sh(p.path(), "git commit -qam 'checks with the repo path'");
+    let before = fs::read(p.path().join("src/calc.sh")).unwrap();
+    let (code, r) = countercheck(p.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let sandbox = r["sandbox"].as_str().unwrap();
+    assert!(
+        sandbox.starts_with("windows-restricted-token (writes only in the check folder"),
+        "{sandbox}"
+    );
+    assert!(sandbox.contains("internet NOT blocked"), "{sandbox}");
+    assert_eq!(by_name(&r, "inside")["passed"], true, "{r:#}");
+    for name in [
+        "outside",
+        "pwsh outside",
+        "python outside",
+        "the worker's files",
+    ] {
+        assert_eq!(by_name(&r, name)["passed"], false, "{name}: {r:#}");
+    }
+    assert!(!leak.exists() && !ps_leak.exists() && !py_leak.exists());
+    assert_eq!(fs::read(p.path().join("src/calc.sh")).unwrap(), before);
+    for name in ["outside", "python outside"] {
+        let tail = by_name(&r, name)["output_tail"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            tail.contains("tried to write outside the check folder"),
+            "{name}: {tail}"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn the_windows_sandbox_writes_list_opens_exactly_that_folder_and_is_undone() {
+    if !windows_sandbox_works() {
+        return;
+    }
+    let outside = tempfile::tempdir().unwrap();
+    let allowed = outside.path().join("runner-scratch");
+    let other = outside.path().join("other");
+    fs::create_dir_all(allowed.join("old")).unwrap();
+    fs::write(allowed.join("old/keep.txt"), "before").unwrap();
+    let acl_before = icacls(&allowed);
+    let a = slash(&allowed);
+    let checks = format!(
+        "[[check]]\nname = \"allowed\"\nrun = \"mkdir -p '{a}/sub' && echo x > '{a}/sub/f' && echo after > '{a}/old/keep.txt'\"\nwrites = [\"{a}\"]\n\
+         [[check]]\nname = \"elsewhere\"\nrun = \"echo x > '{o}'\"\nwrites = [\"{a}\"]\n\
+         [[check]]\nname = \"not listed\"\nrun = \"echo x > '{a}/g'\"\n",
+        o = slash(&other)
+    );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(by_name(&r, "allowed")["passed"], true, "{r:#}");
+    assert!(allowed.join("sub/f").exists());
+    assert_eq!(
+        fs::read_to_string(allowed.join("old/keep.txt"))
+            .unwrap()
+            .trim(),
+        "after",
+        "a file already there can be changed too"
+    );
+    let listed = by_name(&r, "allowed")["writes"][0]
+        .as_str()
+        .unwrap()
+        .to_lowercase();
+    assert!(
+        listed.ends_with("runner-scratch"),
+        "the receipt lists the location: {listed}"
+    );
+    // Only that location, and only for the check that lists it.
+    assert_eq!(by_name(&r, "elsewhere")["passed"], false);
+    assert!(!other.exists());
+    assert_eq!(by_name(&r, "not listed")["passed"], false);
+    assert!(!allowed.join("g").exists());
+    // The grant is taken off again: the folder's permissions are as before, and nothing the
+    // check made there keeps an entry for the run's SID.
+    assert_eq!(icacls(&allowed), acl_before);
+    for p in [
+        allowed.join("sub"),
+        allowed.join("sub/f"),
+        allowed.join("old/keep.txt"),
+    ] {
+        let acl = icacls(&p);
+        assert!(!acl.contains("S-1-5-21-"), "{}: {acl}", p.display());
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn the_windows_sandbox_keeps_localhost_and_says_the_internet_is_open() {
+    if !windows_sandbox_works() {
+        return;
+    }
+    let d = project(
+        "[[check]]\nname = \"localhost\"\nrun = \"python tests/net.py localhost\"\n\
+         [[check]]\nname = \"internet\"\nrun = \"python tests/net.py internet\"\n\
+         [[check]]\nname = \"network true\"\nrun = \"python tests/net.py internet\"\nnetwork = true\n",
+    );
+    fs::write(
+        d.path().join("tests/net.py"),
+        "import socket, subprocess, sys\n\
+         if sys.argv[1] == 'internet':\n    socket.create_connection(('1.1.1.1', 443), timeout=10).close()\n\
+         else:\n    s = socket.socket(); s.bind(('127.0.0.1', 0)); s.listen()\n    port = s.getsockname()[1]\n\
+         \x20   # The client is another process, as with a test server and a browser.\n\
+         \x20   subprocess.run([sys.executable, '-c', f\"import socket; socket.create_connection(('127.0.0.1', {port}), timeout=10).close()\"], check=True)\n\
+         \x20   s.accept()[0].close()\n\
+         print('ok', sys.argv[1])\n",
+    )
+    .unwrap();
+    sh(d.path(), "git add -A && git commit -qm net");
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    // Honest label: the internet is reachable, and the receipt says so.
+    assert!(
+        r["sandbox"]
+            .as_str()
+            .unwrap()
+            .contains("internet NOT blocked")
+    );
+    for name in ["localhost", "internet", "network true"] {
+        assert_eq!(by_name(&r, name)["passed"], true, "{name}: {r:#}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn the_windows_sandbox_stops_what_a_check_left_running() {
+    if !windows_sandbox_works() {
+        return;
+    }
+    // Background processes from sh and from PowerShell's Start-Process: both outlive the check
+    // unless the Job Object stops them.
+    let d = project(
+        "[[check]]\nname = \"sh\"\nrun = \"sleep 60 & echo WINPID=$(cat /proc/$!/winpid); exit 0\"\n\
+         [[check]]\nname = \"pwsh\"\nshell = \"pwsh\"\nrun = \"$p = Start-Process -PassThru -WindowStyle Hidden ping -ArgumentList '-n','60','127.0.0.1'; Write-Output \\\"WINPID=$($p.Id)\\\"\"\n\
+         [[check]]\nname = \"timeout\"\nrun = \"sleep 60 & echo WINPID=$(cat /proc/$!/winpid); wait\"\ntimeout_secs = 5\n",
+    );
+    let started = std::time::Instant::now();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert!(
+        started.elapsed().as_secs() < 60,
+        "verify took {:?}: something outlived its check",
+        started.elapsed()
+    );
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(by_name(&r, "timeout")["timed_out"], true, "{r:#}");
+    for name in ["sh", "pwsh", "timeout"] {
+        let c = by_name(&r, name);
+        let tail = c["output_tail"].as_str().unwrap();
+        let pid = tail
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("WINPID="))
+            .unwrap_or_else(|| panic!("{name}: no pid in {tail}"))
+            .trim()
+            .to_string();
+        assert!(pid.parse::<u32>().is_ok(), "{name}: {pid:?}");
+        assert!(
+            !windows_pid_running(&pid),
+            "{name}: background process {pid} survived its check"
+        );
+    }
+}
+
+/// If the sandbox can't be set up, the check fails; it never runs with less than the label says.
+#[cfg(windows)]
+#[test]
+fn the_windows_sandbox_fails_the_check_when_it_cannot_start() {
+    let work = tempfile::tempdir().unwrap();
+    let marker = work.path().join("ran.txt");
+    let out = Command::new(BIN)
+        .args(["sandbox-exec", "--work"])
+        .arg(work.path())
+        .args(["--sid", "S-1-not-a-sid", "--cmdline"])
+        .arg(format!("cmd.exe /D /C \"echo x>{}\"", marker.display()))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(125), "{out:?}");
+    assert!(!marker.exists(), "the check ran without its sandbox");
+}
+
 // ---- checks from outside the repository (issue #20, ADR-0002) ----
 
 /// A suite repository with `suites/proj.toml` (CHECKS) committed: (dir, full commit id).

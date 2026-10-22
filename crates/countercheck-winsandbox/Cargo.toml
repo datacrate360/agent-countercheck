@@ -1,0 +1,27 @@
+[package]
+name = "countercheck-winsandbox"
+description = "countercheck's Windows check sandbox: the few Win32 calls it needs (restricted token, ACLs), behind a safe API"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# Not `lints.workspace`: the workspace forbids `unsafe`, and this crate exists to hold the FFI
+# that has no safe crate (see src/lib.rs). Every `unsafe` block carries a SAFETY comment.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+undocumented_unsafe_blocks = "deny"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }

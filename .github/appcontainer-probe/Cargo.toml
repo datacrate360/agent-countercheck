@@ -1,0 +1,14 @@
+# Evidence for docs/decisions/0003-windows-sandbox.md, run by CI on windows-latest: what an
+# AppContainer allows (internet, localhost between processes, Git's sh, Python), with and without
+# a loopback exemption. Not part of the workspace and not shipped; it uses the third-party
+# `rappct` crate only here.
+[package]
+name = "appcontainer-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[target.'cfg(windows)'.dependencies]
+rappct = "=0.13.3"

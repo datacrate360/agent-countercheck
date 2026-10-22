@@ -83,6 +83,10 @@ jobs:
         continue-on-error: true
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # The Windows sandbox (write-restricted token + Job Object) must start on this runner: every
+      # check in the tests below runs in it (`--sandbox auto`), and the probe says why if not.
+      - name: Windows sandbox probe
+        run: cargo build -q; target/debug/countercheck.exe sandbox-exec --probe
       - name: Test
         run: cargo test --workspace
       # The example's check runs `python3`; Windows' Python is `python`, so give sh a python3 if needed.
@@ -125,6 +129,20 @@ jobs:
           Stop-Process -Id $server.Id
           if (-not $failed) { throw 'a bad checksum must stop the install' }
           if (Test-Path "$env:RUNNER_TEMP/bin2/countercheck.exe") { throw 'installed despite a bad checksum' }
+
+  # Evidence for docs/decisions/0003-windows-sandbox.md: what an AppContainer allows on this
+  # runner (internet, localhost between processes, Git's sh, Python), with and without the
+  # admin-only loopback exemption. Informational; it never fails the build.
+  appcontainer-evidence:
+    name: AppContainer evidence (windows)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the AppContainer probe
+        run: |
+          $env:PROBE_PYTHON = (Get-Command python).Source
+          cargo run -q --manifest-path .github/appcontainer-probe/Cargo.toml
 
   dco:
     name: sign-off (DCO)

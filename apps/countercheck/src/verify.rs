@@ -128,6 +128,12 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let tmp = scratch_root.join("tmp");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    // Windows sandbox: the run's SID may write here. Granted while both are empty, so every file
+    // copied in inherits it and no existing tree is walked.
+    #[cfg(windows)]
+    if opts.sandbox == runner::Sandbox::RestrictedToken {
+        crate::windows_sandbox::grant_scratch(&work, &tmp)?;
+    }
     let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
 
     // 3. What changed: the clean copy's own bytes against the base. Protected files the worker

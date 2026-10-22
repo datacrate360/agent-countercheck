@@ -20,6 +20,8 @@ mod scan;
 mod snapshot;
 mod ui;
 mod verify;
+#[cfg(windows)]
+mod windows_sandbox;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -38,12 +40,15 @@ struct Cli {
 
 #[derive(Clone, Copy, ValueEnum)]
 enum SandboxArg {
-    /// The macOS sandbox when it can start here, otherwise none (the receipt says which).
+    /// The best sandbox that can start here (macOS, Linux or Windows), otherwise none (the
+    /// receipt says which).
     Auto,
     /// No network, writes only inside the check folder (macOS).
     Seatbelt,
     /// Writes only inside the check folder; no network where user namespaces are allowed (Linux).
     Landlock,
+    /// Writes only inside the check folder; the internet is not blocked (Windows).
+    Windows,
     /// Run checks as a normal process.
     None,
 }
@@ -86,7 +91,7 @@ enum Cmd {
         #[arg(long, value_name = "HEX", requires = "checks_from")]
         checks_sha256: Option<String>,
     },
-    /// (internal) Run one check inside the Linux sandbox; started by `verify`.
+    /// (internal) Run one check inside the Linux or Windows sandbox; started by `verify`.
     #[command(hide = true)]
     SandboxExec {
         /// Print what the sandbox can do here and exit.
@@ -104,6 +109,12 @@ enum Cmd {
         namespaces: bool,
         #[arg(long, default_value_t = 600)]
         timeout_secs: u64,
+        /// Windows: the run's SID, which the check's writes are restricted to.
+        #[arg(long)]
+        sid: Option<String>,
+        /// Windows: the check's whole command line.
+        #[arg(long)]
+        cmdline: Option<String>,
         #[arg(last = true)]
         program: Vec<String>,
     },
@@ -182,8 +193,10 @@ fn run(cli: Cli) -> Result<u8, String> {
             network,
             namespaces,
             timeout_secs,
+            sid,
+            cmdline,
             program,
-        } => sandbox_exec(
+        } => sandbox_exec(SandboxExecArgs {
             probe,
             work,
             tmp,
@@ -191,8 +204,10 @@ fn run(cli: Cli) -> Result<u8, String> {
             network,
             namespaces,
             timeout_secs,
+            sid,
+            cmdline,
             program,
-        ),
+        }),
         Cmd::Verify {
             repo,
             base,
@@ -215,12 +230,18 @@ fn run(cli: Cli) -> Result<u8, String> {
                              (writes are still confined; the receipt records this)."
                         );
                     }
+                    if s == runner::Sandbox::RestrictedToken {
+                        eprintln!(
+                            "note: on Windows checks can reach the internet (writes are still confined; \
+                             the receipt records this)."
+                        );
+                    }
                     s
                 }
                 SandboxArg::Auto if cfg!(windows) => {
                     eprintln!(
-                        "note: no check sandbox on Windows yet; checks run as a normal process \
-                         (the receipt records this)."
+                        "note: the Windows check sandbox could not start here; checks run as a normal \
+                         process (the receipt records this)."
                     );
                     runner::Sandbox::None
                 }
@@ -241,11 +262,26 @@ fn run(cli: Cli) -> Result<u8, String> {
                         );
                     }
                 },
+                SandboxArg::Windows => match runner::auto_sandbox() {
+                    runner::Sandbox::RestrictedToken => runner::Sandbox::RestrictedToken,
+                    _ if cfg!(windows) => {
+                        return Err(
+                            "the Windows sandbox could not start here (`countercheck sandbox-exec --probe` \
+                             says why); use --sandbox none"
+                                .to_string(),
+                        );
+                    }
+                    _ => {
+                        return Err(
+                            "the Windows sandbox needs Windows; use --sandbox auto".to_string()
+                        );
+                    }
+                },
                 SandboxArg::None => runner::Sandbox::None,
             };
             if sandbox == runner::Sandbox::Seatbelt && cfg!(windows) {
                 return Err(
-                    "there is no check sandbox on Windows yet (seatbelt is macOS only); use --sandbox none"
+                    "seatbelt is the macOS sandbox; on Windows use --sandbox windows (or auto)"
                         .to_string(),
                 );
             }
@@ -360,9 +396,9 @@ fn run(cli: Cli) -> Result<u8, String> {
     }
 }
 
-#[cfg(target_os = "linux")]
-#[allow(clippy::too_many_arguments)]
-fn sandbox_exec(
+/// The hidden `sandbox-exec` subcommand's arguments (each system reads its own).
+#[allow(dead_code)]
+struct SandboxExecArgs {
     probe: bool,
     work: Option<PathBuf>,
     tmp: Option<PathBuf>,
@@ -370,36 +406,50 @@ fn sandbox_exec(
     network: bool,
     namespaces: bool,
     timeout_secs: u64,
+    sid: Option<String>,
+    cmdline: Option<String>,
     program: Vec<String>,
-) -> Result<u8, String> {
-    if probe {
+}
+
+#[cfg(target_os = "linux")]
+fn sandbox_exec(a: SandboxExecArgs) -> Result<u8, String> {
+    if a.probe {
         return Ok(linux_sandbox::probe_main());
     }
-    let (Some(work), Some(tmp)) = (work, tmp) else {
+    let (Some(work), Some(tmp)) = (a.work, a.tmp) else {
         return Err("sandbox-exec needs --work and --tmp".to_string());
     };
     Ok(linux_sandbox::run_main(linux_sandbox::Run {
         work,
         tmp,
-        writes,
-        network,
-        timeout_secs,
-        namespaces,
-        program,
+        writes: a.writes,
+        network: a.network,
+        timeout_secs: a.timeout_secs,
+        namespaces: a.namespaces,
+        program: a.program,
     }))
 }
 
-#[cfg(not(target_os = "linux"))]
-#[allow(clippy::too_many_arguments)]
-fn sandbox_exec(
-    _probe: bool,
-    _work: Option<PathBuf>,
-    _tmp: Option<PathBuf>,
-    _writes: Vec<PathBuf>,
-    _network: bool,
-    _namespaces: bool,
-    _timeout_secs: u64,
-    _program: Vec<String>,
-) -> Result<u8, String> {
-    Err("sandbox-exec is the Linux sandbox; it only runs on Linux".to_string())
+#[cfg(windows)]
+fn sandbox_exec(a: SandboxExecArgs) -> Result<u8, String> {
+    if a.probe {
+        return Ok(windows_sandbox::probe_main());
+    }
+    let (Some(work), Some(sid), Some(cmdline)) = (a.work, a.sid, a.cmdline) else {
+        return Err("sandbox-exec needs --work, --sid and --cmdline".to_string());
+    };
+    let code = windows_sandbox::run_main(windows_sandbox::Run {
+        work,
+        writes: a.writes,
+        sid,
+        timeout_secs: a.timeout_secs,
+        cmdline,
+    });
+    // Windows exit codes are 32-bit: pass the check's on unchanged (a u8 could turn a crash into 0).
+    std::process::exit(code)
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn sandbox_exec(_: SandboxExecArgs) -> Result<u8, String> {
+    Err("sandbox-exec is the Linux and Windows sandbox; it doesn't run on this system".to_string())
 }

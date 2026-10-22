@@ -1,4 +1,4 @@
-//! Run one check command in the snapshot, optionally inside the macOS sandbox.
+//! Run one check command in the snapshot, optionally inside the macOS, Linux or Windows sandbox.
 
 use countercheck_core::budget;
 use countercheck_core::config::{PlannedCheck, Shell};
@@ -20,12 +20,15 @@ pub enum Sandbox {
     /// PID namespace (`countercheck sandbox-exec`).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Landlock { namespaces: bool },
+    /// Windows: a write-restricted token confines writes; a Job Object stops everything the
+    /// check started (`countercheck sandbox-exec`). The internet is not blocked.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    RestrictedToken,
 }
 
 impl Sandbox {
     pub fn label(self) -> &'static str {
         match self {
-            Sandbox::None if cfg!(windows) => "none (no sandbox on Windows yet)",
             Sandbox::None => "none",
             Sandbox::Seatbelt => {
                 "macos-seatbelt (no internet, localhost only; writes only in the check folder)"
@@ -35,6 +38,9 @@ impl Sandbox {
             }
             Sandbox::Landlock { namespaces: false } => {
                 "linux-landlock (writes only in the check folder; internet NOT blocked: this system doesn't allow user namespaces)"
+            }
+            Sandbox::RestrictedToken => {
+                "windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows needs admin rights to block it and keep localhost)"
             }
         }
     }
@@ -53,12 +59,29 @@ impl Sandbox {
     }
 }
 
-/// The best sandbox this system has: Seatbelt on macOS, Landlock on Linux, else none.
+/// The best sandbox this system has: Seatbelt on macOS, Landlock on Linux, a restricted token on
+/// Windows, else none.
 pub fn auto_sandbox() -> Sandbox {
     if seatbelt_works() {
         return Sandbox::Seatbelt;
     }
+    if cfg!(windows) {
+        return windows_auto();
+    }
     linux_auto()
+}
+
+#[cfg(windows)]
+fn windows_auto() -> Sandbox {
+    match std::env::current_exe() {
+        Ok(exe) if crate::windows_sandbox::probe(&exe) => Sandbox::RestrictedToken,
+        _ => Sandbox::None,
+    }
+}
+
+#[cfg(not(windows))]
+fn windows_auto() -> Sandbox {
+    Sandbox::None
 }
 
 #[cfg(target_os = "linux")]
@@ -144,9 +167,22 @@ pub fn resolve_writes(spec: &PlannedCheck, repo: &Path) -> Result<Vec<PathBuf>, 
     if spec.writes.is_empty() {
         return Ok(Vec::new());
     }
-    let home = std::env::var("HOME").map_err(|_| "writes: HOME is not set".to_string())?;
-    let user = std::env::var("USER").unwrap_or_default();
-    let uid = if spec.writes.iter().any(|t| t.contains("{uid}")) {
+    let (home_var, user_var) = if cfg!(windows) {
+        ("USERPROFILE", "USERNAME")
+    } else {
+        ("HOME", "USER")
+    };
+    let home = std::env::var(home_var).map_err(|_| format!("writes: {home_var} is not set"))?;
+    let user = std::env::var(user_var).unwrap_or_default();
+    let uid = if cfg!(windows) {
+        if spec.writes.iter().any(|t| t.contains("{uid}")) {
+            return Err(format!(
+                "check \"{}\": writes: {{uid}} isn't available on Windows; use {{user}} or {{home}}",
+                spec.name
+            ));
+        }
+        String::new()
+    } else if spec.writes.iter().any(|t| t.contains("{uid}")) {
         Command::new("/usr/bin/id")
             .arg("-u")
             .output()
@@ -158,20 +194,51 @@ pub fn resolve_writes(spec: &PlannedCheck, repo: &Path) -> Result<Vec<PathBuf>, 
     };
     let real_home = resolve_existing(Path::new(&home));
     let real_repo = resolve_existing(repo);
+    // Windows: `{home}` fills in with forward slashes, like the rest of a check file's paths.
+    let home_for_template = if cfg!(windows) {
+        display_path(&real_home).replace('\\', "/")
+    } else {
+        home.clone()
+    };
     let mut out = Vec::new();
     for t in &spec.writes {
-        let path = countercheck_core::writes::expand(t, &uid, &user, &home)
+        let path = countercheck_core::writes::expand(t, &uid, &user, &home_for_template)
             .map_err(|e| format!("check \"{}\": {e}", spec.name))?;
-        let real = resolve_existing(Path::new(&path));
+        let real = PathBuf::from(display_path(&resolve_existing(Path::new(&path))));
         countercheck_core::writes::check_resolved(
             &spec.name,
-            &real.to_string_lossy(),
-            &real_home.to_string_lossy(),
-            &real_repo.to_string_lossy(),
+            &comparable(&real)?,
+            &comparable(&real_home)?,
+            &comparable(&real_repo)?,
         )?;
         out.push(real);
     }
     Ok(out)
+}
+
+/// A resolved path without Windows' `\\?\` prefix (which `canonicalize` adds), for the receipt
+/// and the sandbox. Unchanged elsewhere.
+fn display_path(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC") => rest.to_string(),
+        _ => s.into_owned(),
+    }
+}
+
+/// A resolved path in the form `writes::check_resolved` compares: on Windows `/` separators and
+/// lowercase (Windows paths ignore case), and only on a local drive.
+fn comparable(p: &Path) -> Result<String, String> {
+    let s = display_path(p);
+    if !cfg!(windows) {
+        return Ok(s);
+    }
+    if s.starts_with(r"\\") {
+        return Err(format!(
+            "writes path {s} is on a network share; the sandbox needs a local drive"
+        ));
+    }
+    Ok(s.replace('\\', "/").to_lowercase())
 }
 
 /// `path` with symlinks resolved as far as it exists, the rest appended (a location the check
@@ -305,6 +372,57 @@ fn add_run(cmd: &mut Command, shell: Shell, run: &str) {
             cmd.arg(run);
         }
     }
+}
+
+/// One argument quoted the way Rust's standard library quotes it on Windows (the rules
+/// `CommandLineToArgvW`, the C runtime and MSYS parse): in quotes when it is empty or has a space
+/// or tab, a `"` escaped with a backslash, backslashes before a `"` (or the closing quote) doubled.
+fn quote_windows_arg(out: &mut String, arg: &str) {
+    let quote = arg.is_empty() || arg.contains([' ', '\t']);
+    if quote {
+        out.push('"');
+    }
+    let mut backslashes = 0usize;
+    for c in arg.chars() {
+        if c == '\\' {
+            backslashes += 1;
+        } else {
+            if c == '"' {
+                out.extend(std::iter::repeat_n('\\', backslashes + 1));
+            }
+            backslashes = 0;
+        }
+        out.push(c);
+    }
+    if quote {
+        out.extend(std::iter::repeat_n('\\', backslashes));
+        out.push('"');
+    }
+}
+
+/// The whole Windows command line for a check, exactly as `Command` builds it without a sandbox:
+/// the program in quotes, then `-c <run>` (sh), `-NoProfile -NonInteractive -Command <run>`
+/// (pwsh) or `/D /S /C "<run>"` as written (cmd). The Windows sandbox starts it itself.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn windows_command_line(program: &Path, shell: Shell, run: &str) -> Result<String, String> {
+    let program = program.to_string_lossy();
+    if program.contains('"') {
+        return Err(format!("the shell's path has a quote in it: {program}"));
+    }
+    let mut out = format!("\"{program}\"");
+    let args: &[&str] = match shell {
+        Shell::Sh => &["-c"],
+        Shell::Pwsh => &["-NoProfile", "-NonInteractive", "-Command"],
+        Shell::Cmd => {
+            out.push_str(&format!(" /D /S /C \"{run}\""));
+            return Ok(out);
+        }
+    };
+    for a in args.iter().copied().chain([run]) {
+        out.push(' ');
+        quote_windows_arg(&mut out, a);
+    }
+    Ok(out)
 }
 
 /// A check that could not start (e.g. its shell is missing): failed, with the reason as output.
@@ -551,8 +669,40 @@ pub fn run_check(
             c.arg("--").arg(&program);
             c
         }
+        Sandbox::RestrictedToken => {
+            // The helper starts the check itself (a restricted token needs its own
+            // CreateProcess), with the command line `Command` would have built, and enforces
+            // the timeout so it can take its grants off the `writes` locations before it exits.
+            let exe = std::env::current_exe().map_err(|e| format!("countercheck binary: {e}"))?;
+            #[cfg(windows)]
+            let sid = crate::windows_sandbox::run_sid()?;
+            #[cfg(not(windows))]
+            let sid = String::new();
+            let line = match windows_command_line(&program, spec.shell, &spec.run) {
+                Ok(l) => l,
+                Err(why) => return Ok(not_started(spec, why)),
+            };
+            let mut c = Command::new(exe);
+            c.arg("sandbox-exec")
+                .arg("--work")
+                .arg(workdir)
+                .arg("--tmp")
+                .arg(tmp)
+                .arg("--timeout-secs")
+                .arg(spec.timeout_secs.to_string())
+                .arg("--sid")
+                .arg(sid)
+                .arg("--cmdline")
+                .arg(line);
+            for w in writes {
+                c.arg("--write").arg(w);
+            }
+            c
+        }
     };
-    add_run(&mut cmd, spec.shell, &spec.run);
+    if sandbox != Sandbox::RestrictedToken {
+        add_run(&mut cmd, spec.shell, &spec.run);
+    }
     cmd.current_dir(workdir)
         .env("COUNTERCHECK", "1")
         .env("TMPDIR", tmp);
@@ -582,7 +732,7 @@ pub fn run_check(
     #[cfg(windows)]
     let job = watch_tree(&child);
     // Under the Linux sandbox the helper times the check out itself; this wait is the safety net.
-    let grace = if matches!(sandbox, Sandbox::Landlock { .. }) {
+    let grace = if matches!(sandbox, Sandbox::Landlock { .. } | Sandbox::RestrictedToken) {
         15
     } else {
         0
@@ -629,6 +779,15 @@ pub fn run_check(
     } else {
         (exit_code, timed_out)
     };
+    #[cfg(windows)]
+    let (exit_code, timed_out) = if sandbox == Sandbox::RestrictedToken
+        && exit_code == Some(crate::windows_sandbox::TIMED_OUT)
+        && output_tail.contains(crate::windows_sandbox::TIMEOUT_LINE)
+    {
+        (None, true)
+    } else {
+        (exit_code, timed_out)
+    };
     let mut result = CheckResult {
         name: spec.name.clone(),
         run: spec.run.clone(),
@@ -665,14 +824,21 @@ pub fn run_check(
     // call to turn FAILED into something softer. Computed on the output before any hint is added.
     if command_failed && sandbox.confines_writes() {
         let out = &result.output_tail;
-        // Landlock refuses a write with EACCES ("Permission denied"), Seatbelt with EPERM.
-        let linux = matches!(sandbox, Sandbox::Landlock { .. });
-        let denied = denied_write_path(out, linux);
+        // Landlock refuses a write with EACCES ("Permission denied"), Seatbelt with EPERM,
+        // Windows with ERROR_ACCESS_DENIED ("Access is denied", or EACCES in sh and Python).
+        let eacces = matches!(sandbox, Sandbox::Landlock { .. } | Sandbox::RestrictedToken);
+        let denied = denied_write_path(out, eacces);
         let network = sandbox.blocks_internet() && !spec.network && looks_like_network_error(out);
         // "Operation not permitted" with no path and no other sign: under Seatbelt a refused
         // connection to an IP address and a refused write print exactly this, so say both.
-        let unclear =
-            sandbox == Sandbox::Seatbelt && denied.is_none() && !network && has_bare_denial(out);
+        // Windows' bare "Access is denied." (cmd) can only be a write here.
+        let unclear = denied.is_none()
+            && !network
+            && match sandbox {
+                Sandbox::Seatbelt => has_bare_denial(out, false),
+                Sandbox::RestrictedToken => has_bare_denial(out, true),
+                _ => false,
+            };
         if let Some(path) = denied {
             result.output_tail.push_str(&write_denied_hint(&path));
         }
@@ -680,11 +846,13 @@ pub fn run_check(
             result.output_tail.push_str(NO_INTERNET_HINT);
         }
         if unclear {
-            result.output_tail.push_str(if spec.network {
-                UNCLEAR_DENIAL_HINT
-            } else {
-                UNCLEAR_DENIAL_NETWORK_HINT
-            });
+            result
+                .output_tail
+                .push_str(if spec.network || !sandbox.blocks_internet() {
+                    UNCLEAR_DENIAL_HINT
+                } else {
+                    UNCLEAR_DENIAL_NETWORK_HINT
+                });
         }
     }
     Ok(result)
@@ -713,28 +881,34 @@ fn looks_like_network_error(output: &str) -> bool {
     SIGNS.iter().any(|s| lower.contains(s))
 }
 
-/// A line saying "Operation not permitted" (or `EPERM`) with no path in it.
-fn has_bare_denial(output: &str) -> bool {
+/// A line saying "Operation not permitted" (or `EPERM`; with `eacces`, also "Access is denied")
+/// with no path in it.
+fn has_bare_denial(output: &str, eacces: bool) -> bool {
     output
         .lines()
-        .any(|line| is_permission_denial(&line.to_lowercase(), false) && path_in(line).is_none())
+        .any(|line| is_permission_denial(&line.to_lowercase(), eacces) && path_in(line).is_none())
 }
 
-/// The sandbox's refusal, in the words of the C library, Python, Node and the shells.
-fn is_permission_denial(lower_line: &str, linux: bool) -> bool {
+/// The sandbox's refusal, in the words of the C library, Python, Node, the shells and Windows
+/// (`eacces`: Landlock and Windows refuse with EACCES / ERROR_ACCESS_DENIED).
+fn is_permission_denial(lower_line: &str, eacces: bool) -> bool {
     lower_line.contains("operation not permitted")
         || lower_line.contains("eperm")
-        || (linux && (lower_line.contains("permission denied") || lower_line.contains("eacces")))
+        || (eacces
+            && (lower_line.contains("permission denied")
+                || lower_line.contains("eacces")
+                || lower_line.contains("access is denied")
+                || lower_line.contains("access to the path")))
 }
 
 /// The file a refused write names, if the output has one: a line with "Operation not permitted"
 /// (or `EPERM`) and an absolute path, e.g. Python `PermissionError: [Errno 1] Operation not
 /// permitted: '/var/tmp/x'`, sh `sh: /var/tmp/x: Operation not permitted`, Node `EPERM: operation
 /// not permitted, open '/var/tmp/x'`. Node prints the path on its own `path:` line too.
-fn denied_write_path(output: &str, linux: bool) -> Option<String> {
+fn denied_write_path(output: &str, eacces: bool) -> Option<String> {
     let lines: Vec<&str> = output.lines().collect();
     lines.iter().enumerate().find_map(|(i, line)| {
-        if !is_permission_denial(&line.to_lowercase(), linux) {
+        if !is_permission_denial(&line.to_lowercase(), eacces) {
             return None;
         }
         path_in(line).or_else(|| {
@@ -748,11 +922,21 @@ fn denied_write_path(output: &str, linux: bool) -> Option<String> {
     })
 }
 
-/// The first absolute path in a line (quoted or followed by `:`/`,`), not part of a URL.
+/// The first absolute path in a line (quoted or followed by `:`/`,`), not part of a URL: Unix
+/// (`/var/tmp/x`) or Windows with a drive letter (`C:\x`, `C:/x`; not a URL scheme).
 fn path_in(line: &str) -> Option<String> {
     line.split(|c: char| c.is_whitespace() || matches!(c, '\'' | '"' | ',' | '(' | ')'))
         .map(|t| t.trim_end_matches(':'))
-        .find(|t| t.len() > 1 && t.starts_with('/') && !t.starts_with("//"))
+        .find(|t| {
+            let b = t.as_bytes();
+            let unix = t.len() > 1 && t.starts_with('/') && !t.starts_with("//");
+            let drive = b.len() > 3
+                && b[0].is_ascii_alphabetic()
+                && b[1] == b':'
+                && (b[2] == b'\\' || b[2] == b'/')
+                && b[3] != b'/';
+            unix || drive
+        })
         .map(|t| t.chars().take(200).collect())
 }
 
@@ -903,7 +1087,7 @@ mod tests {
         ] {
             assert_eq!(denied_write_path(out, false), None, "{out}");
             assert!(!looks_like_network_error(out), "{out}");
-            assert!(has_bare_denial(out), "{out}");
+            assert!(has_bare_denial(out, false), "{out}");
         }
         // Refused connections by name: the network hint, and no write hint.
         let connects = [
@@ -959,13 +1143,79 @@ mod tests {
     }
 
     #[test]
-    fn the_sandbox_label_says_when_there_is_none_on_windows() {
-        let label = Sandbox::None.label();
+    fn the_sandbox_labels_say_what_is_enforced() {
+        assert_eq!(Sandbox::None.label(), "none");
+        let w = Sandbox::RestrictedToken;
+        assert!(
+            w.label()
+                .starts_with("windows-restricted-token (writes only in the check folder")
+        );
+        assert!(w.label().contains("internet NOT blocked"), "{}", w.label());
+        assert!(w.confines_writes() && !w.blocks_internet());
         if cfg!(windows) {
-            assert_eq!(label, "none (no sandbox on Windows yet)");
             assert!(!seatbelt_works());
-        } else {
-            assert_eq!(label, "none");
         }
+    }
+
+    #[test]
+    fn windows_command_lines_quote_like_the_standard_library() {
+        let sh = Path::new(r"C:\Program Files\Git\bin\sh.exe");
+        assert_eq!(
+            windows_command_line(sh, Shell::Sh, "sh tests/check.sh").unwrap(),
+            r#""C:\Program Files\Git\bin\sh.exe" -c "sh tests/check.sh""#
+        );
+        // Quotes are escaped, backslashes before a quote or the closing quote doubled, others kept.
+        assert_eq!(
+            windows_command_line(sh, Shell::Sh, r#"echo "a b" C:\x\ end\"#).unwrap(),
+            r#""C:\Program Files\Git\bin\sh.exe" -c "echo \"a b\" C:\x\ end\\""#
+        );
+        assert_eq!(
+            windows_command_line(sh, Shell::Sh, r#"a\"b"#).unwrap(),
+            r#""C:\Program Files\Git\bin\sh.exe" -c a\\\"b"#
+        );
+        assert_eq!(
+            windows_command_line(sh, Shell::Sh, "").unwrap(),
+            r#""C:\Program Files\Git\bin\sh.exe" -c """#
+        );
+        let ps = Path::new(r"C:\pwsh.exe");
+        assert_eq!(
+            windows_command_line(ps, Shell::Pwsh, "exit 3").unwrap(),
+            r#""C:\pwsh.exe" -NoProfile -NonInteractive -Command "exit 3""#
+        );
+        // cmd gets the line as written.
+        let cmd = Path::new(r"C:\Windows\System32\cmd.exe");
+        assert_eq!(
+            windows_command_line(cmd, Shell::Cmd, r#"findstr /C:"a b" x >NUL && echo ok"#).unwrap(),
+            r#""C:\Windows\System32\cmd.exe" /D /S /C "findstr /C:"a b" x >NUL && echo ok""#
+        );
+        assert!(windows_command_line(Path::new("a\"b"), Shell::Sh, "x").is_err());
+    }
+
+    #[test]
+    fn refused_writes_on_windows_name_the_path() {
+        // sh (MSYS), Python and PowerShell under the Windows sandbox; cmd says no path.
+        let cases = [
+            (
+                "sh: C:/Users/me/leak.txt: Permission denied",
+                Some("C:/Users/me/leak.txt"),
+            ),
+            (
+                r"PermissionError: [Errno 13] Permission denied: 'C:\\Users\\me\\leak.txt'",
+                Some(r"C:\\Users\\me\\leak.txt"),
+            ),
+            (
+                r"Out-File: Access to the path 'C:\Users\me\leak.txt' is denied.",
+                Some(r"C:\Users\me\leak.txt"),
+            ),
+            ("Access is denied.", None),
+        ];
+        for (out, want) in cases {
+            assert_eq!(denied_write_path(out, true).as_deref(), want, "{out}");
+        }
+        assert!(has_bare_denial("Access is denied.", true));
+        assert!(!has_bare_denial("Access is denied.", false));
+        // A URL is still not a path, and neither is a lone drive.
+        assert_eq!(path_in("see https://example.com/x"), None);
+        assert_eq!(path_in("drive C: is full"), None);
     }
 }
