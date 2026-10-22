@@ -232,6 +232,14 @@ fn encoded(script: &str) -> String {
     base64(&bytes)
 }
 
+/// `script` inside a `try`, so an error comes out as one plain line (not PowerShell's CLIXML) and
+/// exit code 1.
+fn wrapped(script: &str) -> String {
+    format!(
+        "try {{\n{script}\n}} catch {{\n  Write-Output (\"error: \" + $_.Exception.Message)\n  exit 1\n}}\n"
+    )
+}
+
 /// Run a script; its exit code and everything it printed.
 fn run_script(script: &str, env: &[(&str, &str)]) -> Result<(i32, String), String> {
     let out = Command::new(powershell())
@@ -243,7 +251,10 @@ fn run_script(script: &str, env: &[(&str, &str)]) -> Result<(i32, String), Strin
             "Bypass",
             "-EncodedCommand",
         ])
-        .arg(encoded(script))
+        .arg(encoded(&wrapped(script)))
+        // Started from PowerShell 7, Windows PowerShell would inherit its module path and fail
+        // to load its own modules (ConvertTo-SecureString, NetSecurity): let it use its own.
+        .env_remove("PSModulePath")
         .envs(env.iter().copied())
         .stdin(std::process::Stdio::null())
         .output()
