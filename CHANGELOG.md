@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **A logo**: the agent (a ghost) hands in its receipt, and Countercheck's coral seal is the verdict. In the README,
+  the HTML report and live UI; the full set (icon, favicons, lockups, social preview) is in `docs/assets/brand/`. The
+  name and logo are not covered by the MIT licence (see `docs/assets/brand/README.md`).
+
 ## v0.8.0 (2026-10-22)
 
 A check sandbox on Windows (partial, no admin needed), so every OS now has one.
