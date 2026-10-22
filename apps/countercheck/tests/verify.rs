@@ -2859,7 +2859,8 @@ shell = "cmd"
 run = 'echo x> "{repo}\src\calc.sh"'
 "#,
         leak = leak.display(),
-        ps = ps_leak.display(),
+        // A TOML basic string: forward slashes (PowerShell takes them), no backslash escapes.
+        ps = slash(&ps_leak),
         py = slash(&py_leak),
         repo = p.path().display(),
     );
