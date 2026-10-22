@@ -202,33 +202,52 @@ fn powershell() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("powershell.exe"))
 }
 
-/// Run a script with `-Command -` (from stdin, so nothing lands in the command line).
+/// Base64 (standard alphabet, padded).
+fn base64(bytes: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk.first().copied().unwrap_or(0),
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for (i, shift) in [18u32, 12, 6, 0].into_iter().enumerate() {
+            if i <= chunk.len() {
+                out.push(char::from(A[((n >> shift) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// PowerShell's `-EncodedCommand`: the script as UTF-16LE, in Base64. The whole script is parsed
+/// at once (`-Command -` reads stdin line by line and mishandles multi-line blocks). It holds no
+/// secrets: the password travels in an environment variable.
+fn encoded(script: &str) -> String {
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    base64(&bytes)
+}
+
+/// Run a script; its exit code and everything it printed.
 fn run_script(script: &str, env: &[(&str, &str)]) -> Result<(i32, String), String> {
-    use std::io::Write;
-    let mut child = Command::new(powershell())
+    let out = Command::new(powershell())
         .args([
             "-NoLogo",
             "-NoProfile",
             "-NonInteractive",
             "-ExecutionPolicy",
             "Bypass",
-            "-Command",
-            "-",
+            "-EncodedCommand",
         ])
+        .arg(encoded(script))
         .envs(env.iter().copied())
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
+        .stdin(std::process::Stdio::null())
+        .output()
         .map_err(|e| format!("could not start PowerShell: {e}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(script.as_bytes())
-            .map_err(|e| format!("PowerShell: {e}"))?;
-    }
-    let out = child
-        .wait_with_output()
-        .map_err(|e| format!("PowerShell: {e}"))?;
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -484,6 +503,18 @@ mod tests {
         ] {
             assert!(!parse_firewall(&bad, sid), "{bad}");
         }
+    }
+
+    #[test]
+    fn scripts_are_encoded_for_powershell() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        // `exit 3` as PowerShell expects it (UTF-16LE), checked against
+        // [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('exit 3')).
+        assert_eq!(encoded("exit 3"), "ZQB4AGkAdAAgADMA");
     }
 
     #[test]
