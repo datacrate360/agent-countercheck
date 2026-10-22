@@ -583,7 +583,7 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 v0.9 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows has a partial one by default (writes confined
 for `pwsh`/`cmd` checks) and a full one after `countercheck windows-setup` (experimental). Not yet: signed
-receipts, a per-host network allow-list, cost read from agent logs, internet blocking on Windows, more agent
+receipts, a per-host network allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, more agent
 hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Contribute: make it fit your domain
