@@ -1,4 +1,4 @@
-//! Extra write locations for one check under the macOS sandbox (issue #18).
+//! Extra write locations for one check under the sandbox (issue #18): macOS, Linux and Windows.
 //!
 //! ```toml
 //! [[check]]
@@ -12,9 +12,9 @@
 //! every protection. `writes` is read from the locked check file like `network`, so a worker
 //! can't grant itself a write location.
 //!
-//! What's allowed, checked here (pure) when the check file is read: an absolute path, no `.`/`..`
-//! or empty segments, no glob or quote characters, only the `{uid}`, `{user}` and `{home}`
-//! placeholders. What's refused once the real path is known (after symlinks are resolved, by the
+//! What's allowed, checked here (pure) when the check file is read: an absolute path (`/...`, or
+//! on Windows `C:/...` with forward slashes), no `.`/`..` or empty segments, no glob or quote
+//! characters, only the `{uid}`, `{user}` and `{home}` placeholders. What's refused once the real path is known (after symlinks are resolved, by the
 //! binary): `/`, anything that contains or equals the home folder, and anything that contains,
 //! equals or is inside the repository, since that would let a check change the worker's files or
 //! the user's.
@@ -26,14 +26,20 @@ pub const MAX_LEN: usize = 512;
 
 const PLACEHOLDERS: [&str; 3] = ["{uid}", "{user}", "{home}"];
 
+/// A Windows path from a drive root with forward slashes: `C:/...`.
+fn drive_absolute(t: &str) -> bool {
+    let b = t.as_bytes();
+    b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'/'
+}
+
 /// Check one `writes` entry as written in the check file.
 pub fn validate_template(check: &str, t: &str) -> Result<(), String> {
     let bad = |why: &str| Err(format!("check \"{check}\": writes entry \"{t}\" {why}"));
     if t.len() > MAX_LEN {
         return bad("is too long");
     }
-    if !(t.starts_with('/') || t.starts_with("{home}")) {
-        return bad("must be an absolute path (or start with {home})");
+    if !(t.starts_with('/') || drive_absolute(t) || t.starts_with("{home}")) {
+        return bad("must be an absolute path like /var/tmp/x or C:/x (or start with {home})");
     }
     if t.chars().any(|c| {
         c.is_control()
@@ -53,7 +59,11 @@ pub fn validate_template(check: &str, t: &str) -> Result<(), String> {
     if rest.contains('{') || rest.contains('}') {
         return bad("has an unknown placeholder (allowed: {uid}, {user}, {home})");
     }
-    let body = t.strip_prefix('/').unwrap_or(t);
+    let body = if drive_absolute(t) {
+        t.get(3..).unwrap_or("")
+    } else {
+        t.strip_prefix('/').unwrap_or(t)
+    };
     if body
         .split('/')
         .any(|seg| seg.is_empty() || seg == "." || seg == "..")
@@ -92,7 +102,9 @@ pub fn expand(t: &str, uid: &str, user: &str, home: &str) -> Result<String, Stri
             "writes \"{t}\": the user name \"{user}\" can't be used in a path"
         ));
     }
-    if t.contains("{home}") && (!home.starts_with('/') || home.contains("..")) {
+    if t.contains("{home}")
+        && (!(home.starts_with('/') || drive_absolute(home)) || home.contains(".."))
+    {
         return Err(format!(
             "writes \"{t}\": the home folder \"{home}\" is not an absolute path"
         ));
@@ -110,7 +122,8 @@ fn contains(a: &str, b: &str) -> bool {
 }
 
 /// Refuse a resolved location (symlinks already followed) that could reach the user's or the
-/// worker's files. All three paths are absolute and resolved.
+/// worker's files. All three paths are absolute and resolved, with `/` separators (on Windows the
+/// caller turns `\` into `/` and lowercases them, since Windows paths ignore case).
 pub fn check_resolved(check: &str, path: &str, home: &str, repo: &str) -> Result<(), String> {
     let bad = |why: &str| Err(format!("check \"{check}\": writes path {path} {why}"));
     if path.trim_end_matches('/').matches('/').count() < 2 {
@@ -169,6 +182,12 @@ mod tests {
         let many: Vec<String> = (0..=MAX_PER_CHECK).map(|i| format!("/tmp/x{i}")).collect();
         assert!(validate("c", &many).is_err());
         assert!(validate("c", &many[..MAX_PER_CHECK]).is_ok());
+        // Windows: a drive letter and forward slashes; never backslashes or a relative drive path.
+        assert!(validate_template("c", "C:/runner-cache/x").is_ok());
+        assert!(validate_template("c", "d:/b/{user}").is_ok());
+        for bad in ["C:\\x\\y", "C:x/y", "C:/a//b", "C:/a/../b", "1:/x", "C:"] {
+            assert!(validate_template("c", bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]
@@ -190,6 +209,11 @@ mod tests {
         assert_eq!(expand("/tmp/x", "", "sri", "/Users/sri").unwrap(), "/tmp/x");
         // An odd user name doesn't matter when {user} isn't used.
         assert!(expand("/tmp/{uid}", "501", "a/b", "/Users/sri").is_ok());
+        // Windows home folder (forward slashes).
+        assert_eq!(
+            expand("{home}/.cache/x", "", "sri", "C:/Users/sri").unwrap(),
+            "C:/Users/sri/.cache/x"
+        );
     }
 
     #[test]
@@ -215,6 +239,18 @@ mod tests {
         // Segment-aware: a sibling with a common prefix is fine.
         assert!(check_resolved("c", "/Users/sri/code/proj-cache", home, repo).is_ok());
         assert!(!contains("/var/tm", "/var/tmp"));
+        // Windows, as the binary passes them: lowercase, forward slashes.
+        let (home, repo) = ("c:/users/sri", "c:/users/sri/code/proj");
+        assert!(check_resolved("c", "c:/runner-cache/x", home, repo).is_ok());
+        for bad in [
+            "c:",
+            "c:/x",
+            "c:/users",
+            "c:/users/sri",
+            "c:/users/sri/code/proj/src",
+        ] {
+            assert!(check_resolved("c", bad, home, repo).is_err(), "{bad}");
+        }
         assert!(contains("/var/tmp", "/var/tmp/x"));
     }
 }

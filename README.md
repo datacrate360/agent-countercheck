@@ -385,14 +385,14 @@ Builds: macOS (Apple silicon and Intel, one universal binary), Linux (x86_64, ar
 |---|---|---|---|
 | macOS | the system sandbox (Seatbelt) | blocked (localhost allowed) unless `network = true` on that check | blocked |
 | Linux | Landlock, plus private user, network and PID namespaces where the system allows them (no root needed) | blocked (localhost allowed) with namespaces; **allowed where user namespaces are blocked**, and the receipt says so | blocked |
-| Windows | a normal process (sandbox planned) | allowed | allowed |
+| Windows | a write-restricted token in a Job Object for `shell = "pwsh"` and `"cmd"` checks (no admin needed; [ADR-0003](docs/decisions/0003-windows-sandbox.md)); **`sh` checks run without it** (Git for Windows' `sh` can't start in it): each says so on the receipt, and the run's label says `partial` | **allowed**, and the receipt says so (the only unprivileged way, an AppContainer, can't run most toolchains) | blocked in the sandbox (drives without permissions, like FAT/exFAT, excepted) |
 
 Everything a check starts is stopped when it ends, including processes that detach with `setsid`: on Linux by a PID
 namespace or a subreaper, on Windows by a Job Object, on macOS by killing the check's process group and then finding
 what detached from it by its working folder or its hold on the check's output (a process that also leaves the check
 folder and closes its output can still escape on macOS; the sandbox limits what it can do). The receipt's
 `sandbox` field always says what was enforced. On Windows, run Countercheck inside a container or VM with networking
-off when you need that isolation. The main protections (locked checks, restored tests, clean copy, sealed receipts)
+off when you also need the internet blocked. The main protections (locked checks, restored tests, clean copy, sealed receipts)
 work on every OS ([FAQ](#faq)).
 
 Linux needs kernel 5.13+ for Landlock (6.7+ for signal and socket scoping); some servers and Docker's default profile
@@ -479,8 +479,8 @@ internet or write outside the check folder.
 | OS | Sandbox used for checks | Note |
 |---|---|---|
 | macOS | Seatbelt (`sandbox-exec`): no internet (localhost allowed), writes only in the check folder | `network = true` opens the internet for one check |
-| Linux | none yet (planned: namespaces + Landlock) | the receipt says `none`; use a container with `--network none` for isolation |
-| Windows | none yet (planned: AppContainer) | the receipt says `none (no sandbox on Windows yet)`; the Job Object only stops a check's processes |
+| Linux | Landlock + namespaces: writes only in the check folder; no internet (localhost allowed) where user namespaces are allowed | the receipt says which |
+| Windows | write-restricted token for `pwsh`/`cmd` checks: writes only in the check folder; **internet not blocked** (the only unprivileged way, an AppContainer, can't run most toolchains); `sh` checks run unsandboxed and are marked so per check | the receipt says which; the Job Object stops a check's processes |
 
 **So without a sandbox, can the agent cheat on Linux or Windows?**
 

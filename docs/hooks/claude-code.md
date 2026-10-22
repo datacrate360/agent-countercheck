@@ -58,7 +58,8 @@ Claude Code runs natively on Windows, and so do these hooks. Use the same settin
   from `USERPROFILE` when `HOME` isn't set.
 - Checks run with Git for Windows' `sh` (Claude Code on Windows needs Git for Windows too), or with
   `shell = "pwsh"`/`"cmd"` per check.
-- There is no sandbox on Windows yet; the receipt says `none (no sandbox on Windows yet)`.
+- `pwsh` and `cmd` checks run in the Windows sandbox (writes only in the check folder, the internet not blocked;
+  the receipt says `windows-restricted-token (...)`); `sh` checks run without it, and the receipt marks each one.
 
 ## Environment
 

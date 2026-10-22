@@ -17,6 +17,9 @@ pub struct Options {
     pub claim: Option<String>,
     pub worker: Worker,
     pub sandbox: runner::Sandbox,
+    /// The sandbox was asked for by name (`--sandbox windows`): a run it can't confine is an
+    /// error, not a run without it.
+    pub sandbox_required: bool,
     pub out: Option<PathBuf>,
     /// `--checks-from`: the checks come from outside the repository (ADR-0002).
     pub checks_from: Option<String>,
@@ -116,6 +119,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         locked_texts.insert(path, String::from_utf8_lossy(&bytes).into_owned());
     }
     let planned = config::plan(&checks, &locked_texts)?;
+    let sandbox = windows_sh_check(opts, &planned)?;
     let protected = Protected::new(&checks.protected_patterns())?;
 
     // 2. A clean copy of the worker's files.
@@ -128,6 +132,15 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let tmp = scratch_root.join("tmp");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    // Windows sandbox: the run's SID may write here. Granted while both are empty, so every file
+    // copied in inherits it and no existing tree is walked.
+    #[cfg(windows)]
+    if matches!(
+        sandbox,
+        runner::Sandbox::RestrictedToken | runner::Sandbox::RestrictedTokenPartial
+    ) {
+        crate::windows_sandbox::grant_scratch(&work, &tmp)?;
+    }
     let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
 
     // 3. What changed: the clean copy's own bytes against the base. Protected files the worker
@@ -217,7 +230,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // Extra write locations, checked before anything runs (only the sandbox restricts writes).
     let mut writes = Vec::new();
     for spec in &planned {
-        writes.push(if opts.sandbox.confines_writes() {
+        writes.push(if sandbox.confines_writes() {
             runner::resolve_writes(spec, &root)?
         } else {
             Vec::new()
@@ -226,7 +239,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let mut results = Vec::new();
     for (spec, writes) in planned.iter().zip(&writes) {
         let Some(g) = &spec.golden else {
-            let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox, writes)?;
+            let mut result = runner::run_check(spec, &work, &tmp, sandbox, writes)?;
             note_links_as_text(&mut result, &links_as_text);
             results.push(result);
             continue;
@@ -265,7 +278,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             }
         });
         golden::clear_output(&work, g)?;
-        let mut result = runner::run_check(spec, &work, &tmp, opts.sandbox, writes)?;
+        let mut result = runner::run_check(spec, &work, &tmp, sandbox, writes)?;
         golden::judge(&work, g, &expected, &mut result);
         note_links_as_text(&mut result, &links_as_text);
         results.push(result);
@@ -321,7 +334,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         checks_locked,
         checks_source,
         checks_external,
-        sandbox: opts.sandbox.label().to_string(),
+        sandbox: sandbox.label().to_string(),
         tree_sha256,
         linked,
         protected_changes,
@@ -347,6 +360,45 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
 /// The clean copy against the base, by bytes. A file that differs only by CRLF line endings is
 /// marked [`Diff::LineEndings`].
+/// The sandbox this run gets. Windows: Git for Windows' `sh` can't start under the sandbox's
+/// write-restricted token (MSYS secures its shared memory and signal pipes to the user account
+/// only, and a token that may write there may write everywhere the user can), so in a run with
+/// `sh` checks those run without it, each says so on the receipt, and the label says the run was
+/// partial; asked for by name (`--sandbox windows`), such a run is an error.
+fn windows_sh_check(
+    opts: &Options,
+    planned: &[config::PlannedCheck],
+) -> Result<runner::Sandbox, String> {
+    if opts.sandbox != runner::Sandbox::RestrictedToken {
+        return Ok(opts.sandbox);
+    }
+    let sh = planned
+        .iter()
+        .filter(|c| c.shell == config::Shell::Sh)
+        .count();
+    if sh == 0 {
+        eprintln!(
+            "note: on Windows checks can reach the internet (writes are still confined; the receipt \
+             records this)."
+        );
+        return Ok(opts.sandbox);
+    }
+    if opts.sandbox_required {
+        return Err(format!(
+            "{sh} check(s) use sh, and Git for Windows' sh can't run in the Windows sandbox (MSYS \
+             secures its shared memory to your user account only); set shell = \"pwsh\" or \"cmd\" \
+             on them in .countercheck/checks.toml, or use --sandbox auto to run them unsandboxed \
+             (the receipt says which)"
+        ));
+    }
+    eprintln!(
+        "note: {sh} sh check(s) run without the Windows sandbox (Git for Windows' sh can't run in it; \
+         the receipt marks them). Checks with shell = \"pwsh\" or \"cmd\" are sandboxed; the \
+         internet is not blocked on Windows."
+    );
+    Ok(runner::Sandbox::RestrictedTokenPartial)
+}
+
 fn compare(
     base: &mut git::Revision,
     copied: &Files,

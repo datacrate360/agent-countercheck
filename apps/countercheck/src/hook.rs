@@ -65,6 +65,7 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
             cost_usd: None,
         },
         sandbox,
+        sandbox_required: false,
         out: std::env::var_os("COUNTERCHECK_RECEIPTS").map(PathBuf::from),
         checks_from: None,
         checks_sha256: None,

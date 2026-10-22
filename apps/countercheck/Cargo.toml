@@ -39,6 +39,9 @@ junction = "1"
 # Windows: each check runs in a Job Object, so a timeout kills every process it started (MSYS
 # programs break the parent chain `taskkill /T` follows). Safe API; our crates stay unsafe-free.
 win32job = "2"
+# Windows: the check sandbox (write-restricted token, permissions). The workspace's only
+# `unsafe`, kept in that small crate for review (docs/decisions/0003-windows-sandbox.md).
+countercheck-winsandbox = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

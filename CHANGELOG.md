@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **New: a sandbox on Windows, for `pwsh` and `cmd` checks** ([ADR-0003](docs/decisions/0003-windows-sandbox.md)).
+  Checks run through `countercheck sandbox-exec` with a **write-restricted token**, no admin needed: writes only in
+  the check folder, its temp dir and `writes = [...]` locations; reads work as before (Python, node, PowerShell). The
+  existing Job Object still stops everything a check started. **Git for Windows' `sh` can't start in it** (MSYS
+  secures its shared memory and signal pipes to the user account only), so in a run with `sh` checks the `pwsh`/`cmd`
+  checks still run in the sandbox and only the `sh` checks run without it, each marked on the receipt
+  (`"sandboxed": false` and `"unsandboxed_reason"`, new optional fields; `NOT sandboxed` in the text receipt) and the
+  run's label says `windows-restricted-token, partial: sh checks ran unsandboxed (...)`; set `shell = "cmd"` or
+  `"pwsh"` on a check to sandbox it. **The internet is not blocked** on Windows (the only unprivileged way, an AppContainer, can't run most toolchains; a
+  firewall rule needs admin); the receipt's `sandbox` says `windows-restricted-token (...; internet
+  NOT blocked ...)`. `--sandbox auto` picks it when a probe write is really refused; `--sandbox windows` requires it
+  (and refuses a run with `sh` checks).
+  If it can't be set up at run time, the check fails rather than running unconfined.
+- **New: `writes` on Windows**: `C:/path` (forward slashes) and `{home}` (`USERPROFILE`); the run's permission
+  entry on the location is removed after the check.
+- Write hints recognise Windows' refusals (sh, Python, PowerShell, cmd).
+- The workspace's only `unsafe` code is in the new `crates/countercheck-winsandbox` (Win32 FFI, reviewed per block).
+
 ## v0.7.0 (2026-10-22)
 
 A sandbox on Linux, checks kept outside the repository, and detached processes stopped on every OS.

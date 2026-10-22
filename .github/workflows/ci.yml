@@ -83,8 +83,16 @@ jobs:
         continue-on-error: true
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # The Windows sandbox (write-restricted token + Job Object) must start on this runner: every
+      # check in the tests below runs in it (`--sandbox auto`), and the probe says why if not.
+      - name: Windows sandbox probe
+        run: cargo build -q; target/debug/countercheck.exe sandbox-exec --probe
       - name: Test
         run: cargo test --workspace
+      # The same Windows sandbox tests again with their output shown, so the log proves each one
+      # ran in the sandbox (`windows sandbox probe: restricted=1`) instead of skipping.
+      - name: Windows sandbox tests, output shown
+        run: cargo test -q -p countercheck --test verify -- windows_sandbox sh_checks_run_unsandboxed --nocapture
       # The example's check runs `python3`; Windows' Python is `python`, so give sh a python3 if needed.
       - name: python3 for the example
         shell: bash
@@ -125,6 +133,37 @@ jobs:
           Stop-Process -Id $server.Id
           if (-not $failed) { throw 'a bad checksum must stop the install' }
           if (Test-Path "$env:RUNNER_TEMP/bin2/countercheck.exe") { throw 'installed despite a bad checksum' }
+
+  # Evidence for docs/decisions/0003-windows-sandbox.md: what an AppContainer allows on this
+  # runner (internet, localhost between processes, Git's sh, Python), with and without the
+  # admin-only loopback exemption. Informational; it never fails the build.
+  appcontainer-evidence:
+    name: AppContainer evidence (windows)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the AppContainer probe
+        continue-on-error: true
+        run: |
+          $env:PROBE_PYTHON = (Get-Command python).Source
+          cargo run -q --manifest-path eval/windows-evidence/Cargo.toml
+      # The runner is elevated; the same probe as a fresh standard (non-admin) user says whether
+      # any of it needs admin rights.
+      - name: Run the AppContainer probe as a standard user
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory C:\acprobe -Force | Out-Null
+          Copy-Item eval/windows-evidence/target/debug/appcontainer-probe.exe C:\acprobe\
+          icacls C:\acprobe /grant "*S-1-5-32-545:(OI)(CI)M" | Out-Null
+          $pw = 'Cc-' + [guid]::NewGuid().ToString('N').Substring(0, 16) + '!a1'
+          net user ccprobe $pw /add /y | Out-Null
+          $cred = [pscredential]::new("$env:COMPUTERNAME\ccprobe", (ConvertTo-SecureString $pw -AsPlainText -Force))
+          $env:PROBE_PYTHON = (Get-Command python).Source
+          $env:PROBE_OUT = 'C:\acprobe'
+          $p = Start-Process -FilePath C:\acprobe\appcontainer-probe.exe -Credential $cred -LoadUserProfile -WorkingDirectory C:\acprobe -RedirectStandardOutput C:\acprobe\out.txt -RedirectStandardError C:\acprobe\err.txt -Wait -PassThru
+          "exit: $($p.ExitCode)"
+          Get-Content C:\acprobe\out.txt, C:\acprobe\err.txt -ErrorAction SilentlyContinue
 
   dco:
     name: sign-off (DCO)
