@@ -55,11 +55,8 @@ pub fn run_sid() -> Result<String, String> {
         let mut buf = [0u8; 16];
         getrandom::fill(&mut buf).map_err(|e| format!("random SID: {e}"))?;
         let mut parts = [0u32; 4];
-        for (p, chunk) in parts.iter_mut().zip(buf.chunks_exact(4)) {
-            *p = chunk
-                .try_into()
-                .map(u32::from_le_bytes)
-                .map_err(|_| "random SID".to_string())?;
+        for (p, chunk) in parts.iter_mut().zip(buf.as_chunks::<4>().0) {
+            *p = u32::from_le_bytes(*chunk);
         }
         Ok(ffi::sddl::run_sid(parts))
     })
