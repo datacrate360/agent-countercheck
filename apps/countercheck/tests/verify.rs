@@ -2004,7 +2004,13 @@ fn hooks_work_with_windows_payloads() {
         serde_json::from_str(&fs::read_to_string(logged["receipt"].as_str().unwrap()).unwrap())
             .unwrap();
     assert_eq!(receipt["claim"], "Fixed it, all tests pass.", "{receipt:#}");
-    assert_eq!(receipt["sandbox"], "none (no sandbox on Windows yet)");
+    assert!(
+        receipt["sandbox"]
+            .as_str()
+            .unwrap()
+            .starts_with("windows-restricted-token"),
+        "{receipt:#}"
+    );
     let hermes = serde_json::json!({
         "hook_event_name": "pre_verify", "cwd": fwd, "session_id": "w1",
         "extra": { "final_response": "Fixed it, all tests pass." }

@@ -479,8 +479,8 @@ internet or write outside the check folder.
 | OS | Sandbox used for checks | Note |
 |---|---|---|
 | macOS | Seatbelt (`sandbox-exec`): no internet (localhost allowed), writes only in the check folder | `network = true` opens the internet for one check |
-| Linux | none yet (planned: namespaces + Landlock) | the receipt says `none`; use a container with `--network none` for isolation |
-| Windows | none yet (planned: AppContainer) | the receipt says `none (no sandbox on Windows yet)`; the Job Object only stops a check's processes |
+| Linux | Landlock + namespaces: writes only in the check folder; no internet (localhost allowed) where user namespaces are allowed | the receipt says which |
+| Windows | write-restricted token: writes only in the check folder; **internet not blocked** (that needs admin rights on Windows) | the receipt says `windows-restricted-token (...)`; the Job Object stops a check's processes |
 
 **So without a sandbox, can the agent cheat on Linux or Windows?**
 

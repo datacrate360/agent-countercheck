@@ -27,7 +27,7 @@ We aim to reply within a few days and to credit reporters who want credit.
 - The Windows sandbox is a write-restricted token plus a Job Object (`countercheck sandbox-exec`,
   [ADR-0003](docs/decisions/0003-windows-sandbox.md)). It confines writes but **does not block the internet** (that
   needs admin rights on Windows; the receipt says so). Not covered: drives without permissions (FAT/exFAT, some network
-  shares), objects with no DACL or that grant the logon session, and processes started through a Windows service
+  shares), files and folders that grant write to `Everyone` or `RESTRICTED` (or have no DACL), and processes started through a Windows service
   (Task Scheduler, WMI, COM), which run outside the Job Object.
 - `crates/countercheck-winsandbox` is the only crate allowed to use `unsafe` (Win32 calls with no safe crate); every
   block carries a `SAFETY:` note, and a bug there is in scope.

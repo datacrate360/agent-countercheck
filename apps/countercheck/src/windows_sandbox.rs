@@ -6,8 +6,9 @@
 //!    (so everything copied in inherits it); this helper grants it on the check's
 //!    `writes = [...]` locations and takes it off again afterwards.
 //! 2. **A write-restricted token**: the check runs with this user's token, all privileges but
-//!    traverse removed, and every write must also be allowed for the run's SID (or the logon
-//!    session's, which only the session's own objects carry). Reads work as before, so Git for
+//!    traverse removed, and every write must also be allowed for the run's SID, the logon
+//!    session's, `Everyone` or `RESTRICTED` (the last three for system objects like the NUL
+//!    device; on disk almost nothing grants them write). Reads work as before, so Git for
 //!    Windows' `sh`, Python and node run unchanged; writes anywhere else are refused.
 //! 3. **A Job Object** with kill-on-close: everything the check started, even what it started
 //!    in the background with `start` or `&`, stops when the check ends or times out.
@@ -31,6 +32,10 @@ pub const SETUP_FAILED: i32 = 125;
 pub const TIMED_OUT: i32 = 124;
 /// Printed (to the check's output) when the check ran out of time.
 pub const TIMEOUT_LINE: &str = "[countercheck] the check timed out";
+
+/// The `Everyone` group (`S-1-1-0`) and the `RESTRICTED` SID (`S-1-5-12`).
+const EVERYONE: &str = "S-1-1-0";
+const RESTRICTED: &str = "S-1-5-12";
 
 /// Most files and folders a `writes` location may hold for us to grant and revoke access.
 const MAX_ENTRIES: usize = 100_000;
@@ -169,7 +174,11 @@ fn run_restricted(
     timeout: Duration,
 ) -> Result<Option<u32>, String> {
     let (user, logon) = ffi::current_sids().map_err(|e| format!("token: {e}"))?;
-    let restricting = [sid, logon.as_str()];
+    // Everyone and RESTRICTED as well, like Chromium's restricted tokens and Windows' own
+    // write-restricted services: the NUL device (`>NUL`, /dev/null) and the named-object
+    // directories that MSYS (Git's sh) and .NET's crypto library create objects in are granted to
+    // them, not to the logon session. On disk, they open only what grants write to everyone.
+    let restricting = [sid, logon.as_str(), EVERYONE, RESTRICTED];
     let dacl = ffi::sddl::default_dacl(&[user.as_str(), sid, logon.as_str()])?;
     let child = ffi::spawn_restricted(&ffi::Restricted {
         command_line: cmdline,

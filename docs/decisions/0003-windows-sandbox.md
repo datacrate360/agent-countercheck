@@ -39,8 +39,12 @@ How it works (`apps/countercheck/src/windows_sandbox.rs`, `countercheck sandbox-
    walking the tree itself and never entering or changing a symlink or junction; afterwards it removes every entry for
    the SID again, including on what the check created there.
 4. The check runs with this user's token, restricted: all privileges but traverse removed, and `WRITE_RESTRICTED`
-   with the restricting SIDs {run SID, logon-session SID}. Every write access check must then pass both for the
-   user's normal groups and for one restricting SID; only the check folder, temp dir and `writes` grant the run SID.
+   with the restricting SIDs {run SID, logon-session SID, `Everyone`, `RESTRICTED`}. Every write access check must
+   then pass both for the user's normal groups and for one restricting SID; only the check folder, temp dir and
+   `writes` grant the run SID. `Everyone` and `RESTRICTED` are there, as in Chromium's restricted tokens and Windows'
+   write-restricted services, because system objects are granted to them: without them the first CI run showed
+   MSYS `bash` dying at start (`NtCreateDirectoryObject(\BaseNamedObjects\msys-2.0S5-…): 0xC0000022`), .NET failing
+   to load `BCrypt.dll`, and `cmd`'s `>NUL` refused. On disk, almost nothing grants them write.
    The token's default DACL lists the user, the run SID and the logon SID, so the check can still open what it
    creates (pipes, its child processes). Only stdin/stdout/stderr are inherited (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`).
 5. The check starts suspended, joins a kill-on-close Job Object, then runs with the check's timeout; the job is closed
@@ -75,9 +79,9 @@ acceptable; the alternative is no Windows sandbox.
 ## Known limits (stated in SECURITY.md)
 
 - **Internet not blocked** (see above). Run inside a VM or a Windows container with networking off when that matters.
-- **Places anyone may write**: a write-restricted process can still write where an object grants `Everyone`-like
-  access to the restricting SIDs (the logon SID is granted on the session's own objects only) or has no DACL at all;
-  and drives without permissions (FAT/exFAT USB sticks, some network shares) don't restrict writes.
+- **Places anyone may write**: a write-restricted process can still write where a file or folder grants write to
+  `Everyone` or `RESTRICTED` (rare; a sloppy installer's folder in `C:\ProgramData`, for example) or has no DACL at
+  all; and drives without permissions (FAT/exFAT USB sticks, some network shares) don't restrict writes.
 - **Processes started through a Windows service** (Task Scheduler, WMI, a COM server) run outside the Job Object.
 - Leftover permission entries: if the helper itself is killed, an entry for a SID no token will ever carry again can
   stay on a `writes` folder (harmless, but visible in `icacls`).
