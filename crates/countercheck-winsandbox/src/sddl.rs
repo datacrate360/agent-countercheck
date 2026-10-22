@@ -115,13 +115,23 @@ fn check_sid(sid: &str) -> Result<(), String> {
 /// the inherited ones (the order Windows keeps), so an explicit deny still wins. A DACL that is
 /// absent (`D:NO_ACCESS_CONTROL`: anyone may do anything) is returned as is.
 pub fn add_full_control(sddl: &str, sid: &str, inherit: bool) -> Result<String, String> {
+    add_allow(sddl, sid, inherit, "FA")
+}
+
+/// Like [`add_full_control`], allowing only read and execute (`FRFX`): for the folder the runner
+/// account runs countercheck's own binary from, which it must not change.
+pub fn add_read_execute(sddl: &str, sid: &str, inherit: bool) -> Result<String, String> {
+    add_allow(sddl, sid, inherit, "FRFX")
+}
+
+fn add_allow(sddl: &str, sid: &str, inherit: bool, rights: &str) -> Result<String, String> {
     check_sid(sid)?;
     if sddl == "D:NO_ACCESS_CONTROL" {
         return Ok(sddl.to_string());
     }
     let d = parse(sddl)?;
     let flags = if inherit { "OICI" } else { "" };
-    let entry = format!("A;{flags};FA;;;{sid}");
+    let entry = format!("A;{flags};{rights};;;{sid}");
     if d.aces.iter().any(|a| a.eq_ignore_ascii_case(&entry)) {
         return Ok(sddl.to_string());
     }
@@ -257,5 +267,18 @@ mod tests {
             format!("D:(A;;GA;;;{RUN})(A;;GA;;;S-1-5-5-0-1234)(A;;GA;;;SY)")
         );
         assert!(default_dacl(&["BA)(A;;GA;;;WD"]).is_err());
+    }
+
+    #[test]
+    fn a_read_execute_entry_is_added_like_full_control() {
+        let sid = "S-1-5-21-1-2-3-1001";
+        let base = "D:PAI(A;OICIID;FA;;;SY)";
+        assert_eq!(
+            add_read_execute(base, sid, true).unwrap(),
+            format!("D:PAI(A;OICI;FRFX;;;{sid})(A;OICIID;FA;;;SY)")
+        );
+        let (back, removed) = remove_sid(&add_read_execute(base, sid, true).unwrap(), sid).unwrap();
+        assert!(removed);
+        assert_eq!(back, base);
     }
 }

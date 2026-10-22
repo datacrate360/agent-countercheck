@@ -3429,3 +3429,124 @@ fn a_setsid_daemon_is_stopped_when_its_check_ends_on_macos() {
         }
     }
 }
+
+// ---- the Windows full sandbox: the runner account (ADR-0004) ----
+// CI runs these after `countercheck windows-setup` (the runner is admin), with
+// COUNTERCHECK_TEST_RUNNER=1; elsewhere they skip.
+
+#[cfg(windows)]
+fn runner_set_up() -> bool {
+    std::env::var("COUNTERCHECK_TEST_RUNNER").is_ok_and(|v| v == "1") && !nested()
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_runner_sandboxes_sh_and_blocks_the_internet() {
+    if !runner_set_up() {
+        eprintln!(
+            "skipped: COUNTERCHECK_TEST_RUNNER is not set (needs countercheck windows-setup)"
+        );
+        return;
+    }
+    // C:\ProgramData lets members of Users create folders: the account could write there if
+    // only its rights applied. The restricted token is what refuses it.
+    let tag = std::process::id();
+    let sh_leak = format!("C:/ProgramData/cc-leak-sh-{tag}");
+    let cmd_leak = format!(r"C:\ProgramData\cc-leak-cmd-{tag}");
+    let checks = format!(
+        r#"[[check]]
+name = "sh inside"
+run = "mkdir -p a/b && echo x > a/b/c && echo y > \"$TEMP/t\""
+[[check]]
+name = "sh outside"
+run = "mkdir -p {sh_leak}"
+[[check]]
+name = "cmd outside"
+shell = "cmd"
+run = 'mkdir "{cmd_leak}"'
+[[check]]
+name = "who"
+shell = "cmd"
+run = "whoami"
+[[check]]
+name = "internet"
+shell = "pwsh"
+run = "$c = [Net.Sockets.TcpClient]::new(); $c.Connect('1.1.1.1', 443)"
+timeout_secs = 60
+[[check]]
+name = "localhost"
+shell = "pwsh"
+run = "$l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $l.Start(); $c = [Net.Sockets.TcpClient]::new(); $c.Connect('127.0.0.1', $l.LocalEndpoint.Port); if (-not $c.Connected) {{ exit 1 }}"
+[[check]]
+name = "internet allowed"
+shell = "pwsh"
+run = "$c = [Net.Sockets.TcpClient]::new(); $c.Connect('1.1.1.1', 443)"
+network = true
+timeout_secs = 60
+"#
+    );
+    let p = project(&checks);
+    let (code, r) = countercheck(p.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let sandbox = r["sandbox"].as_str().unwrap();
+    assert!(
+        sandbox.starts_with("windows-runner (no internet"),
+        "{sandbox}"
+    );
+    let ok = |n: &str| by_name(&r, n)["passed"] == true;
+    assert!(ok("sh inside"), "{r:#}");
+    assert!(
+        by_name(&r, "sh inside").get("sandboxed").is_none(),
+        "sh is sandboxed: {r:#}"
+    );
+    assert!(!ok("sh outside"), "{r:#}");
+    assert!(!Path::new(&sh_leak).exists(), "sh wrote outside");
+    assert!(!ok("cmd outside"), "{r:#}");
+    assert!(!Path::new(&cmd_leak).exists(), "cmd wrote outside");
+    let who = by_name(&r, "who")["output_tail"]
+        .as_str()
+        .unwrap()
+        .to_lowercase();
+    assert!(who.contains("countercheck-runner"), "{who}");
+    assert!(!ok("internet"), "the internet should be blocked: {r:#}");
+    assert!(ok("localhost"), "localhost should work: {r:#}");
+    assert!(
+        ok("internet allowed"),
+        "network = true runs as you, with internet: {r:#}"
+    );
+    assert_eq!(by_name(&r, "internet allowed")["network"], true);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_runner_stops_what_a_check_left_running() {
+    if !runner_set_up() {
+        eprintln!(
+            "skipped: COUNTERCHECK_TEST_RUNNER is not set (needs countercheck windows-setup)"
+        );
+        return;
+    }
+    let p = project(
+        "[[check]]\nname = \"bg\"\nshell = \"cmd\"\nrun = 'start \"\" /b ping -n 300 -w 1000 127.0.0.1 >NUL & exit /b 0'\n",
+    );
+    let (code, r) = countercheck(p.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+    let left = || {
+        let out = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "@(Get-Process -IncludeUserName -Name PING -ErrorAction SilentlyContinue | Where-Object { $_.UserName -like '*countercheck-runner' }).Count",
+            ])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    for _ in 0..30 {
+        if left() == "0" {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    panic!("the runner account's ping survived its check ({})", left());
+}

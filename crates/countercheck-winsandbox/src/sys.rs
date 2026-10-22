@@ -15,6 +15,9 @@ use windows_sys::Win32::Security::Authorization::{
     ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertSidToStringSidW,
     ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW, SDDL_REVISION_1,
 };
+use windows_sys::Win32::Security::Cryptography::{
+    CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
+};
 use windows_sys::Win32::Security::{
     ACL, CreateRestrictedToken, DACL_SECURITY_INFORMATION, DISABLE_MAX_PRIVILEGE, GetFileSecurityW,
     GetSecurityDescriptorDacl, GetTokenInformation, PSECURITY_DESCRIPTOR, PSID, SID_AND_ATTRIBUTES,
@@ -26,10 +29,11 @@ use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_SUSPENDED, CreateProcessAsUserW, DeleteProcThreadAttributeList,
-    EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess,
-    InitializeProcThreadAttributeList, OpenProcessToken, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-    PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessAsUserW,
+    CreateProcessWithLogonW, DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT,
+    GetCurrentProcess, GetExitCodeProcess, InitializeProcThreadAttributeList, LOGON_WITH_PROFILE,
+    OpenProcessToken, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION, ResumeThread,
+    STARTF_USESTDHANDLES, STARTUPINFOEXW, STARTUPINFOW, TerminateProcess,
     UpdateProcThreadAttribute, WaitForSingleObject,
 };
 
@@ -531,6 +535,110 @@ pub fn spawn_restricted(spec: &Restricted<'_>) -> io::Result<Child> {
         return Err(io::Error::last_os_error());
     }
     drop(list);
+    Ok(Child {
+        process: Handle(pi.hProcess),
+        thread: Handle(pi.hThread),
+        pid: pi.dwProcessId,
+    })
+}
+
+/// Decrypt data protected with DPAPI (`CryptProtectData`, machine or user scope).
+pub fn unprotect(data: &[u8]) -> io::Result<Vec<u8>> {
+    let mut input = data.to_vec();
+    let len = u32::try_from(input.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "protected data too long"))?;
+    let blob_in = CRYPT_INTEGER_BLOB {
+        cbData: len,
+        pbData: input.as_mut_ptr(),
+    };
+    let mut out = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+    // SAFETY: `blob_in` points at `input`, alive for the call; the description, entropy,
+    // reserved and prompt pointers may be null; `out` is a valid out struct.
+    let ok = unsafe {
+        CryptUnprotectData(
+            &blob_in,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut out,
+        )
+    };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let guard = Local(out.pbData.cast());
+    // SAFETY: on success Windows allocated `cbData` bytes at `pbData` (LocalAlloc), owned by
+    // `guard` until the end of this function.
+    let bytes = unsafe { std::slice::from_raw_parts(out.pbData, out.cbData as usize) }.to_vec();
+    drop(guard);
+    Ok(bytes)
+}
+
+/// How to start a process as another local account.
+pub struct Logon<'a> {
+    pub user: &'a str,
+    pub password: &'a str,
+    /// The whole command line, already quoted for the program.
+    pub command_line: &'a str,
+    pub cwd: &'a Path,
+    /// From [`crate::block::env_block`]: NUL-terminated strings ending with an empty one.
+    pub env_block: &'a [u16],
+}
+
+/// Start `spec.command_line` as the local account `spec.user` (Windows' Secondary Logon service,
+/// `CreateProcessWithLogonW`, which needs no privilege), suspended, with its profile loaded, no
+/// window, and this process's stdin/stdout/stderr. The caller puts it in a Job Object, then calls
+/// [`Child::resume`].
+pub fn spawn_logon(spec: &Logon<'_>) -> io::Result<Child> {
+    if !spec.env_block.ends_with(&[0, 0]) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the environment block is not terminated",
+        ));
+    }
+    let user = wide(OsStr::new(spec.user))?;
+    let domain = wide(OsStr::new("."))?;
+    let mut password = wide(OsStr::new(spec.password))?;
+    let mut cmd = wide(OsStr::new(spec.command_line))?;
+    let cwd = wide(spec.cwd.as_os_str())?;
+    let std = std_handles()?;
+    let si = STARTUPINFOW {
+        cb: u32::try_from(std::mem::size_of::<STARTUPINFOW>()).unwrap_or(0),
+        dwFlags: STARTF_USESTDHANDLES,
+        hStdInput: std[0],
+        hStdOutput: std[1],
+        hStdError: std[2],
+        ..Default::default()
+    };
+    let mut pi = PROCESS_INFORMATION::default();
+    // SAFETY: every string is NUL-terminated and alive for the call; `cmd` is a mutable buffer,
+    // as the API requires; `env_block` is a double-NUL-terminated UTF-16 block (checked above,
+    // CREATE_UNICODE_ENVIRONMENT says so); `si` has its size in `cb` and valid handles; `pi` is
+    // a valid out struct.
+    let ok = unsafe {
+        CreateProcessWithLogonW(
+            user.as_ptr(),
+            domain.as_ptr(),
+            password.as_ptr(),
+            LOGON_WITH_PROFILE,
+            std::ptr::null(),
+            cmd.as_mut_ptr(),
+            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
+            spec.env_block.as_ptr().cast(),
+            cwd.as_ptr(),
+            &si,
+            &mut pi,
+        )
+    };
+    password.fill(0);
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
     Ok(Child {
         process: Handle(pi.hProcess),
         thread: Handle(pi.hThread),

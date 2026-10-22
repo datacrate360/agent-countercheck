@@ -52,6 +52,9 @@ pub struct Run {
     pub timeout_secs: u64,
     /// The check's whole command line (see `runner::windows_command_line`).
     pub cmdline: String,
+    /// The full sandbox (ADR-0004): run the check as the runner account, through this copy of
+    /// countercheck it can run (`windows_runner::helper_copy`).
+    pub runner_exe: Option<PathBuf>,
 }
 
 /// The SID of this countercheck run: made once per process, used for every check.
@@ -79,6 +82,22 @@ fn grant_one(path: &Path, sid: &str, dir: bool) -> Result<(), String> {
         ffi::set_file_dacl(path, &new).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(())
+}
+
+/// Allow `sid` to read and run what is in folder `dir` (inherited), not change it.
+pub fn grant_read(dir: &Path, sid: &str) -> Result<(), String> {
+    let dacl = ffi::file_dacl(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let new = ffi::sddl::add_read_execute(&dacl, sid, true)
+        .map_err(|e| format!("{}: {e}", dir.display()))?;
+    if new != dacl {
+        ffi::set_file_dacl(dir, &new).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    Ok(())
+}
+
+/// Allow `sid` full control on folder `dir` (inherited by what is created inside).
+pub fn grant_full(dir: &Path, sid: &str) -> Result<(), String> {
+    grant_one(dir, sid, true)
 }
 
 /// Take every entry for `sid` off one file or folder.
@@ -266,8 +285,89 @@ pub fn probe(exe: &Path) -> bool {
     })
 }
 
+/// `countercheck sandbox-exec --probe-to FILE`: the probe's answer written to a file (the runner
+/// account's probe, whose output can't come back through a pipe of another account).
+pub fn probe_to_main(file: &Path) -> u8 {
+    let ok = probe_write_refused().unwrap_or(false);
+    let _ = std::fs::write(file, format!("restricted={}\n", u8::from(ok)));
+    0
+}
+
+/// The command line that runs this check again as the runner account: the same helper, from the
+/// copy it may run, with the account's SID as the one the check may write for.
+fn runner_cmdline(exe: &Path, run: &Run, sid: &str) -> String {
+    let mut out = String::new();
+    let args: Vec<String> = vec![
+        exe.display().to_string(),
+        "sandbox-exec".into(),
+        "--work".into(),
+        run.work.display().to_string(),
+        "--sid".into(),
+        sid.into(),
+        "--timeout-secs".into(),
+        run.timeout_secs.to_string(),
+        "--cmdline".into(),
+        run.cmdline.clone(),
+    ];
+    for a in &args {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        crate::runner::quote_windows_arg(&mut out, a);
+    }
+    out
+}
+
+/// The full sandbox: grant the account on `writes`, run the check as the account (which runs it
+/// write-restricted, with its own timeout), take the grants off again.
+fn run_as_runner_main(run: &Run, exe: &Path) -> i32 {
+    let Some(c) = crate::windows_runner::load() else {
+        eprintln!(
+            "[countercheck] the Windows runner account is not set up (countercheck windows-setup)"
+        );
+        return SETUP_FAILED;
+    };
+    let mut granted = Vec::new();
+    for w in &run.writes {
+        granted.push(w.clone());
+        if let Err(e) = grant_writes(w, &c.sid) {
+            eprintln!("[countercheck] the Windows sandbox could not allow writes to {e}");
+            for g in &granted {
+                revoke_writes(g, &c.sid);
+            }
+            return SETUP_FAILED;
+        }
+    }
+    let line = runner_cmdline(exe, run, &c.sid);
+    // The second helper times the check out itself; this is the safety net.
+    let status = crate::windows_runner::run_as_runner(
+        &c,
+        &line,
+        &run.work,
+        None,
+        Duration::from_secs(run.timeout_secs.saturating_add(10)),
+    );
+    for g in &granted {
+        revoke_writes(g, &c.sid);
+    }
+    match status {
+        Ok(Some(code)) => code as i32,
+        Ok(None) => {
+            eprintln!("{TIMEOUT_LINE} after {} s", run.timeout_secs);
+            TIMED_OUT
+        }
+        Err(e) => {
+            eprintln!("[countercheck] the Windows sandbox could not run the check: {e}");
+            SETUP_FAILED
+        }
+    }
+}
+
 /// `countercheck sandbox-exec --sid ... --cmdline ...`: grant, run, clean up; the check's exit code.
 pub fn run_main(run: Run) -> i32 {
+    if let Some(exe) = &run.runner_exe {
+        return run_as_runner_main(&run, exe);
+    }
     let mut granted = Vec::new();
     for w in &run.writes {
         granted.push(w.clone());

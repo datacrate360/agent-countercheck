@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **New (Windows): the full check sandbox, an opt-in admin setup** ([ADR-0004](docs/decisions/0004-windows-runner-account.md)).
+  `countercheck windows-setup` (once, as administrator; `--remove` undoes it) creates a low-rights `countercheck-runner`
+  account and a firewall rule that blocks its internet (loopback stays open). Checks then run as that account inside
+  the existing write-restricted token and Job Object: every shell sandboxed, Git's `sh` included; internet blocked,
+  localhost kept. Receipt label `windows-runner (...)`. Without the setup nothing changes.
+
 ## v0.8.0 (2026-10-22)
 
 A check sandbox on Windows (partial, no admin needed), so every OS now has one.
