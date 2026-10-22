@@ -1,7 +1,8 @@
 # Evidence for docs/decisions/0003-windows-sandbox.md, run by CI on windows-latest: what an
 # AppContainer allows (internet, localhost between processes, Git's sh, Python), with and without
-# a loopback exemption. Not part of the workspace and not shipped; it uses the third-party
-# `rappct` crate only here.
+# a loopback exemption. Not part of the workspace and not shipped. The `unsafe` here is the bare
+# AppContainer launch (CreateAppContainerProfile + CreateProcessW with SECURITY_CAPABILITIES);
+# the `rappct` crate was tried first and failed every launch on the runner (error 6 or 203).
 [package]
 name = "appcontainer-probe"
 version = "0.0.0"
@@ -11,4 +12,10 @@ publish = false
 [workspace]
 
 [target.'cfg(windows)'.dependencies]
-rappct = "=0.13.3"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Isolation",
+    "Win32_System_Threading",
+] }

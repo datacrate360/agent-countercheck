@@ -7,20 +7,99 @@ fn main() {
 }
 
 #[cfg(windows)]
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(Some(0)).collect()
+}
+
+/// Start `cmdline` in the AppContainer `ac` with the given capability SIDs; its exit code.
+#[cfg(windows)]
+fn launch(ac: windows_sys::Win32::Security::PSID, caps: &[&str], cmdline: &str) -> Result<u32, String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError};
+    use windows_sys::Win32::Security::Authorization::ConvertStringSidToSidW;
+    use windows_sys::Win32::Security::{PSID, SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES};
+    use windows_sys::Win32::System::Threading::*;
+    const SE_GROUP_ENABLED: u32 = 4;
+    unsafe {
+        let mut cap_sids: Vec<SID_AND_ATTRIBUTES> = Vec::new();
+        for c in caps {
+            let w = wide(c);
+            let mut sid: PSID = std::ptr::null_mut();
+            if ConvertStringSidToSidW(w.as_ptr(), &mut sid) == 0 {
+                return Err(format!("capability SID {c}: error {}", GetLastError()));
+            }
+            cap_sids.push(SID_AND_ATTRIBUTES { Sid: sid, Attributes: SE_GROUP_ENABLED });
+        }
+        let sc = SECURITY_CAPABILITIES {
+            AppContainerSid: ac,
+            Capabilities: if cap_sids.is_empty() { std::ptr::null_mut() } else { cap_sids.as_mut_ptr() },
+            CapabilityCount: cap_sids.len() as u32,
+            Reserved: 0,
+        };
+        let mut size = 0usize;
+        InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &mut size);
+        let mut buf = vec![0u64; size.div_ceil(8)];
+        let list = buf.as_mut_ptr().cast();
+        if InitializeProcThreadAttributeList(list, 1, 0, &mut size) == 0 {
+            return Err(format!("InitializeProcThreadAttributeList: {}", GetLastError()));
+        }
+        if UpdateProcThreadAttribute(
+            list,
+            0,
+            PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
+            std::ptr::addr_of!(sc).cast(),
+            std::mem::size_of::<SECURITY_CAPABILITIES>(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+        ) == 0
+        {
+            return Err(format!("UpdateProcThreadAttribute: {}", GetLastError()));
+        }
+        let mut si = STARTUPINFOEXW::default();
+        si.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
+        si.lpAttributeList = list;
+        let mut cmd = wide(cmdline);
+        let cwd = wide(r"C:\Windows\System32");
+        let mut pi = PROCESS_INFORMATION::default();
+        let ok = CreateProcessW(
+            std::ptr::null(),
+            cmd.as_mut_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+            EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+            std::ptr::null(),
+            cwd.as_ptr(),
+            std::ptr::addr_of!(si.StartupInfo),
+            &mut pi,
+        );
+        DeleteProcThreadAttributeList(list);
+        if ok == 0 {
+            return Err(format!("CreateProcessW: error {}", GetLastError()));
+        }
+        WaitForSingleObject(pi.hProcess, 180_000);
+        let mut code = 0u32;
+        windows_sys::Win32::System::Threading::GetExitCodeProcess(pi.hProcess, &mut code);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        Ok(code)
+    }
+}
+
+#[cfg(windows)]
 fn main() {
-    use rappct::{
-        AppContainerProfile, KnownCapability, LaunchOptions, SecurityCapabilitiesBuilder,
-        StdioConfig, launch_in_container_with_io,
-    };
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::Isolation::{CreateAppContainerProfile, DeleteAppContainerProfile, DeriveAppContainerSidFromAppContainerName};
+    use windows_sys::Win32::Security::PSID;
 
     let python = std::env::var("PROBE_PYTHON").unwrap_or_default();
-    // Results go to a file in a folder granted to the container (no pipes, no custom environment).
+    // Results go to a file in a folder granted to the container.
     let out_dir = std::env::temp_dir().join(format!("acprobe-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&out_dir);
-    let make_script = |setup: &str| format!(
-        r#"
+    let make_script = |setup: &str| {
+        format!(
+            r#"
 $ErrorActionPreference = 'Stop'
-$out = '{out}\{setup}.txt'
+$out = '{out}\{file}.txt'
 function Probe($name, $block) {{
   try {{ $r = & $block; Add-Content -Path $out -Value "{setup}: $name = ok $r" }}
   catch {{ Add-Content -Path $out -Value "{setup}: $name = FAILED ($($_.Exception.Message))" }}
@@ -36,91 +115,69 @@ Probe 'localhost, another process' {{
 }}
 Probe 'Git sh' {{ $o = & 'C:\Program Files\Git\bin\sh.exe' -c 'echo hi' 2>&1; if ($LASTEXITCODE -ne 0) {{ throw "exit $LASTEXITCODE $o" }}; "($o)" }}
 Probe 'Python ({python})' {{ $o = & '{python}' -c 'print(1)' 2>&1; if ($LASTEXITCODE -ne 0) {{ throw "exit $LASTEXITCODE $o" }} }}
-Probe 'write %TEMP%' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-probe.txt') -Value x }}
+Probe 'write the user temp folder' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-probe.txt') -Value x }}
 "#,
-        out = out_dir.display()
-    );
-    let encode = |script: String| {
-        base64(
-            &script
-                .encode_utf16()
-                .flat_map(|u| u.to_le_bytes())
-                .collect::<Vec<u8>>(),
+            out = out_dir.display(),
+            file = setup.replace(' ', "_").replace('+', "and"),
         )
+    };
+    let encode = |script: String| {
+        base64(&script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect::<Vec<u8>>())
     };
     let ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
     let name = format!("countercheck.probe.{}", std::process::id());
-    let profile = match AppContainerProfile::ensure(&name, "countercheck probe", None) {
-        Ok(p) => p,
-        Err(e) => {
-            println!("could not create an AppContainer profile: {e}");
+    let wname = wide(&name);
+    let mut ac: PSID = std::ptr::null_mut();
+    // SAFETY (evidence only): valid NUL-terminated strings and out pointer.
+    let hr = unsafe {
+        CreateAppContainerProfile(wname.as_ptr(), wname.as_ptr(), wname.as_ptr(), std::ptr::null(), 0, &mut ac)
+    };
+    if hr < 0 {
+        let hr2 = unsafe { DeriveAppContainerSidFromAppContainerName(wname.as_ptr(), &mut ac) };
+        if hr2 < 0 {
+            println!("could not create an AppContainer profile: 0x{hr:08x}");
             return;
         }
-    };
-    let sid = profile.sid.as_string().to_string();
-    if let Err(e) = rappct::acl::grant_to_package(
-        rappct::acl::ResourcePath::Directory(out_dir.clone()),
-        &profile.sid,
-        rappct::acl::AccessMask::GENERIC_ALL,
-    ) {
-        println!("could not grant the output folder: {e:?}");
     }
-    let run = |setup: &str, caps: &[KnownCapability]| {
-        let sec = match SecurityCapabilitiesBuilder::new(&profile.sid)
-            .with_known(caps)
-            .build()
-        {
-            Ok(s) => s,
-            Err(e) => {
-                println!("{setup}: capabilities: {e}");
-                return;
-            }
-        };
-        let encoded = encode(make_script(setup));
-        // rappct 0.13.3: Null stdio gives "The handle is invalid", and no environment gives error
-        // 203; the parent's environment (sorted, as Windows wants it) with inherited stdio works.
-        let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os().collect();
-        env.sort_by_key(|(k, _)| k.to_string_lossy().to_ascii_uppercase());
-        for (variant, stdio, env) in [
-            ("stdio inherit, parent env", StdioConfig::Inherit, Some(env.clone())),
-            ("stdio pipe, parent env", StdioConfig::Pipe, Some(env)),
-        ] {
-            let opts = LaunchOptions {
-                exe: ps.into(),
-                cmdline: Some(format!(
-                    "\"{ps}\" -NoProfile -NonInteractive -EncodedCommand {encoded}"
-                )),
-                cwd: Some(r"C:\Windows\System32".into()),
-                env,
-                stdio,
-                ..Default::default()
-            };
-            match launch_in_container_with_io(&sec, &opts) {
-                Ok(child) => {
-                    let code = child.wait(Some(std::time::Duration::from_secs(120)));
-                    println!("{setup} ({variant}): powershell exit {code:?}");
-                    match std::fs::read_to_string(out_dir.join(format!("{setup}.txt"))) {
-                        Ok(t) => print!("{t}"),
-                        Err(e) => println!("{setup}: no results file: {e}"),
-                    }
-                    return;
-                }
-                Err(e) => println!("{setup} ({variant}): launch failed: {e:?}"),
-            }
+    let mut text: *mut u16 = std::ptr::null_mut();
+    let sid = unsafe {
+        ConvertSidToStringSidW(ac, &mut text);
+        let mut n = 0;
+        while *text.add(n) != 0 {
+            n += 1;
         }
+        String::from_utf16_lossy(std::slice::from_raw_parts(text, n))
     };
+    let grant = std::process::Command::new("icacls")
+        .arg(&out_dir)
+        .args(["/grant", &format!("*{sid}:(OI)(CI)F")])
+        .output();
+    println!("granted the results folder: {:?}", grant.map(|o| o.status.code()));
     let elevated = std::process::Command::new("net")
         .arg("session")
         .output()
         .is_ok_and(|o| o.status.success());
     println!("AppContainer {sid}; this process elevated (admin): {elevated}");
+    let run = |setup: &str, caps: &[&str]| {
+        let line = format!(
+            "\"{ps}\" -NoProfile -NonInteractive -EncodedCommand {}",
+            encode(make_script(setup))
+        );
+        match launch(ac, caps, &line) {
+            Ok(code) => println!("{setup}: powershell exit {code}"),
+            Err(e) => println!("{setup}: launch failed: {e}"),
+        }
+        let file = out_dir.join(format!("{}.txt", setup.replace(' ', "_").replace('+', "and")));
+        match std::fs::read_to_string(&file) {
+            Ok(t) => print!("{t}"),
+            Err(e) => println!("{setup}: no results file: {e}"),
+        }
+    };
     run("no capabilities", &[]);
+    // internetClient (S-1-15-3-1) + privateNetworkClientServer (S-1-15-3-3).
     run(
         "internetClient + privateNetworkClientServer",
-        &[
-            KnownCapability::InternetClient,
-            KnownCapability::PrivateNetworkClientServer,
-        ],
+        &["S-1-15-3-1", "S-1-15-3-3"],
     );
     // The loopback exemption: a machine-wide firewall setting (needs admin; CI runs as admin).
     let add = std::process::Command::new("CheckNetIsolation.exe")
@@ -128,13 +185,13 @@ Probe 'write %TEMP%' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-pro
         .output();
     println!(
         "loopback exemption added: {:?}",
-        add.as_ref().map(|o| o.status.code())
+        add.as_ref().map(|o| (o.status.code(), String::from_utf8_lossy(&o.stdout).trim().to_string()))
     );
     run("no capabilities + loopback exemption", &[]);
     let _ = std::process::Command::new("CheckNetIsolation.exe")
         .args(["LoopbackExempt", "-d", &format!("-p={sid}")])
         .output();
-    let _ = profile.delete();
+    unsafe { DeleteAppContainerProfile(wname.as_ptr()) };
 }
 
 #[cfg(windows)]
@@ -142,11 +199,7 @@ fn base64(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in data.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         for i in 0..4 {
             if i <= chunk.len() {
