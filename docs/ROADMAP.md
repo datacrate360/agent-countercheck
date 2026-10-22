@@ -56,12 +56,9 @@ section. Ideas and use cases are welcome as issues.
    database.
 7. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
 8. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
-9. **Windows full sandbox: an opt-in one-time admin setup** (v0.8.0 confines writes for `pwsh`/`cmd` checks only).
-   `countercheck windows-setup` (run once as admin; `--remove` undoes it) creates a low-rights local user and an
-   outbound firewall rule for it; checks then run as that user: every shell sandboxed (Git's `sh` included), internet
-   blocked, localhost kept. Without the setup, today's partial sandbox stays the default and the receipt says which ran.
-   Chosen over an AppContainer mode, which can't run Git's `sh`, most toolchains or unrestricted PowerShell (CI
-   evidence in ADR-0003). Design note (ADR-0004) first.
+9. **Windows full sandbox, after the experimental release** (ADR-0004, built: `countercheck windows-setup`): try it on
+   real Windows 11 machines and drop "experimental"; then the two follow-ups: no stored password for the runner
+   account, and `network = true` checks fully sandboxed (a second account without the firewall rule).
 10. **winget and scoop** packages for Windows (today: `install.ps1`, `pip`/`uvx`, or the zip from Releases).
 
 ## Later

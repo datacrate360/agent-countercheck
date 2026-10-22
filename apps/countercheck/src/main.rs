@@ -22,6 +22,8 @@ mod snapshot;
 mod ui;
 mod verify;
 #[cfg(windows)]
+mod windows_runner;
+#[cfg(windows)]
 mod windows_sandbox;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -116,8 +118,27 @@ enum Cmd {
         /// Windows: the check's whole command line.
         #[arg(long)]
         cmdline: Option<String>,
+        /// Windows: run the check as the runner account, through this copy of countercheck.
+        #[arg(long)]
+        runner_exe: Option<PathBuf>,
+        /// Windows: print whether the full sandbox (`windows-setup`) works here and exit.
+        #[arg(long)]
+        probe_runner: bool,
+        /// Windows: write the probe's answer to this file (the runner account's probe).
+        #[arg(long)]
+        probe_to: Option<PathBuf>,
         #[arg(last = true)]
         program: Vec<String>,
+    },
+    /// Windows: set up the full check sandbox once, as administrator (a low-rights account whose
+    /// internet is blocked; checks run as it). `--remove` undoes it.
+    WindowsSetup {
+        /// Remove the account, its firewall rule and its settings.
+        #[arg(long)]
+        remove: bool,
+        /// Let the account read and run a toolchain outside Program Files (repeatable).
+        #[arg(long = "allow-read", value_name = "DIR")]
+        allow_read: Vec<PathBuf>,
     },
     /// Write a starter .countercheck/checks.toml.
     Init {
@@ -196,6 +217,9 @@ fn run(cli: Cli) -> Result<u8, String> {
             timeout_secs,
             sid,
             cmdline,
+            runner_exe,
+            probe_runner,
+            probe_to,
             program,
         } => sandbox_exec(SandboxExecArgs {
             probe,
@@ -207,8 +231,12 @@ fn run(cli: Cli) -> Result<u8, String> {
             timeout_secs,
             sid,
             cmdline,
+            runner_exe,
+            probe_runner,
+            probe_to,
             program,
         }),
+        Cmd::WindowsSetup { remove, allow_read } => windows_setup(remove, &allow_read),
         Cmd::Verify {
             repo,
             base,
@@ -259,7 +287,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                     }
                 },
                 SandboxArg::Windows => match runner::auto_sandbox() {
-                    runner::Sandbox::RestrictedToken => runner::Sandbox::RestrictedToken,
+                    s @ (runner::Sandbox::RestrictedToken | runner::Sandbox::WindowsRunner) => s,
                     _ if cfg!(windows) => {
                         return Err(
                             "the Windows sandbox could not start here (`countercheck sandbox-exec --probe` \
@@ -406,7 +434,20 @@ struct SandboxExecArgs {
     timeout_secs: u64,
     sid: Option<String>,
     cmdline: Option<String>,
+    runner_exe: Option<PathBuf>,
+    probe_runner: bool,
+    probe_to: Option<PathBuf>,
     program: Vec<String>,
+}
+
+#[cfg(windows)]
+fn windows_setup(remove: bool, allow_read: &[PathBuf]) -> Result<u8, String> {
+    windows_runner::setup_main(remove, allow_read)
+}
+
+#[cfg(not(windows))]
+fn windows_setup(_remove: bool, _allow_read: &[PathBuf]) -> Result<u8, String> {
+    Err("windows-setup is for Windows; macOS and Linux need no setup".to_string())
 }
 
 #[cfg(target_os = "linux")]
@@ -433,6 +474,12 @@ fn sandbox_exec(a: SandboxExecArgs) -> Result<u8, String> {
     if a.probe {
         return Ok(windows_sandbox::probe_main());
     }
+    if a.probe_runner {
+        return Ok(windows_runner::probe_main());
+    }
+    if let Some(file) = &a.probe_to {
+        return Ok(windows_sandbox::probe_to_main(file));
+    }
     let (Some(work), Some(sid), Some(cmdline)) = (a.work, a.sid, a.cmdline) else {
         return Err("sandbox-exec needs --work, --sid and --cmdline".to_string());
     };
@@ -442,6 +489,7 @@ fn sandbox_exec(a: SandboxExecArgs) -> Result<u8, String> {
         sid,
         timeout_secs: a.timeout_secs,
         cmdline,
+        runner_exe: a.runner_exe,
     });
     // Windows exit codes are 32-bit: pass the check's on unchanged (a u8 could turn a crash into 0).
     std::process::exit(code)

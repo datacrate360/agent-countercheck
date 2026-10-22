@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **New (Windows, experimental): the full check sandbox, an opt-in admin setup** ([ADR-0004](docs/decisions/0004-windows-runner-account.md)).
+  `countercheck windows-setup` (once, as administrator; `--remove` undoes it) creates a low-rights `countercheck-runner`
+  account and a firewall rule that blocks its internet (loopback stays open). Checks then run as that account inside
+  the existing write-restricted token and Job Object: every shell sandboxed, Git's `sh` included; internet blocked,
+  localhost kept. Receipt label `windows-runner (...)`. Without the setup nothing changes. Experimental until tried on
+  real Windows machines beyond CI; follow-ups: a design without a stored password, and full sandboxing for
+  `network = true` checks (today they run as you).
 - **A logo**: the agent (a ghost) hands in its receipt, and Countercheck's coral seal is the verdict. In the README,
   the HTML report and live UI; the full set (icon, favicons, lockups, social preview) is in `docs/assets/brand/`. The
   name and logo are not covered by the MIT licence (see `docs/assets/brand/README.md`).

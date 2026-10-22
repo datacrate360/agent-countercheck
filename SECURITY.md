@@ -31,6 +31,11 @@ We aim to reply within a few days and to credit reporters who want credit.
   with the reason, and the run's label says `partial: sh checks ran unsandboxed`. Not covered: drives without permissions (FAT/exFAT, some network
   shares), files and folders that grant write to `Everyone` or `RESTRICTED` (or have no DACL), and processes started through a Windows service
   (Task Scheduler, WMI, COM), which run outside the Job Object.
+- With `countercheck windows-setup` (opt-in, admin once; ADR-0004), Windows checks run as a low-rights local account,
+  `countercheck-runner`, inside the same restricted token and Job Object, and a firewall rule blocks that account's
+  internet (not loopback). Its password is stored with machine-scope DPAPI in `%ProgramData%\countercheck` (admins can
+  change it, users can read it): it is not a secret from the agent, only the means to start processes as an account
+  with fewer rights than the agent's own. A check with `network = true` runs as the developer.
 - `crates/countercheck-winsandbox` is the only crate allowed to use `unsafe` (Win32 calls with no safe crate); every
   block carries a `SAFETY:` note, and a bug there is in scope.
 - Folders listed under `link` come from the worker's tree and are not part of the checked snapshot; receipts say so.

@@ -27,9 +27,13 @@
 )]
 #![cfg_attr(not(windows), forbid(unsafe_code))]
 
+pub mod block;
 pub mod sddl;
 
 #[cfg(windows)]
 mod sys;
 #[cfg(windows)]
-pub use sys::{Child, Restricted, current_sids, file_dacl, set_file_dacl, spawn_restricted};
+pub use sys::{
+    Child, Logon, Restricted, current_sids, file_dacl, set_file_dacl, spawn_logon,
+    spawn_restricted, unprotect,
+};

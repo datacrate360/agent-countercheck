@@ -115,7 +115,9 @@ writes = ["/var/tmp/hermes-pytest-{uid}"]   # this check may also write here (an
 ```text
   [pass] tests (official runner)  (8.2 s, writes allowed: /private/var/tmp/hermes-pytest-501)  $ scripts/run_tests.sh
 ```
-
+ After `countercheck windows-setup` (admin, once;
+  [ADR-0004](decisions/0004-windows-runner-account.md)) checks run as a low-rights account whose internet a firewall
+  rule blocks: every shell is sandboxed and the internet is blocked like on macOS; a `network = true` check runs as you.
 - Absolute paths, with the placeholders `{uid}`, `{user}` and `{home}`. No `.`/`..`, globs, quotes or `$`; at most 8
   per check. On Windows write `C:/runner-cache` (forward slashes; a backslash is refused) or `{home}/...` (your
   `USERPROFILE`); `{uid}` doesn't exist there and is refused.

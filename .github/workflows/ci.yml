@@ -133,6 +133,26 @@ jobs:
           Stop-Process -Id $server.Id
           if (-not $failed) { throw 'a bad checksum must stop the install' }
           if (Test-Path "$env:RUNNER_TEMP/bin2/countercheck.exe") { throw 'installed despite a bad checksum' }
+      # The full Windows sandbox (docs/decisions/0004-windows-runner-account.md): this runner is an
+      # administrator, so it can run the one-time setup. After it, `--sandbox auto` picks the
+      # runner account; only the runner tests run then (the ones above expect v0.8.0's mode).
+      - name: Windows full sandbox (runner account)
+        run: |
+          cargo build -q
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          target/debug/countercheck.exe windows-setup
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          target/debug/countercheck.exe sandbox-exec --probe-runner
+          $env:COUNTERCHECK_TEST_RUNNER = '1'
+          cargo test -q -p countercheck --test verify -- windows_runner --nocapture
+          $tests = $LASTEXITCODE
+          target/debug/countercheck.exe windows-setup --remove
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (Get-LocalUser -Name countercheck-runner -ErrorAction SilentlyContinue) { throw 'the runner account was left behind' }
+          if (Get-NetFirewallRule -Name countercheck-runner-no-internet -ErrorAction SilentlyContinue) { throw 'the firewall rule was left behind' }
+          if (Test-Path "$env:ProgramData\countercheck") { throw 'the settings were left behind' }
+          target/debug/countercheck.exe sandbox-exec --probe-runner
+          exit $tests
 
   # Evidence for docs/decisions/0003-windows-sandbox.md: what an AppContainer allows on this
   # runner (internet, localhost between processes, Git's sh, Python), with and without the

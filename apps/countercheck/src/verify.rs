@@ -137,9 +137,24 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     #[cfg(windows)]
     if matches!(
         sandbox,
-        runner::Sandbox::RestrictedToken | runner::Sandbox::RestrictedTokenPartial
+        runner::Sandbox::RestrictedToken
+            | runner::Sandbox::RestrictedTokenPartial
+            | runner::Sandbox::WindowsRunner
     ) {
         crate::windows_sandbox::grant_scratch(&work, &tmp)?;
+    }
+    // The full sandbox: the runner account may write in both too, and runs countercheck from a
+    // copy in `bin`, which it may read and run but not change (so a check can't swap it).
+    #[cfg(windows)]
+    if sandbox == runner::Sandbox::WindowsRunner {
+        let c = crate::windows_runner::load()
+            .ok_or("the Windows runner account is not set up (countercheck windows-setup)")?;
+        for dir in [&work, &tmp] {
+            crate::windows_sandbox::grant_full(dir, &c.sid)
+                .map_err(|e| format!("Windows sandbox: {e}"))?;
+        }
+        let exe = crate::windows_runner::helper_copy(&c, &scratch_root.join("bin"))?;
+        crate::windows_runner::set_helper(exe);
     }
     let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
 
@@ -369,6 +384,7 @@ fn windows_sh_check(
     opts: &Options,
     planned: &[config::PlannedCheck],
 ) -> Result<runner::Sandbox, String> {
+    // The full sandbox runs every shell as the runner account (ADR-0004).
     if opts.sandbox != runner::Sandbox::RestrictedToken {
         return Ok(opts.sandbox);
     }

@@ -30,7 +30,17 @@ pub enum Sandbox {
     /// says so on the receipt (`sandboxed: false`), and the label says the run was partial.
     #[cfg_attr(not(windows), allow(dead_code))]
     RestrictedTokenPartial,
+    /// Windows after `countercheck windows-setup` (ADR-0004): checks run as the low-rights
+    /// `countercheck-runner` account inside the restricted token and Job Object; a firewall rule
+    /// blocks that account's internet (not loopback), and Git's `sh` runs sandboxed too.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    WindowsRunner,
 }
+
+/// Why an `sh` check with `network = true` ran outside the Windows full sandbox.
+pub const SH_NETWORK_UNSANDBOXED: &str = "network = true: this check runs as you, because the runner \
+    account has no internet, and Git for Windows' sh can't run in your restricted token; set shell = \
+    \"pwsh\" or \"cmd\" on it to keep its writes confined";
 
 /// Why an `sh` check ran outside the Windows sandbox (on the receipt, per check).
 pub const SH_UNSANDBOXED: &str = "Git for Windows' sh can't run in a restricted token (MSYS secures its \
@@ -56,6 +66,9 @@ impl Sandbox {
             Sandbox::RestrictedTokenPartial => {
                 "windows-restricted-token, partial: sh checks ran unsandboxed (Git for Windows can't run in a restricted token); pwsh/cmd checks: writes only in the check folder; internet NOT blocked"
             }
+            Sandbox::WindowsRunner => {
+                "windows-runner (no internet, localhost only; writes only in the check folder; checks run as countercheck-runner)"
+            }
         }
     }
 
@@ -66,12 +79,18 @@ impl Sandbox {
 
     /// The sandbox one check runs in, and why it runs outside the run's sandbox if it does: in a
     /// partial Windows run, `sh` checks run without it and the others in the restricted token.
-    pub fn for_check(self, shell: Shell) -> (Sandbox, Option<&'static str>) {
+    /// Under the Windows full sandbox, a `network = true` check runs as the developer (the runner
+    /// account has no internet): restricted for `pwsh`/`cmd`, unsandboxed for `sh`.
+    pub fn for_check(self, shell: Shell, network: bool) -> (Sandbox, Option<&'static str>) {
         match self {
             Sandbox::RestrictedTokenPartial if shell == Shell::Sh => {
                 (Sandbox::None, Some(SH_UNSANDBOXED))
             }
             Sandbox::RestrictedTokenPartial => (Sandbox::RestrictedToken, None),
+            Sandbox::WindowsRunner if network && shell == Shell::Sh => {
+                (Sandbox::None, Some(SH_NETWORK_UNSANDBOXED))
+            }
+            Sandbox::WindowsRunner if network => (Sandbox::RestrictedToken, None),
             s => (s, None),
         }
     }
@@ -80,7 +99,7 @@ impl Sandbox {
     pub fn blocks_internet(self) -> bool {
         matches!(
             self,
-            Sandbox::Seatbelt | Sandbox::Landlock { namespaces: true }
+            Sandbox::Seatbelt | Sandbox::Landlock { namespaces: true } | Sandbox::WindowsRunner
         )
     }
 }
@@ -100,6 +119,7 @@ pub fn auto_sandbox() -> Sandbox {
 #[cfg(windows)]
 fn windows_auto() -> Sandbox {
     match std::env::current_exe() {
+        Ok(exe) if crate::windows_runner::probe(&exe) => Sandbox::WindowsRunner,
         Ok(exe) if crate::windows_sandbox::probe(&exe) => Sandbox::RestrictedToken,
         _ => Sandbox::None,
     }
@@ -244,7 +264,7 @@ pub fn resolve_writes(spec: &PlannedCheck, repo: &Path) -> Result<Vec<PathBuf>, 
 
 /// A resolved path without Windows' `\\?\` prefix (which `canonicalize` adds), for the receipt
 /// and the sandbox. Unchanged elsewhere.
-fn display_path(p: &Path) -> String {
+pub fn display_path(p: &Path) -> String {
     let s = p.to_string_lossy();
     match s.strip_prefix(r"\\?\") {
         Some(rest) if !rest.starts_with("UNC") => rest.to_string(),
@@ -403,7 +423,7 @@ fn add_run(cmd: &mut Command, shell: Shell, run: &str) {
 /// One argument quoted the way Rust's standard library quotes it on Windows (the rules
 /// `CommandLineToArgvW`, the C runtime and MSYS parse): in quotes when it is empty or has a space
 /// or tab, a `"` escaped with a backslash, backslashes before a `"` (or the closing quote) doubled.
-fn quote_windows_arg(out: &mut String, arg: &str) {
+pub fn quote_windows_arg(out: &mut String, arg: &str) {
     let quote = arg.is_empty() || arg.contains([' ', '\t']);
     if quote {
         out.push('"');
@@ -650,7 +670,7 @@ pub fn run_check(
     sandbox: Sandbox,
     writes: &[PathBuf],
 ) -> Result<CheckResult, String> {
-    let (sandbox, unsandboxed) = sandbox.for_check(spec.shell);
+    let (sandbox, unsandboxed) = sandbox.for_check(spec.shell, spec.network);
     let program = match shell_program(spec.shell) {
         Ok(p) => p,
         Err(why) => return Ok(not_started(spec, why)),
@@ -700,7 +720,7 @@ pub fn run_check(
             c.arg("--").arg(&program);
             c
         }
-        Sandbox::RestrictedToken => {
+        Sandbox::RestrictedToken | Sandbox::WindowsRunner => {
             // The helper starts the check itself (a restricted token needs its own
             // CreateProcess), with the command line `Command` would have built, and enforces
             // the timeout so it can take its grants off the `writes` locations before it exits.
@@ -728,10 +748,18 @@ pub fn run_check(
             for w in writes {
                 c.arg("--write").arg(w);
             }
+            // The full sandbox: the helper runs the check as the runner account, through the
+            // copy of countercheck `verify` made for it.
+            #[cfg(windows)]
+            if sandbox == Sandbox::WindowsRunner {
+                let exe = crate::windows_runner::helper()
+                    .ok_or("the Windows runner's copy of countercheck is missing")?;
+                c.arg("--runner-exe").arg(exe);
+            }
             c
         }
     };
-    if sandbox != Sandbox::RestrictedToken {
+    if !matches!(sandbox, Sandbox::RestrictedToken | Sandbox::WindowsRunner) {
         add_run(&mut cmd, spec.shell, &spec.run);
     }
     cmd.current_dir(workdir)
@@ -763,10 +791,11 @@ pub fn run_check(
     #[cfg(windows)]
     let job = watch_tree(&child);
     // Under the Linux sandbox the helper times the check out itself; this wait is the safety net.
-    let grace = if matches!(sandbox, Sandbox::Landlock { .. } | Sandbox::RestrictedToken) {
-        15
-    } else {
-        0
+    let grace = match sandbox {
+        Sandbox::Landlock { .. } | Sandbox::RestrictedToken => 15,
+        // The runner account's sign-in comes first.
+        Sandbox::WindowsRunner => 45,
+        _ => 0,
     };
     let status = child
         .wait_timeout(Duration::from_secs(spec.timeout_secs.saturating_add(grace)))
@@ -811,14 +840,15 @@ pub fn run_check(
         (exit_code, timed_out)
     };
     #[cfg(windows)]
-    let (exit_code, timed_out) = if sandbox == Sandbox::RestrictedToken
-        && exit_code == Some(crate::windows_sandbox::TIMED_OUT)
-        && output_tail.contains(crate::windows_sandbox::TIMEOUT_LINE)
-    {
-        (None, true)
-    } else {
-        (exit_code, timed_out)
-    };
+    let (exit_code, timed_out) =
+        if matches!(sandbox, Sandbox::RestrictedToken | Sandbox::WindowsRunner)
+            && exit_code == Some(crate::windows_sandbox::TIMED_OUT)
+            && output_tail.contains(crate::windows_sandbox::TIMEOUT_LINE)
+        {
+            (None, true)
+        } else {
+            (exit_code, timed_out)
+        };
     let mut result = CheckResult {
         name: spec.name.clone(),
         run: spec.run.clone(),
@@ -859,7 +889,10 @@ pub fn run_check(
         let out = &result.output_tail;
         // Landlock refuses a write with EACCES ("Permission denied"), Seatbelt with EPERM,
         // Windows with ERROR_ACCESS_DENIED ("Access is denied", or EACCES in sh and Python).
-        let eacces = matches!(sandbox, Sandbox::Landlock { .. } | Sandbox::RestrictedToken);
+        let eacces = matches!(
+            sandbox,
+            Sandbox::Landlock { .. } | Sandbox::RestrictedToken | Sandbox::WindowsRunner
+        );
         let denied = denied_write_path(out, eacces);
         let network = sandbox.blocks_internet() && !spec.network && looks_like_network_error(out);
         // "Operation not permitted" with no path and no other sign: under Seatbelt a refused
@@ -869,7 +902,7 @@ pub fn run_check(
             && !network
             && match sandbox {
                 Sandbox::Seatbelt => has_bare_denial(out, false),
-                Sandbox::RestrictedToken => has_bare_denial(out, true),
+                Sandbox::RestrictedToken | Sandbox::WindowsRunner => has_bare_denial(out, true),
                 _ => false,
             };
         if let Some(path) = denied {
@@ -1201,14 +1234,36 @@ mod tests {
         );
         assert!(p.label().contains("internet NOT blocked"));
         assert_eq!(
-            p.for_check(Shell::Sh),
+            p.for_check(Shell::Sh, false),
             (Sandbox::None, Some(SH_UNSANDBOXED))
         );
         for shell in [Shell::Pwsh, Shell::Cmd] {
-            assert_eq!(p.for_check(shell), (Sandbox::RestrictedToken, None));
+            assert_eq!(p.for_check(shell, false), (Sandbox::RestrictedToken, None));
         }
-        assert_eq!(w.for_check(Shell::Sh), (w, None));
-        assert_eq!(Sandbox::None.for_check(Shell::Sh), (Sandbox::None, None));
+        assert_eq!(w.for_check(Shell::Sh, false), (w, None));
+        assert_eq!(
+            Sandbox::None.for_check(Shell::Sh, false),
+            (Sandbox::None, None)
+        );
+        // The full sandbox (ADR-0004): every shell runs as the runner account, internet blocked;
+        // a network = true check runs as the developer, restricted unless it uses sh.
+        let r = Sandbox::WindowsRunner;
+        assert!(
+            r.label()
+                .starts_with("windows-runner (no internet, localhost only")
+        );
+        assert!(r.confines_writes() && r.blocks_internet());
+        for shell in [Shell::Sh, Shell::Pwsh, Shell::Cmd] {
+            assert_eq!(r.for_check(shell, false), (r, None));
+        }
+        assert_eq!(
+            r.for_check(Shell::Sh, true),
+            (Sandbox::None, Some(SH_NETWORK_UNSANDBOXED))
+        );
+        assert_eq!(
+            r.for_check(Shell::Pwsh, true),
+            (Sandbox::RestrictedToken, None)
+        );
         if cfg!(windows) {
             assert!(!seatbelt_works());
         }
