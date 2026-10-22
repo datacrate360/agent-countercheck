@@ -12,16 +12,20 @@ fn main() {
         AppContainerProfile, KnownCapability, LaunchOptions, SecurityCapabilitiesBuilder,
         StdioConfig, launch_in_container_with_io,
     };
-    use std::io::Read;
 
     let python = std::env::var("PROBE_PYTHON").unwrap_or_default();
-    let script = format!(
+    // Results go to a file in a folder granted to the container (no pipes, no custom environment).
+    let out_dir = std::env::temp_dir().join(format!("acprobe-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&out_dir);
+    let make_script = |setup: &str| format!(
         r#"
 $ErrorActionPreference = 'Stop'
+$out = '{out}\{setup}.txt'
 function Probe($name, $block) {{
-  try {{ $r = & $block; Write-Output "$($env:PROBE_SETUP): $name = ok $r" }}
-  catch {{ Write-Output "$($env:PROBE_SETUP): $name = FAILED ($($_.Exception.Message))" }}
+  try {{ $r = & $block; Add-Content -Path $out -Value "{setup}: $name = ok $r" }}
+  catch {{ Add-Content -Path $out -Value "{setup}: $name = FAILED ($($_.Exception.Message))" }}
 }}
+Add-Content -Path $out -Value "{setup}: started"
 Probe 'internet 1.1.1.1:443' {{ $c = [Net.Sockets.TcpClient]::new(); if (-not $c.ConnectAsync('1.1.1.1', 443).Wait(8000)) {{ throw 'timeout' }}; $c.Close() }}
 Probe 'localhost, same process' {{ $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $l.Start(); $p = $l.LocalEndpoint.Port; $c = [Net.Sockets.TcpClient]::new(); if (-not $c.ConnectAsync('127.0.0.1', $p).Wait(5000)) {{ throw 'timeout' }}; $c.Close(); $l.Stop() }}
 Probe 'localhost, another process' {{
@@ -33,14 +37,17 @@ Probe 'localhost, another process' {{
 Probe 'Git sh' {{ $o = & 'C:\Program Files\Git\bin\sh.exe' -c 'echo hi' 2>&1; if ($LASTEXITCODE -ne 0) {{ throw "exit $LASTEXITCODE $o" }}; "($o)" }}
 Probe 'Python ({python})' {{ $o = & '{python}' -c 'print(1)' 2>&1; if ($LASTEXITCODE -ne 0) {{ throw "exit $LASTEXITCODE $o" }} }}
 Probe 'write %TEMP%' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-probe.txt') -Value x }}
-"#
+"#,
+        out = out_dir.display()
     );
-    let encoded = base64(
-        &script
-            .encode_utf16()
-            .flat_map(|u| u.to_le_bytes())
-            .collect::<Vec<u8>>(),
-    );
+    let encode = |script: String| {
+        base64(
+            &script
+                .encode_utf16()
+                .flat_map(|u| u.to_le_bytes())
+                .collect::<Vec<u8>>(),
+        )
+    };
     let ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
     let name = format!("countercheck.probe.{}", std::process::id());
     let profile = match AppContainerProfile::ensure(&name, "countercheck probe", None) {
@@ -51,6 +58,13 @@ Probe 'write %TEMP%' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-pro
         }
     };
     let sid = profile.sid.as_string().to_string();
+    if let Err(e) = rappct::acl::grant_to_package(
+        rappct::acl::ResourcePath::Directory(out_dir.clone()),
+        &profile.sid,
+        rappct::acl::AccessMask::GENERIC_ALL,
+    ) {
+        println!("could not grant the output folder: {e:?}");
+    }
     let run = |setup: &str, caps: &[KnownCapability]| {
         let sec = match SecurityCapabilitiesBuilder::new(&profile.sid)
             .with_known(caps)
@@ -62,46 +76,30 @@ Probe 'write %TEMP%' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-pro
                 return;
             }
         };
-        let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os().collect();
-        env.push(("PROBE_SETUP".into(), setup.into()));
-        env.sort_by_key(|(k, _)| k.to_string_lossy().to_ascii_lowercase());
-        let opts = LaunchOptions {
-            exe: ps.into(),
-            cmdline: Some(format!(
-                "\"{ps}\" -NoProfile -NonInteractive -EncodedCommand {encoded}"
-            )),
-            cwd: Some(r"C:\Windows\System32".into()),
-            env: Some(env),
-            stdio: StdioConfig::Pipe,
-            ..Default::default()
-        };
-        match launch_in_container_with_io(&sec, &opts) {
-            Ok(mut child) => {
-                let out = child.stdout.take();
-                let err = child.stderr.take();
-                let t1 = std::thread::spawn(move || {
-                    let mut s = String::new();
-                    if let Some(mut f) = out {
-                        let _ = f.read_to_string(&mut s);
+        let encoded = encode(make_script(setup));
+        for (variant, stdio) in [("stdio null", StdioConfig::Null), ("stdio inherit", StdioConfig::Inherit)] {
+            let opts = LaunchOptions {
+                exe: ps.into(),
+                cmdline: Some(format!(
+                    "\"{ps}\" -NoProfile -NonInteractive -EncodedCommand {encoded}"
+                )),
+                cwd: Some(r"C:\Windows\System32".into()),
+                env: None,
+                stdio,
+                ..Default::default()
+            };
+            match launch_in_container_with_io(&sec, &opts) {
+                Ok(child) => {
+                    let code = child.wait(Some(std::time::Duration::from_secs(120)));
+                    println!("{setup} ({variant}): powershell exit {code:?}");
+                    match std::fs::read_to_string(out_dir.join(format!("{setup}.txt"))) {
+                        Ok(t) => print!("{t}"),
+                        Err(e) => println!("{setup}: no results file: {e}"),
                     }
-                    s
-                });
-                let t2 = std::thread::spawn(move || {
-                    let mut s = String::new();
-                    if let Some(mut f) = err {
-                        let _ = f.read_to_string(&mut s);
-                    }
-                    s
-                });
-                let code = child.wait(Some(std::time::Duration::from_secs(120)));
-                print!("{}", t1.join().unwrap_or_default());
-                let e = t2.join().unwrap_or_default();
-                if !e.trim().is_empty() {
-                    println!("{setup}: stderr: {}", e.trim());
+                    return;
                 }
-                println!("{setup}: powershell exit {code:?}");
+                Err(e) => println!("{setup} ({variant}): launch failed: {e:?}"),
             }
-            Err(e) => println!("{setup}: launch failed: {e}"),
         }
     };
     let elevated = std::process::Command::new("net")
