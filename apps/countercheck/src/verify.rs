@@ -135,7 +135,10 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     // Windows sandbox: the run's SID may write here. Granted while both are empty, so every file
     // copied in inherits it and no existing tree is walked.
     #[cfg(windows)]
-    if sandbox == runner::Sandbox::RestrictedToken {
+    if matches!(
+        sandbox,
+        runner::Sandbox::RestrictedToken | runner::Sandbox::RestrictedTokenPartial
+    ) {
         crate::windows_sandbox::grant_scratch(&work, &tmp)?;
     }
     let links_as_text = snapshot::copy_files(&root, &work, &git::worktree_files(&root)?)?;
@@ -359,36 +362,41 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 /// marked [`Diff::LineEndings`].
 /// The sandbox this run gets. Windows: Git for Windows' `sh` can't start under the sandbox's
 /// write-restricted token (MSYS secures its shared memory and signal pipes to the user account
-/// only, and a token that may write there may write everywhere the user can), so a run with an
-/// `sh` check runs without it and the receipt says why; asked for by name, that's an error.
+/// only, and a token that may write there may write everywhere the user can), so in a run with
+/// `sh` checks those run without it, each says so on the receipt, and the label says the run was
+/// partial; asked for by name (`--sandbox windows`), such a run is an error.
 fn windows_sh_check(
     opts: &Options,
     planned: &[config::PlannedCheck],
 ) -> Result<runner::Sandbox, String> {
-    if opts.sandbox != runner::Sandbox::RestrictedToken
-        || !planned.iter().any(|c| c.shell == config::Shell::Sh)
-    {
-        if opts.sandbox == runner::Sandbox::RestrictedToken {
-            eprintln!(
-                "note: on Windows checks can reach the internet (writes are still confined; the receipt \
-                 records this)."
-            );
-        }
+    if opts.sandbox != runner::Sandbox::RestrictedToken {
+        return Ok(opts.sandbox);
+    }
+    let sh = planned
+        .iter()
+        .filter(|c| c.shell == config::Shell::Sh)
+        .count();
+    if sh == 0 {
+        eprintln!(
+            "note: on Windows checks can reach the internet (writes are still confined; the receipt \
+             records this)."
+        );
         return Ok(opts.sandbox);
     }
     if opts.sandbox_required {
-        return Err(
-            "Git for Windows' sh can't run in the Windows sandbox (MSYS secures its shared memory to \
-             your user account only); set shell = \"pwsh\" or \"cmd\" on the sh checks in \
-             .countercheck/checks.toml, or use --sandbox none"
-                .to_string(),
-        );
+        return Err(format!(
+            "{sh} check(s) use sh, and Git for Windows' sh can't run in the Windows sandbox (MSYS \
+             secures its shared memory to your user account only); set shell = \"pwsh\" or \"cmd\" \
+             on them in .countercheck/checks.toml, or use --sandbox auto to run them unsandboxed \
+             (the receipt says which)"
+        ));
     }
     eprintln!(
-        "note: this project has sh checks, which can't run in the Windows sandbox; checks run as a normal \
-         process (the receipt records this). Checks with shell = \"pwsh\" or \"cmd\" can be sandboxed."
+        "note: {sh} sh check(s) run without the Windows sandbox (Git for Windows' sh can't run in it; \
+         the receipt marks them). Checks with shell = \"pwsh\" or \"cmd\" are sandboxed; the \
+         internet is not blocked on Windows."
     );
-    Ok(runner::Sandbox::NoneForSh)
+    Ok(runner::Sandbox::RestrictedTokenPartial)
 }
 
 fn compare(

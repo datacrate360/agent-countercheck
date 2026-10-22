@@ -92,8 +92,9 @@ network = true
   connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict.
 - On Linux the internet is blocked the same way when the system allows unprivileged user namespaces; where it
   doesn't, checks have the internet and the receipt's `sandbox` says so. On Windows the sandbox confines writes of
-  `shell = "pwsh"` and `"cmd"` checks (a run with an `sh` check runs without it: Git for Windows' `sh` can't start
-  in it; use `cmd` or `pwsh` for the checks you want confined) but doesn't block the internet (that needs admin rights there; [ADR-0003](decisions/0003-windows-sandbox.md)), the
+  `shell = "pwsh"` and `"cmd"` checks; `sh` checks run without it (Git for Windows' `sh` can't start in it), each
+  marked `"sandboxed": false` with the reason on the receipt (`NOT sandboxed` in the text), and the run's label says
+  `partial: sh checks ran unsandboxed`. Use `cmd` or `pwsh` for the checks you want confined. It but doesn't block the internet (that needs admin rights there; [ADR-0003](decisions/0003-windows-sandbox.md)); the
   receipt's `sandbox` says so, and the no-internet hint never shows. Refused writes get the write hint there too
   (sh's and Python's "Permission denied", PowerShell's "Access to the path ... is denied", cmd's bare "Access is
   denied.").

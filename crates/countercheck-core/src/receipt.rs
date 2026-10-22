@@ -63,6 +63,14 @@ pub struct CheckResult {
     /// older receipts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub writes: Vec<String>,
+    /// `Some(false)` when this check ran outside the run's sandbox (Windows: Git for Windows'
+    /// `sh` can't start in it), with the reason below. Absent when the check ran in the run's
+    /// sandbox (as the run's `sandbox` says) and on older receipts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sandboxed: Option<bool>,
+    /// Why the check ran outside the run's sandbox.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsandboxed_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -272,8 +280,13 @@ impl Receipt {
             } else {
                 format!(", writes allowed: {}", r.writes.join(", "))
             };
+            let unsandboxed = if r.sandboxed == Some(false) {
+                ", NOT sandboxed"
+            } else {
+                ""
+            };
             s.push_str(&format!(
-                "  [{mark}] {}  ({} ms{net}{writes})  $ {}\n",
+                "  [{mark}] {}  ({} ms{net}{writes}{unsandboxed})  $ {}\n",
                 r.name, r.duration_ms, r.run
             ));
             if !r.passed {
@@ -347,6 +360,8 @@ mod tests {
             output_sha256: String::new(),
             network: false,
             writes: Vec::new(),
+            sandboxed: None,
+            unsandboxed_reason: None,
         }
     }
 

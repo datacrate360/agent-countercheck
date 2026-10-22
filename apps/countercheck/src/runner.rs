@@ -24,12 +24,18 @@ pub enum Sandbox {
     /// check started (`countercheck sandbox-exec`). The internet is not blocked.
     #[cfg_attr(not(windows), allow(dead_code))]
     RestrictedToken,
-    /// Windows, a run with `sh` checks: no sandbox, because Git for Windows' `sh` (MSYS) can't
-    /// start under a write-restricted token (its shared memory and signal pipes are secured to the
-    /// user account only). Runs like `None`; the label says why.
+    /// Windows, a run with `sh` checks: `pwsh`/`cmd` checks run in the restricted token, `sh`
+    /// checks without it (Git for Windows' `sh`, MSYS, can't start under a write-restricted token:
+    /// its shared memory and signal pipes are secured to the user account only). Each `sh` check
+    /// says so on the receipt (`sandboxed: false`), and the label says the run was partial.
     #[cfg_attr(not(windows), allow(dead_code))]
-    NoneForSh,
+    RestrictedTokenPartial,
 }
+
+/// Why an `sh` check ran outside the Windows sandbox (on the receipt, per check).
+pub const SH_UNSANDBOXED: &str = "Git for Windows' sh can't run in a restricted token (MSYS secures its \
+    shared memory and signal pipes to the user account only); set shell = \"pwsh\" or \"cmd\" on this check \
+    to sandbox it";
 
 impl Sandbox {
     pub fn label(self) -> &'static str {
@@ -47,15 +53,27 @@ impl Sandbox {
             Sandbox::RestrictedToken => {
                 "windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows needs admin rights to block it and keep localhost)"
             }
-            Sandbox::NoneForSh => {
-                "none (Git for Windows' sh can't run in the Windows sandbox; checks with shell = \"pwsh\" or \"cmd\" can)"
+            Sandbox::RestrictedTokenPartial => {
+                "windows-restricted-token, partial: sh checks ran unsandboxed (Git for Windows can't run in a restricted token); pwsh/cmd checks: writes only in the check folder; internet NOT blocked: Windows needs admin rights to block it and keep localhost"
             }
         }
     }
 
     /// Writes outside the check folder are refused.
     pub fn confines_writes(self) -> bool {
-        !matches!(self, Sandbox::None | Sandbox::NoneForSh)
+        !matches!(self, Sandbox::None)
+    }
+
+    /// The sandbox one check runs in, and why it runs outside the run's sandbox if it does: in a
+    /// partial Windows run, `sh` checks run without it and the others in the restricted token.
+    pub fn for_check(self, shell: Shell) -> (Sandbox, Option<&'static str>) {
+        match self {
+            Sandbox::RestrictedTokenPartial if shell == Shell::Sh => {
+                (Sandbox::None, Some(SH_UNSANDBOXED))
+            }
+            Sandbox::RestrictedTokenPartial => (Sandbox::RestrictedToken, None),
+            s => (s, None),
+        }
     }
 
     /// The internet is blocked (localhost still works).
@@ -446,6 +464,8 @@ fn not_started(spec: &PlannedCheck, why: String) -> CheckResult {
         output_tail: why,
         network: spec.network,
         writes: Vec::new(),
+        sandboxed: None,
+        unsandboxed_reason: None,
     }
 }
 
@@ -630,6 +650,7 @@ pub fn run_check(
     sandbox: Sandbox,
     writes: &[PathBuf],
 ) -> Result<CheckResult, String> {
+    let (sandbox, unsandboxed) = sandbox.for_check(spec.shell);
     let program = match shell_program(spec.shell) {
         Ok(p) => p,
         Err(why) => return Ok(not_started(spec, why)),
@@ -645,7 +666,9 @@ pub fn run_check(
     let err = log.try_clone().map_err(|e| e.to_string())?;
 
     let mut cmd = match sandbox {
-        Sandbox::None | Sandbox::NoneForSh => Command::new(&program),
+        Sandbox::None => Command::new(&program),
+        // Mapped to `RestrictedToken` or `None` per check above.
+        Sandbox::RestrictedTokenPartial => Command::new(&program),
         Sandbox::Seatbelt => {
             let mut c = Command::new("/usr/bin/sandbox-exec");
             c.arg("-p")
@@ -814,6 +837,8 @@ pub fn run_check(
         } else {
             Vec::new()
         },
+        sandboxed: unsandboxed.map(|_| false),
+        unsandboxed_reason: unsandboxed.map(str::to_string),
     };
     if let Some(b) = &spec.budget
         && result.passed
@@ -1167,6 +1192,23 @@ mod tests {
         );
         assert!(w.label().contains("internet NOT blocked"), "{}", w.label());
         assert!(w.confines_writes() && !w.blocks_internet());
+        // A partial run: sh checks outside the sandbox (and say why), the others in it.
+        let p = Sandbox::RestrictedTokenPartial;
+        assert!(
+            p.label().contains("partial: sh checks ran unsandboxed"),
+            "{}",
+            p.label()
+        );
+        assert!(p.label().contains("internet NOT blocked"));
+        assert_eq!(
+            p.for_check(Shell::Sh),
+            (Sandbox::None, Some(SH_UNSANDBOXED))
+        );
+        for shell in [Shell::Pwsh, Shell::Cmd] {
+            assert_eq!(p.for_check(shell), (Sandbox::RestrictedToken, None));
+        }
+        assert_eq!(w.for_check(Shell::Sh), (w, None));
+        assert_eq!(Sandbox::None.for_check(Shell::Sh), (Sandbox::None, None));
         if cfg!(windows) {
             assert!(!seatbelt_works());
         }

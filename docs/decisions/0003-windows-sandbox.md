@@ -15,21 +15,24 @@ give, without admin rights:
 
 | Mechanism | Writes | Internet | Localhost between processes | Admin? | Reads the user's toolchain |
 |---|---|---|---|---|---|
-| **AppContainer** (Edge, Store apps) | confined | blocked without `internetClient` | **blocked** (any capability set) | profile: no. Loopback exemption: **yes** | no: only folders that grant `ALL APPLICATION PACKAGES` or the container's SID (System32, Program Files); not `C:\hostedtoolcache`, `%LOCALAPPDATA%\Programs\Python`, the repository's `node_modules` |
+| **AppContainer** (Edge, Store apps) | confined | blocked without `internetClient` (measured) | **works within one container** (measured, no exemption); to other processes it needs the loopback exemption (admin) | profile: no | no: only folders that grant `ALL APPLICATION PACKAGES` or the container's SID (System32, Program Files); measured: Python in `C:\hostedtoolcache` can't be started; also `%LOCALAPPDATA%\Programs\Python`, the repository's `node_modules` |
 | **Write-restricted token** (`CreateRestrictedToken(WRITE_RESTRICTED)`, Chromium's GPU process, Windows services) | confined to objects that grant a restricting SID | not blocked | works | no | yes, unchanged |
 | Low integrity level | confined, except folders labelled low (`AppData\LocalLow`, `%TEMP%\Low`) | not blocked | works | no | yes |
 | Windows Filtering Platform / firewall rules | - | blocked per program or SID | works | **yes** | - |
 | Job Object (already used) | - | - | - | no | - |
 
-The AppContainer column was measured on the CI runner (`windows-latest`) by the `appcontainer-evidence` job
-(`.github/appcontainer-probe`, which uses the third-party `rappct` crate only there). See "Evidence" below.
+The AppContainer row was measured on the CI runner (`windows-latest`) by the `AppContainer evidence (windows)` job
+(`eval/windows-evidence`: a standalone program outside the workspace, never shipped). See "Evidence" below.
 
 ## Decision
 
 **Writes: a write-restricted token, for `pwsh` and `cmd` checks. Process tree: the Job Object, as before. Internet:
-not blocked, and the receipt says so. Git for Windows' `sh`: can't be confined (below); a run with an `sh` check runs
-without the sandbox and the receipt says `none (Git for Windows' sh can't run in the Windows sandbox; checks with
-shell = "pwsh" or "cmd" can)`; `--sandbox windows` refuses such a run.** The label is `windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows
+not blocked, and the receipt says so. Git for Windows' `sh`: can't be confined (below), so it is decided per check: in a
+run with `sh` checks, the `pwsh`/`cmd` checks still run in the sandbox, each `sh` check runs without it and carries
+`"sandboxed": false` and `"unsandboxed_reason"` on the receipt, and the run's label becomes `windows-restricted-token,
+partial: sh checks ran unsandboxed (Git for Windows can't run in a restricted token); ...`. A whole-run fallback was
+rejected: `sh` is the default shell, so it would leave most Windows projects with no sandbox at all.
+`--sandbox windows` refuses a run with `sh` checks.** Without `sh` checks the label is `windows-restricted-token (writes only in the check folder; internet NOT blocked: Windows
 needs admin rights to block it and keep localhost)`, the same honest shape as Linux without user namespaces.
 
 How it works (`apps/countercheck/src/windows_sandbox.rs`, `countercheck sandbox-exec`, mirroring `linux_sandbox.rs`):
@@ -55,12 +58,14 @@ How it works (`apps/countercheck/src/windows_sandbox.rs`, `countercheck sandbox-
    sandbox only when that refused write really was refused. If any setup step fails at run time, the check fails
    (exit 125) and never runs with less than the receipt says.
 
-Why not AppContainer, which also blocks the internet: without admin it breaks two things the other platforms keep.
-Localhost between processes is blocked (a test server and the browser or test client that talks to it are separate
-processes); the loopback exemption (`CheckNetIsolation LoopbackExempt`, `NetworkIsolationSetAppContainerConfig`) is a
-machine-wide firewall setting that needs admin. And the check can't read the user's own toolchain (a Python in
-`%LOCALAPPDATA%`, the repository's linked `node_modules`) unless we add permission entries to those folders, which
-changes files outside the check on every run. A sandbox that fails honest work would make people turn it off.
+Why not AppContainer now, although it also blocks the internet. I expected it to block localhost between processes
+(Microsoft's UWP documentation says so); the CI evidence shows it does not **within one container** (a server and
+a client the check starts are both inside), so the internet could be blocked with localhost kept. But it can't read
+the user's own toolchain: measured, the runner's Python in `C:\hostedtoolcache` can't even be started, and the same
+holds for a Python in `%LOCALAPPDATA%` or the repository's linked `node_modules`, unless we add permission entries to
+those folders (changing files outside the check, recursively, on every run or once for good). Git for Windows' `sh`
+fails in it too (measured, same MSYS error). A sandbox that fails honest work would make people turn it off, so this
+PR ships the restricted token and leaves an AppContainer mode as the next step (below).
 
 ## Why Git for Windows' `sh` can't run in it
 
@@ -83,8 +88,8 @@ The workspace forbids `unsafe`. No safe crate covers restricted tokens and per-f
 
 - `win32job` (already used) and `junction` cover only their own APIs.
 - `rappct` (AppContainer/LPAC, MIT) covers AppContainer launch and ACL grants, but has no restricted-token launch
-  and no ACL revoke, has one author, one year of history, and `unwrap()` in its launch path. It is used only in the
-  CI evidence job, not shipped.
+  and no ACL revoke, has one author, one year of history, and `unwrap()` in its launch path. Tried for the CI evidence,
+  it failed every launch on the runner (`CreateProcessW` error 6 with null stdio, 203 otherwise); not used.
 - The `windows` / `windows-sys` crates are bindings; every call is `unsafe`.
 
 So the FFI lives in **one small crate, `crates/countercheck-winsandbox`**, built on Microsoft's `windows-sys`
@@ -105,4 +110,31 @@ acceptable; the alternative is no Windows sandbox.
 
 ## Evidence
 
-See the PR description for the CI runs.
+CI on `windows-latest` (Windows Server, Git 2.56.0.windows.2), PR #29:
+
+- **Restricted token, first run**: MSYS `bash` died at start (`NtCreateDirectoryObject(\BaseNamedObjects\msys-2.0S5-…):
+  0xC0000022`), PowerShell's .NET failed to load `BCrypt.dll`, `cmd`'s `>NUL` was refused: fixed by `Everyone` and
+  `RESTRICTED` among the restricting SIDs.
+- **Restricted token, second run**: `pwsh` and `cmd` checks pass; MSYS `bash` still dies (`CreateFileMapping <user
+  SID>.1, Win32 error 5` / `couldn't create signal pipe, Win32 error 5`): the per-check `sh` rule above.
+- **Restricted token, final**: every Windows test passes (writes refused outside with the hint, `writes` opens exactly
+  its folder and is undone, localhost between processes works, the internet is reachable as the label says, detached
+  and timed-out processes are stopped, `sh` checks marked unsandboxed, a failed setup fails the check).
+- **AppContainer** (`eval/windows-evidence`, as the runner's admin account), PowerShell probes inside the container:
+
+  | Setup | internet 1.1.1.1:443 | localhost, same process | localhost, another process (same container) | Git `sh` | Python in `C:\hostedtoolcache` |
+  |---|---|---|---|---|---|
+  | no capabilities | blocked | ok | ok | fails (MSYS `0xC0000022`) | can't be started |
+  | `internetClient` + `privateNetworkClientServer` | ok | ok | ok | fails | can't be started |
+  | no capabilities + loopback exemption | blocked | ok | ok | fails | can't be started |
+
+  The same probe as a fresh standard (non-admin) user: see the PR description (the step runs on every CI run).
+
+## Next step (not in this PR)
+
+1. **An AppContainer mode** for projects whose toolchain is readable from a container (Program Files, or folders the
+   user grants once): internet blocked, localhost within the check kept, no admin. Needs a decision on granting the
+   container's SID read access to toolchain folders.
+2. **A one-time admin setup** for everything else (as OpenAI's Codex does on Windows): checks run as a dedicated local
+   user, with write only in the check folder and a firewall rule for that user that allows only loopback. MSYS works
+   then (its objects belong to that user), so `sh` checks could be sandboxed too.

@@ -27,8 +27,8 @@ We aim to reply within a few days and to credit reporters who want credit.
 - The Windows sandbox is a write-restricted token plus a Job Object (`countercheck sandbox-exec`,
   [ADR-0003](docs/decisions/0003-windows-sandbox.md)). It confines writes but **does not block the internet** (that
   needs admin rights on Windows; the receipt says so), and only `shell = "pwsh"`/`"cmd"` checks can run in it: Git for
-  Windows' `sh` (MSYS) can't start under it, so a run with an `sh` check runs without a sandbox (the receipt says
-  `none (Git for Windows' sh can't run in the Windows sandbox; ...)`). Not covered: drives without permissions (FAT/exFAT, some network
+  Windows' `sh` (MSYS) can't start under it, so `sh` checks run unsandboxed: each is marked `"sandboxed": false`
+  with the reason, and the run's label says `partial: sh checks ran unsandboxed`. Not covered: drives without permissions (FAT/exFAT, some network
   shares), files and folders that grant write to `Everyone` or `RESTRICTED` (or have no DACL), and processes started through a Windows service
   (Task Scheduler, WMI, COM), which run outside the Job Object.
 - `crates/countercheck-winsandbox` is the only crate allowed to use `unsafe` (Win32 calls with no safe crate); every

@@ -2008,7 +2008,7 @@ fn hooks_work_with_windows_payloads() {
         receipt["sandbox"]
             .as_str()
             .unwrap()
-            .starts_with("none (Git for Windows' sh can't run in the Windows sandbox"),
+            .starts_with("windows-restricted-token, partial: sh checks ran unsandboxed"),
         "{receipt:#}"
     );
     let hermes = serde_json::json!({
@@ -3052,22 +3052,66 @@ fn the_windows_sandbox_stops_what_a_check_left_running() {
     }
 }
 
-/// Git for Windows' sh can't start in the sandbox: a run with an sh check runs without it, and the
-/// receipt says so; `--sandbox windows` refuses to run it at all.
+/// Git for Windows' sh can't start in the sandbox: in a run with sh checks, those run without it
+/// and each says so on the receipt, the cmd/pwsh checks still run in it, and the label says the
+/// run was partial. `--sandbox windows` refuses such a run.
 #[cfg(windows)]
 #[test]
-fn a_run_with_sh_checks_says_it_ran_without_the_windows_sandbox() {
+fn sh_checks_run_unsandboxed_and_say_so_while_the_others_stay_sandboxed() {
     if !windows_sandbox_works() {
         return;
     }
-    let d = project(CHECKS);
-    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
-    let (code, r) = countercheck(d.path(), &[]);
-    assert_eq!(code, 0, "{r:#}");
-    assert_eq!(
-        r["sandbox"],
-        "none (Git for Windows' sh can't run in the Windows sandbox; checks with shell = \"pwsh\" or \"cmd\" can)"
+    let outside = tempfile::tempdir().unwrap();
+    let sh_file = outside.path().join("from-sh.txt");
+    let cmd_file = outside.path().join("from-cmd.txt");
+    let checks = format!(
+        r#"[[check]]
+name = "sh"
+run = "echo x > '{sh}'"
+[[check]]
+name = "cmd"
+shell = "cmd"
+run = 'echo x> "{cmd}"'
+"#,
+        sh = slash(&sh_file),
+        cmd = cmd_file.display()
     );
+    let d = project(&checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    let sandbox = r["sandbox"].as_str().unwrap();
+    assert!(
+        sandbox.starts_with(
+            "windows-restricted-token, partial: sh checks ran unsandboxed (Git for Windows can't run in a restricted token)"
+        ),
+        "{sandbox}"
+    );
+    // The sh check really ran outside the sandbox (its write went through), and says so.
+    let sh = by_name(&r, "sh");
+    assert_eq!(sh["passed"], true, "{r:#}");
+    assert!(sh_file.exists());
+    assert_eq!(sh["sandboxed"], false, "{r:#}");
+    assert!(
+        sh["unsandboxed_reason"]
+            .as_str()
+            .unwrap()
+            .contains("Git for Windows' sh"),
+        "{r:#}"
+    );
+    // The cmd check in the same run stayed in it.
+    let cmd = by_name(&r, "cmd");
+    assert_eq!(cmd["passed"], false, "{r:#}");
+    assert!(!cmd_file.exists());
+    assert!(cmd.get("sandboxed").is_none(), "{r:#}");
+    // The text receipt marks the unsandboxed check too.
+    let out = Command::new(BIN)
+        .args(["verify", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("NOT sandboxed"), "{text}");
+    // Asked for by name, the sandbox refuses a run it can't fully confine.
     let out = Command::new(BIN)
         .args(["verify", "--sandbox", "windows", "--repo"])
         .arg(d.path())

@@ -459,6 +459,8 @@ mod tests {
             output_sha256: String::new(),
             network: false,
             writes: Vec::new(),
+            sandboxed: None,
+            unsandboxed_reason: None,
         }
     }
 
