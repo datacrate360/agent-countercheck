@@ -77,14 +77,21 @@ Probe 'write %TEMP%' {{ Set-Content -Path (Join-Path $env:TEMP 'appcontainer-pro
             }
         };
         let encoded = encode(make_script(setup));
-        for (variant, stdio) in [("stdio null", StdioConfig::Null), ("stdio inherit", StdioConfig::Inherit)] {
+        // rappct 0.13.3: Null stdio gives "The handle is invalid", and no environment gives error
+        // 203; the parent's environment (sorted, as Windows wants it) with inherited stdio works.
+        let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os().collect();
+        env.sort_by_key(|(k, _)| k.to_string_lossy().to_ascii_uppercase());
+        for (variant, stdio, env) in [
+            ("stdio inherit, parent env", StdioConfig::Inherit, Some(env.clone())),
+            ("stdio pipe, parent env", StdioConfig::Pipe, Some(env)),
+        ] {
             let opts = LaunchOptions {
                 exe: ps.into(),
                 cmdline: Some(format!(
                     "\"{ps}\" -NoProfile -NonInteractive -EncodedCommand {encoded}"
                 )),
                 cwd: Some(r"C:\Windows\System32".into()),
-                env: None,
+                env,
                 stdio,
                 ..Default::default()
             };
