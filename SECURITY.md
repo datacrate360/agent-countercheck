@@ -23,6 +23,13 @@ We aim to reply within a few days and to credit reporters who want credit.
 
 - The macOS sandbox is Seatbelt (`sandbox-exec`); the Linux sandbox is Landlock plus user, network and PID namespaces
   (`countercheck sandbox-exec`). Where a Linux system blocks unprivileged user namespaces, checks can reach the
-  internet (writes stay confined) and the receipt says so. Windows has no sandbox yet.
+  internet (writes stay confined) and the receipt says so.
+- The Windows sandbox is a write-restricted token plus a Job Object (`countercheck sandbox-exec`,
+  [ADR-0003](docs/decisions/0003-windows-sandbox.md)). It confines writes but **does not block the internet** (that
+  needs admin rights on Windows; the receipt says so). Not covered: drives without permissions (FAT/exFAT, some network
+  shares), objects with no DACL or that grant the logon session, and processes started through a Windows service
+  (Task Scheduler, WMI, COM), which run outside the Job Object.
+- `crates/countercheck-winsandbox` is the only crate allowed to use `unsafe` (Win32 calls with no safe crate); every
+  block carries a `SAFETY:` note, and a bug there is in scope.
 - Folders listed under `link` come from the worker's tree and are not part of the checked snapshot; receipts say so.
 - Receipts are sealed with a hash, not yet signed.

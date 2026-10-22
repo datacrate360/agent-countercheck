@@ -91,8 +91,11 @@ network = true
   there, not that it lacked the internet. A bare "Operation not permitted" with no path is what both a refused
   connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict.
 - On Linux the internet is blocked the same way when the system allows unprivileged user namespaces; where it
-  doesn't, checks have the internet and the receipt's `sandbox` says so. Windows has no sandbox yet: checks always
-  have the internet there, and the hint never shows.
+  doesn't, checks have the internet and the receipt's `sandbox` says so. On Windows the sandbox confines writes but
+  doesn't block the internet (that needs admin rights there; [ADR-0003](decisions/0003-windows-sandbox.md)), the
+  receipt's `sandbox` says so, and the no-internet hint never shows. Refused writes get the write hint there too
+  (sh's and Python's "Permission denied", PowerShell's "Access to the path ... is denied", cmd's bare "Access is
+  denied.").
 
 ### Checks that write to a fixed path
 
@@ -112,14 +115,16 @@ writes = ["/var/tmp/hermes-pytest-{uid}"]   # this check may also write here (an
 ```
 
 - Absolute paths, with the placeholders `{uid}`, `{user}` and `{home}`. No `.`/`..`, globs, quotes or `$`; at most 8
-  per check.
+  per check. On Windows write `C:/runner-cache` (forward slashes; a backslash is refused) or `{home}/...` (your
+  `USERPROFILE`); `{uid}` doesn't exist there and is refused.
 - **Refused** (an error before any check runs), after symlinks are followed: `/` and other one-folder paths, your home
   folder or anything above it, and the repository, anything inside it or above it. A check can't use `writes` to change
   the worker's files or yours.
 - It lives in the locked check file, so a worker can't grant itself a write location. The internet stays blocked
   unless the check also has `network = true`.
-- The receipt shows the resolved locations on that check (`writes allowed: ...`). It applies under the macOS and Linux
-  sandboxes; Windows has no sandbox yet, so nothing restricts writes there and `writes` has no effect.
+- The receipt shows the resolved locations on that check (`writes allowed: ...`). It applies under the macOS, Linux
+  and Windows sandboxes. On Windows the location is created if missing and given a permission entry for the run while
+  the check runs (and what is already in it, skipping links); the entry is taken off again when the check ends.
 
 ### Lock the test runner's settings
 

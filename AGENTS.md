@@ -9,8 +9,11 @@ code: the rules, one run step by step, and where each part lives.
 - `crates/countercheck-core`: pure logic, no I/O: `config` (`.countercheck/checks.toml`, matrix expansion), `protect`
   (protected paths, junk files), `receipt` (receipt, verdict rules, seal), `claim` (does an answer report a blocker),
   check types `matrix`, `forbid`, `golden`, `budget`, `coverage`.
+- `crates/countercheck-winsandbox`: the Windows sandbox's Win32 calls (restricted token, file permissions) behind a
+  safe API; the **only crate allowed `unsafe`**, every block with a `SAFETY:` note (ADR-0003).
 - `apps/countercheck`: the `countercheck` binary: `git.rs` (git CLI wrappers), `snapshot.rs` (clean copy, restore,
-  tree hash), `runner.rs` (run a check, macOS sandbox, timeouts, budget), `scan.rs` (forbid + coverage scans),
+  tree hash), `runner.rs` (run a check, macOS sandbox, timeouts, budget), `linux_sandbox.rs` / `windows_sandbox.rs` (the
+  `sandbox-exec` helper), `scan.rs` (forbid + coverage scans),
   `golden.rs`, `verify.rs` (the flow), `hook.rs` (agent hooks), `main.rs` (CLI).
 - `apps/countercheck/tests/verify.rs`: end-to-end tests with real git repos and the real binary.
   `crates/countercheck-core/tests/`: property tests and claim fixtures.
@@ -33,7 +36,7 @@ Follow the matching guide in `.claude/skills/` (Claude Code loads them automatic
 ## Golden rules
 
 1. **Never crash.** Non-test code has no `unwrap`/`expect`/`panic!`/`todo!`/`unreachable!` (denied at each crate
-   root); `unsafe` is forbidden. Return a plain-English error.
+   root); `unsafe` is forbidden (only `crates/countercheck-winsandbox` holds reviewed Win32 FFI). Return a plain-English error.
 2. **The worker never grades itself.** Checks come from the base revision. Protected files are restored from base.
    Never add an option that lets the worker's tree change what is checked without the receipt saying so.
 3. **Honest verdicts.** Only `verified` when locked checks ran and passed. Anything Countercheck can't prove is
