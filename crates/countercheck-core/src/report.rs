@@ -87,7 +87,8 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
     h.push_str("</head><body>");
     let _ = write!(
         h,
-        "<nav class=\"top\"><span class=\"brand\"><span class=\"mark\"></span>Agent&nbsp;Counter<em>check</em></span>{}</nav><main>",
+        "<nav class=\"top\"><span class=\"brand\">{}Agent&nbsp;Counter<em>check</em></span>{}</nav><main>",
+        MARK.trim_end(),
         if live.is_some() {
             "<span class=\"pill live\"><span class=\"dot\"></span><span id=\"live\">live</span></span>"
         } else {
@@ -406,6 +407,9 @@ const HEAD_START: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\
 
 /// Styles for the report and the live UI: `assets/report.css`, compiled into the binary.
 const STYLE: &str = include_str!("../assets/report.css");
+/// The logo (docs/assets/brand/mark-small.svg without filters), inline: the page's
+/// Content-Security-Policy allows no image files.
+const MARK: &str = include_str!("../assets/mark.svg");
 
 #[cfg(test)]
 mod tests {
