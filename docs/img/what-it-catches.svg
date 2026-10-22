@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="496" viewBox="0 0 960 496" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="522" viewBox="0 0 960 522" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>What each kind of cheating runs into, by operating system</title>
-  <desc>Caught on macOS, Linux and Windows: editing a protected test, weakening checks.toml, committing edits to move the base, saying done without running anything, claiming tests pass when they fail, editing the receipt afterwards. Caught on macOS only (the sandbox; Linux and Windows not yet): fetching the answer online during a check, writing outside the check folder. Not caught anywhere: mistakes the checks don't test.</desc>
+  <desc>Caught on macOS, Linux and Windows: editing a protected test, weakening checks.toml, committing edits to move the base, saying done without running anything, claiming tests pass when they fail, editing the receipt afterwards. Fetching the answer online during a check: caught on macOS, on Linux where user namespaces are allowed, not on Windows. Writing outside the check folder: caught on macOS and Linux, on Windows for pwsh and cmd checks but not sh checks. The receipt says which applied. Not caught anywhere: mistakes the checks don't test.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
@@ -9,7 +9,7 @@
       <path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/>
     </marker>
   </defs>
-  <rect width="960" height="496" rx="16" fill="#FFFFFF"/>
+  <rect width="960" height="522" rx="16" fill="#FFFFFF"/>
   <text letter-spacing="1" x="20" y="40" font-size="13" fill="#64748B" font-weight="700">THE AGENT…</text>
   <text letter-spacing="1" x="350" y="40" font-size="13" fill="#64748B" font-weight="700">WHAT STOPS IT</text>
   <text x="770" y="40" font-size="13" fill="#0F172A" font-weight="700" text-anchor="middle">macOS</text>
@@ -74,8 +74,8 @@
   <text x="350" y="345" font-size="13" fill="#334155">Sandbox: no internet (a check may opt in: network = true)</text>
   <circle cx="770" cy="340" r="11" fill="#0F766E"/>
   <text x="770" y="345" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
-  <circle cx="840" cy="340" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
-  <text x="840" y="344" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
+  <circle cx="840" cy="340" r="11" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+  <text x="840" y="345" font-size="13" fill="#0F766E" font-weight="700" text-anchor="middle">✓</text>
   <circle cx="910" cy="340" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
   <text x="910" y="344" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
   <rect x="12" y="364" width="936" height="40" rx="8" fill="#FFFFFF"/>
@@ -83,10 +83,10 @@
   <text x="350" y="389" font-size="13" fill="#334155">Sandbox: writes only inside the check's copy</text>
   <circle cx="770" cy="384" r="11" fill="#0F766E"/>
   <text x="770" y="389" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
-  <circle cx="840" cy="384" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
-  <text x="840" y="388" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
-  <circle cx="910" cy="384" r="11" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
-  <text x="910" y="388" font-size="13" fill="#64748B" font-weight="700" text-anchor="middle">–</text>
+  <circle cx="840" cy="384" r="11" fill="#0F766E"/>
+  <text x="840" y="389" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+  <circle cx="910" cy="384" r="11" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+  <text x="910" y="389" font-size="13" fill="#0F766E" font-weight="700" text-anchor="middle">✓</text>
   <rect x="12" y="408" width="936" height="40" rx="8" fill="#FFF7ED"/>
   <text x="24" y="433" font-size="13.5" fill="#0F172A" font-weight="700">Gets wrong what your checks don't test</text>
   <text x="350" y="433" font-size="13" fill="#C2410C" font-weight="700">Nothing can: add stronger checks (golden, coverage, budget)</text>
@@ -98,8 +98,10 @@
   <text x="910" y="433" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle">✗</text>
   <circle cx="30" cy="470" r="8" fill="#0F766E"/>
   <text x="46" y="475" font-size="12" fill="#334155">caught</text>
-  <circle cx="120" cy="470" r="8" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
-  <text x="136" y="475" font-size="12" fill="#334155">not yet: no sandbox (the receipt says so); run inside a container with --network none</text>
-  <circle cx="680" cy="470" r="8" fill="#C2410C"/>
-  <text x="696" y="475" font-size="12" fill="#334155">outside what any checker can see</text>
+  <circle cx="120" cy="470" r="8" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+  <text x="136" y="475" font-size="12" fill="#334155">partly: Linux where user namespaces are allowed; Windows for pwsh/cmd checks, not sh (the receipt says which)</text>
+  <circle cx="30" cy="496" r="8" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="46" y="501" font-size="12" fill="#334155">not blocked here (the receipt says so): run inside a container or VM with networking off</text>
+  <circle cx="680" cy="496" r="8" fill="#C2410C"/>
+  <text x="696" y="501" font-size="12" fill="#334155">outside what any checker can see</text>
 </svg>
