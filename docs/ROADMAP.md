@@ -56,8 +56,9 @@ section. Ideas and use cases are welcome as issues.
    database.
 7. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
 8. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
-9. **Windows sandbox**: run checks in an AppContainer (or a restricted token + Job Object) with no internet and
-   writes only in the check folder, like the macOS one. Windows runs checks without a sandbox today.
+9. **Windows sandbox, the rest** (v0.8.0 confines writes for `pwsh`/`cmd` checks): block the internet and cover
+   Git's `sh`, either with an AppContainer mode (needs read grants for toolchains) or an opt-in one-time admin setup
+   with a dedicated user (ADR-0003).
 10. **winget and scoop** packages for Windows (today: `install.ps1`, `pip`/`uvx`, or the zip from Releases).
 
 ## Later
