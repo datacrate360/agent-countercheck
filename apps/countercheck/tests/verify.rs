@@ -1658,6 +1658,68 @@ fn claude_hook_reads_the_final_message_from_the_transcript() {
     assert_eq!(line["agent_reported_blocker"], true);
 }
 
+/// Claude Code's Stop input has no model: the receipt takes it from the last assistant message in
+/// the transcript (after a `/model` switch, the new one; Claude Code's own `<synthetic>` messages
+/// are skipped).
+#[test]
+fn claude_hook_takes_the_model_from_the_transcript() {
+    let d = project(CHECKS);
+    let transcript = d.path().join("transcript.jsonl");
+    let msg = |model: &str, text: &str| {
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "model": model,
+            "content": [{"type": "text", "text": text}]}})
+    };
+    let lines = [
+        msg("claude-opus-5", "Looking."),
+        msg("claude-sonnet-5", "Fixed it, all tests pass."),
+        msg("<synthetic>", "API Error: overloaded"),
+    ];
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    fs::write(&transcript, text).unwrap();
+    let input = serde_json::json!({
+        "session_id": "s1", "transcript_path": transcript, "cwd": d.path(),
+        "hook_event_name": "Stop", "stop_hook_active": false,
+    })
+    .to_string();
+    claude_hook(&input, &[]);
+    let r = all_receipts(d.path());
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["worker"]["agent"], "claude-code");
+    assert_eq!(r[0]["worker"]["model"], "claude-sonnet-5");
+}
+
+/// Without a model in the transcript, the one SessionStart reported for this session is used.
+#[test]
+fn claude_hook_falls_back_to_the_model_from_session_start() {
+    let d = project(CHECKS);
+    let start = serde_json::json!({
+        "session_id": "s9", "cwd": d.path(), "hook_event_name": "SessionStart",
+        "source": "startup", "model": "claude-opus-5",
+    })
+    .to_string();
+    let (code, _) = run_hook("session-start", &start, &[]);
+    assert_eq!(code, 0);
+    let stop = serde_json::json!({
+        "session_id": "s9", "transcript_path": d.path().join("none.jsonl"), "cwd": d.path(),
+        "hook_event_name": "Stop", "stop_hook_active": false,
+        "last_assistant_message": "Fixed it.",
+    })
+    .to_string();
+    claude_hook(&stop, &[]);
+    let r = all_receipts(d.path());
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["worker"]["model"], "claude-opus-5");
+    // Another session has no recorded model, and none is made up.
+    let other = stop.replace("\"s9\"", "\"s10\"");
+    claude_hook(&other, &[]);
+    let r = all_receipts(d.path());
+    assert!(
+        r.iter()
+            .any(|x| x["worker"].get("model").is_none_or(|m| m.is_null())),
+        "{r:?}"
+    );
+}
+
 /// A Cortex Code session in `<home>/.snowflake/cortex/conversations/`: `<id>.json` with the
 /// messages either in `history` (`legacy`) or in `<id>.history.jsonl`. Returns the two paths.
 /// Layout from cortex-replay's parser (github.com/dataprofessor/cortex-replay, src/parser.mjs);

@@ -5,7 +5,7 @@
 use crate::{git, runner, verify};
 use countercheck_core::claim::reports_blocker;
 use countercheck_core::receipt::{
-    MAX_ROLE_CHARS, MAX_SESSION_CHARS, Receipt, Verdict, Worker, clean_label,
+    MAX_MODEL_CHARS, MAX_ROLE_CHARS, MAX_SESSION_CHARS, Receipt, Verdict, Worker, clean_label,
 };
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -63,7 +63,7 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
         claim: input.claim,
         worker: Worker {
             agent: Some(input.agent.to_string()),
-            model: input.model,
+            model: input.model.and_then(|m| clean_label(&m, MAX_MODEL_CHARS)),
             cost_usd: None,
             // Several agents on one project: each one's environment says what it is for.
             role: std::env::var("COUNTERCHECK_ROLE")
@@ -240,7 +240,15 @@ pub fn claude_stop() -> Result<(), String> {
             .ok_or("no working directory in hook input")?,
         claim,
         agent: agent_from_transcript(text("transcript_path").unwrap_or("")),
-        model: text("model").map(str::to_string),
+        // Claude Code's Stop input has no model (only SessionStart's does): read it from the last
+        // assistant message (right after a `/model` switch too), else what SessionStart recorded.
+        model: text("model")
+            .map(str::to_string)
+            .or_else(|| text("transcript_path").and_then(last_model))
+            .or_else(|| {
+                let cwd = text("cwd").map(PathBuf::from)?;
+                recorded_model(&cwd, text("session_id")?)
+            }),
         session: text("session_id").unwrap_or("").to_string(),
     };
     let session = input.session.clone();
@@ -295,6 +303,13 @@ fn session_file(cwd: &Path, session: &str) -> Option<PathBuf> {
     )
 }
 
+/// The model SessionStart recorded for this session, if any.
+fn recorded_model(cwd: &Path, session: &str) -> Option<String> {
+    let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    v.get("model")?.as_str().map(str::to_string)
+}
+
 /// The recorded start commit, if there is one and it still exists.
 fn recorded_base(cwd: &Path, session: &str) -> Option<String> {
     let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
@@ -338,8 +353,17 @@ pub fn session_start() -> Result<(), String> {
         .unwrap_or(0);
     std::fs::write(
         &file,
-        serde_json::json!({ "session_id": session, "base": head, "recorded_at_unix": now })
-            .to_string(),
+        serde_json::json!({
+            "session_id": session,
+            "base": head,
+            "recorded_at_unix": now,
+            // Claude Code gives the model only here; the stop hook falls back to it.
+            "model": payload
+                .get("model")
+                .and_then(|v| v.as_str())
+                .and_then(|m| clean_label(m, MAX_MODEL_CHARS)),
+        })
+        .to_string(),
     )
     .map_err(|e| format!("{}: {e}", file.display()))
 }
@@ -460,6 +484,23 @@ fn last_in_lines(text: &str) -> Option<String> {
     text.lines().rev().find_map(|line| {
         let v: serde_json::Value = serde_json::from_str(line).ok()?;
         assistant_text(&v)
+    })
+}
+
+/// The model of the last assistant message in a JSON Lines transcript (Claude Code writes
+/// `{"type":"assistant","message":{"model":...}}`). `<synthetic>` marks messages Claude Code made up
+/// itself (e.g. an API error notice), not a model, so those are skipped.
+fn last_model(path: &str) -> Option<String> {
+    let (text, _) = read_tail(&home_path(path))?;
+    text.lines().rev().find_map(|line| {
+        let v: serde_json::Value = serde_json::from_str(line).ok()?;
+        let msg = v.get("message").unwrap_or(&v);
+        let assistant = v.get("type").and_then(|t| t.as_str()) == Some("assistant")
+            || msg.get("role").and_then(|r| r.as_str()) == Some("assistant");
+        let model = msg.get("model")?.as_str()?;
+        (assistant && !model.starts_with('<'))
+            .then(|| clean_label(model, MAX_MODEL_CHARS))
+            .flatten()
     })
 }
 

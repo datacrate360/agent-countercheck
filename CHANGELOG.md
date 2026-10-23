@@ -5,6 +5,9 @@
 - **Many agents, one project:** `verify --role "Security review"` (or `COUNTERCHECK_ROLE` in the agent's environment,
   which the hooks read) labels what each agent is for; the hooks also save the agent's session id. Both go on the
   sealed receipt (left out when unset, so older receipts read the same).
+- **Fix:** the Claude Code hook now records the model. Claude Code's Stop input never includes it (only
+  SessionStart's does), so receipts had none; the hook reads it from the last assistant message in the transcript
+  (the new model after a `/model` switch), else from what the SessionStart hook recorded.
 - **Report and live UI redesign:** the project's name and folder (home shown as `~`) at the top; a verdict bar; an
   **Agents** panel with one row per agent (its role, else the tool): its runs as coloured dots, its pass count and its
   latest claim. Filter the runs by verdict or by agent (pure CSS, still no script in `report`; the live UI keeps your

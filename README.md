@@ -338,8 +338,9 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 | Claude Code hook | `<project>/.claude/settings.json` | step 4a |
 | Hermes hook | `~/.hermes/config.yaml` or `~/.hermes/profiles/<name>/config.yaml` | step 4b; approvals in that profile's `shell-hooks-allowlist.json` |
 
-There are no per-agent profiles. Each receipt names its agent (the hooks fill it in, `--agent` sets it by hand), so
-several agents on one project end up side by side in the same list, each session with its own "before" commit.
+There are no per-agent profiles. Each receipt names its agent and model (the hooks fill both in; `--agent` and
+`--model` set them by hand), so several agents on one project end up side by side in the same list, each session with
+its own "before" commit.
 
 Several agents on one project, each with its own job (UI design, security review, data pipeline, …)? Give each one a
 **role**: set `COUNTERCHECK_ROLE` in the environment that agent runs in (its hook reads it), or pass `--role` to

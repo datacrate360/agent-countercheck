@@ -101,6 +101,8 @@ pub struct Worker {
 
 /// Longest role kept on a receipt (characters).
 pub const MAX_ROLE_CHARS: usize = 60;
+/// Longest model name kept on a receipt from a hook (characters).
+pub const MAX_MODEL_CHARS: usize = 100;
 /// Longest session id kept on a receipt (characters).
 pub const MAX_SESSION_CHARS: usize = 128;
 
