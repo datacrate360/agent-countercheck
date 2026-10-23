@@ -75,6 +75,10 @@ enum Cmd {
         /// Which model did the work.
         #[arg(long)]
         model: Option<String>,
+        /// What this agent is for, e.g. "UI design" or "security review", to tell several agents
+        /// on one project apart (default: the COUNTERCHECK_ROLE environment variable).
+        #[arg(long)]
+        role: Option<String>,
         /// Cost of the work in US dollars, if the caller knows it.
         #[arg(long)]
         cost_usd: Option<f64>,
@@ -243,6 +247,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             claim,
             agent,
             model,
+            role,
             cost_usd,
             sandbox,
             json,
@@ -330,6 +335,15 @@ fn run(cli: Cli) -> Result<u8, String> {
                     agent,
                     model,
                     cost_usd,
+                    role: role
+                        .or_else(|| std::env::var("COUNTERCHECK_ROLE").ok())
+                        .and_then(|r| {
+                            countercheck_core::receipt::clean_label(
+                                &r,
+                                countercheck_core::receipt::MAX_ROLE_CHARS,
+                            )
+                        }),
+                    session: None,
                 },
                 sandbox,
                 sandbox_required,

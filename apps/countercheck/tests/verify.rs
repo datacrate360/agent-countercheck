@@ -1330,6 +1330,110 @@ fn report_writes_a_page_of_every_run() {
     assert!(!String::from_utf8_lossy(&status.stdout).contains("report.html"));
 }
 
+/// Every receipt in a folder, parsed.
+fn all_receipts(dir: &Path) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    for e in fs::read_dir(dir.join(".countercheck/receipts")).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().is_some_and(|x| x == "json") {
+            out.push(serde_json::from_str(&fs::read_to_string(p).unwrap()).unwrap());
+        }
+    }
+    out
+}
+
+/// Several agents on one project: `--role`, else `COUNTERCHECK_ROLE`, names each one on its receipt
+/// (cleaned up, sealed with the rest); the report lists one row per agent and the project's path.
+#[test]
+fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
+    let d = project(CHECKS);
+    let (_, by_flag) = countercheck(
+        d.path(),
+        &["--role", "  UI\n design ", "--agent", "claude-code"],
+    );
+    assert_eq!(by_flag["worker"]["role"], "UI design");
+    let out = Command::new(BIN)
+        .args([
+            "verify",
+            "--json",
+            "--sandbox",
+            "none",
+            "--agent",
+            "codex",
+            "--repo",
+        ])
+        .arg(d.path())
+        .env("COUNTERCHECK_ROLE", "Security review")
+        .output()
+        .unwrap();
+    let by_env: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(by_env["worker"]["role"], "Security review");
+    // No role: the field is left out, so older readers see the receipt they know.
+    let (_, none) = countercheck(d.path(), &["--role", " \t"]);
+    assert!(none["worker"].get("role").is_none(), "{none}");
+    // The role is sealed like everything else.
+    let id = by_flag["id"].as_str().unwrap();
+    let file = d
+        .path()
+        .join(".countercheck/receipts")
+        .join(format!("{id}.json"));
+    let text = fs::read_to_string(&file).unwrap();
+    fs::write(&file, text.replace("UI design", "Release")).unwrap();
+    let show = Command::new(BIN)
+        .args(["show"])
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert_ne!(
+        show.status.code(),
+        Some(0),
+        "an edited role must break the seal"
+    );
+    fs::write(&file, text).unwrap();
+
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .env("HOME", d.path().parent().unwrap())
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
+    assert!(html.contains("<h2>3 agents on this project</h2>"), "{html}");
+    for name in ["<b>UI design</b>", "<b>Security review</b>"] {
+        assert!(html.contains(name), "{name}: {html}");
+    }
+    // The home folder is shown as ~, so a shared page doesn't carry the user's name.
+    let leaf = d.path().file_name().unwrap().to_string_lossy();
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(
+        html.contains(&format!("<code>~{sep}{leaf}</code>")),
+        "{html}"
+    );
+}
+
+/// A hook records the agent's session, so one session's runs group together; the role comes from
+/// the agent's environment.
+#[test]
+fn hooks_record_the_session_and_the_role() {
+    let d = project(CHECKS);
+    let (code, _) = hermes_hook(
+        &hermes_payload(d.path()),
+        &[("COUNTERCHECK_ROLE", "Data pipeline")],
+    );
+    assert_eq!(code, 0);
+    let r = all_receipts(d.path());
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["worker"]["session"], "s1");
+    assert_eq!(r[0]["worker"]["role"], "Data pipeline");
+    assert_eq!(r[0]["worker"]["agent"], "hermes");
+}
+
 /// A receipt edited after it was written shows as a broken seal; no receipts is a plain error.
 #[test]
 fn report_flags_an_edited_receipt_and_needs_receipts() {
@@ -1552,6 +1656,68 @@ fn claude_hook_reads_the_final_message_from_the_transcript() {
     let line: serde_json::Value =
         serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
     assert_eq!(line["agent_reported_blocker"], true);
+}
+
+/// Claude Code's Stop input has no model: the receipt takes it from the last assistant message in
+/// the transcript (after a `/model` switch, the new one; Claude Code's own `<synthetic>` messages
+/// are skipped).
+#[test]
+fn claude_hook_takes_the_model_from_the_transcript() {
+    let d = project(CHECKS);
+    let transcript = d.path().join("transcript.jsonl");
+    let msg = |model: &str, text: &str| {
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "model": model,
+            "content": [{"type": "text", "text": text}]}})
+    };
+    let lines = [
+        msg("claude-opus-5", "Looking."),
+        msg("claude-sonnet-5", "Fixed it, all tests pass."),
+        msg("<synthetic>", "API Error: overloaded"),
+    ];
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    fs::write(&transcript, text).unwrap();
+    let input = serde_json::json!({
+        "session_id": "s1", "transcript_path": transcript, "cwd": d.path(),
+        "hook_event_name": "Stop", "stop_hook_active": false,
+    })
+    .to_string();
+    claude_hook(&input, &[]);
+    let r = all_receipts(d.path());
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["worker"]["agent"], "claude-code");
+    assert_eq!(r[0]["worker"]["model"], "claude-sonnet-5");
+}
+
+/// Without a model in the transcript, the one SessionStart reported for this session is used.
+#[test]
+fn claude_hook_falls_back_to_the_model_from_session_start() {
+    let d = project(CHECKS);
+    let start = serde_json::json!({
+        "session_id": "s9", "cwd": d.path(), "hook_event_name": "SessionStart",
+        "source": "startup", "model": "claude-opus-5",
+    })
+    .to_string();
+    let (code, _) = run_hook("session-start", &start, &[]);
+    assert_eq!(code, 0);
+    let stop = serde_json::json!({
+        "session_id": "s9", "transcript_path": d.path().join("none.jsonl"), "cwd": d.path(),
+        "hook_event_name": "Stop", "stop_hook_active": false,
+        "last_assistant_message": "Fixed it.",
+    })
+    .to_string();
+    claude_hook(&stop, &[]);
+    let r = all_receipts(d.path());
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["worker"]["model"], "claude-opus-5");
+    // Another session has no recorded model, and none is made up.
+    let other = stop.replace("\"s9\"", "\"s10\"");
+    claude_hook(&other, &[]);
+    let r = all_receipts(d.path());
+    assert!(
+        r.iter()
+            .any(|x| x["worker"].get("model").is_none_or(|m| m.is_null())),
+        "{r:?}"
+    );
 }
 
 /// A Cortex Code session in `<home>/.snowflake/cortex/conversations/`: `<id>.json` with the

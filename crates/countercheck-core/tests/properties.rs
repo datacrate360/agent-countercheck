@@ -170,6 +170,8 @@ fn receipt() -> impl Strategy<Value = Receipt> {
             proptest::option::of(text()),
             proptest::option::of(text()),
             cost(),
+            proptest::option::of(text()),
+            proptest::option::of(text()),
         ),
         (proptest::option::of(text()), claim_status(), any::<bool>()),
         (
@@ -191,7 +193,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
         .prop_map(
             |(
                 (created_at, version, base_rev, base_commit, head_commit, dirty),
-                (agent, model, cost_usd),
+                (agent, model, cost_usd, role, session),
                 (claim, claim_status, checks_locked),
                 (checks_source, sandbox, tree_sha256, linked, checks_external),
                 (protected_changes, checks, verdict, reasons, uncovered, watched),
@@ -211,6 +213,8 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                     agent,
                     model,
                     cost_usd,
+                    role,
+                    session,
                 },
                 claim,
                 claim_status,
@@ -289,7 +293,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 39;
+const EDITS: usize = 41;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -354,6 +358,8 @@ fn edit(r: &mut Receipt, which: usize) {
         29 => first_check(r).output_sha256.push('x'),
         30 => r.verdict = other_verdict(r.verdict),
         31 => first_check(r).network ^= true,
+        39 => r.worker.role = other_opt(&r.worker.role),
+        40 => r.worker.session = other_opt(&r.worker.session),
         36 => first_check(r).writes.push("/var/tmp/x".into()),
         37 => match &mut r.checks_external {
             Some(e) => e.pinned ^= true,
@@ -1152,15 +1158,21 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
     /// Whatever text a worker puts in a claim, check name, command, output or reason, every `<`
-    /// in the page opens one of the report's own tags, and the page never contains a script.
+    /// in the page opens one of the report's own tags, and the page never contains a script. The
+    /// agent's role, tool and model and the project path are hostile too (they reach the agents panel
+    /// and the filters).
     #[test]
     fn report_text_never_becomes_markup(
         r in receipt(), claim in hostile(), name in hostile(), run in hostile(),
         out in hostile(), reason in hostile(), file in hostile(), seal_ok in any::<bool>(),
+        role in hostile(), agent in hostile(), model in hostile(), path in hostile(),
     ) {
-        use countercheck_core::report::{render_html, Entry};
+        use countercheck_core::report::{render_html, Entry, Page};
         let mut r = r;
         r.claim = Some(claim);
+        r.worker.role = Some(role);
+        r.worker.agent = Some(agent);
+        r.worker.model = Some(model);
         r.reasons.push(reason);
         if let Some(c) = r.checks.first_mut() {
             c.name = name;
@@ -1168,14 +1180,16 @@ proptest! {
             c.output_tail = out;
             c.passed = false;
         }
-        let html = render_html(&[Entry { file, receipt: r, seal_ok }], "t", "now");
+        let page = Page { title: "t", path: &path, generated_at: "now" };
+        let html = render_html(&[Entry { file, receipt: r, seal_ok }], &page);
         let tag = regex::Regex::new(
-            r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer|nav|q|em|svg|defs|radialGradient|linearGradient|stop|rect|path|circle|ellipse|polyline)[ >]",
+            r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer|nav|q|em|i|small|label|input|svg|defs|radialGradient|linearGradient|stop|rect|path|circle|ellipse|polyline)[ >]",
         ).unwrap();
         for (i, _) in html.match_indices('<') {
             prop_assert!(tag.is_match(&html[i..]), "unexpected markup at {}: {}", i, html[i..].chars().take(40).collect::<String>());
         }
         prop_assert!(!html.to_lowercase().contains("<script"));
-        prop_assert_eq!(html.matches("<style>").count(), 1);
+        // The stylesheet, and the filter rules (built from numbers only).
+        prop_assert_eq!(html.matches("<style>").count(), 2);
     }
 }
