@@ -555,6 +555,20 @@ after `countercheck windows-setup` (experimental). A GitHub Action on the
 allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, hooks for Codex and
 Cursor. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## ⭐ Why star it?
+
+I use Countercheck myself every day on my own agents' work, so I will keep maintaining it.
+
+- **New agents and new fields:** if you need another agent hooked up (Codex, Cursor, OpenCode, …) or checks for your
+  kind of work, [open an issue](https://github.com/datacrate360/agent-countercheck/issues) and I'll add them step by
+  step.
+- **Usable, easy, free:** every agent and platform it supports should work, take minutes to set up, and stay free
+  (MIT).
+- **When agents change, I'll fix it:** if an agent changes its hooks or output, or finds a new way to fake "done",
+  Countercheck gets updated to catch it.
+
+Just a star, so you can find it the next time an agent tells you it's done. ⭐
+
 ## Contribute
 
 Countercheck gets better with every field it learns about, and most of that needs **no Rust**: a domain is covered by
