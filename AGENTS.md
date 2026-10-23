@@ -63,5 +63,4 @@ cargo test --workspace
 cargo build --release && python3 eval/validate.py
 ```
 
-Commits are signed off (`git commit -s`, see CONTRIBUTING.md). Work happens on branch `DEV`; promotion DEV → TEST →
-PROD.
+Commits are signed off (`git commit -s`, see CONTRIBUTING.md). Work happens on branch `DEV`; promotion DEV → PROD.

@@ -66,7 +66,7 @@ Every behaviour change needs a test that fails without the change and passes wit
 ## Pull requests
 
 - Open them against **`DEV`**. GitHub shows `PROD` (the latest release) by default and suggests it as the base:
-  switch the base to `DEV`. `TEST` and `PROD` are release branches maintained by the owner.
+  switch the base to `DEV`. `PROD` is the release branch, maintained by the owner.
 - One topic per pull request; fill in the template (what, why, how tested).
 - Add a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md) for anything users notice.
 - AI-assisted contributions are welcome. You are responsible for them: you've read the code, run the gate, and can
