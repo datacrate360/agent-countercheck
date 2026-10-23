@@ -35,9 +35,10 @@ def absolute(target: str, ref: str, image: bool) -> str:
 
 def rewrite(text: str, ref: str) -> str:
     def md(m: re.Match) -> str:
-        # An image when the link text starts with `![`: look back from the `](`.
+        # An image when its `[alt]` starts with `![`. A link whose text ends with an image,
+        # `[![badge](x.svg)](LICENSE)`, ends in `)` before its `](`: that one is a link, not an image.
         start = text.rfind("[", 0, m.start() + 1)
-        image = start > 0 and text[start - 1] == "!"
+        image = text[m.start() - 1] != ")" and start > 0 and text[start - 1] == "!"
         return m.group(1) + absolute(m.group(2), ref, image) + m.group(3)
 
     text = MD.sub(md, text)
@@ -70,12 +71,19 @@ def main() -> int:
             for p in re.findall(rf"https://(?:raw\.githubusercontent|github)\.com/{REPO}/(?:blob/)?PROD/([^)\s\"'#]+)", out)
             if not (README.parent / p).exists()
         ]
+        raw_pages = [
+            u for u in re.findall(rf"https://raw\.githubusercontent\.com/{REPO}/PROD/([^)\s\"']+)", out)
+            if not u.split("#")[0].lower().endswith(IMAGE_EXT)
+            and f"raw.githubusercontent.com/{REPO}/PROD/{u}" not in text  # written raw on purpose (curl | sh)
+        ]
+        for u in raw_pages:
+            print(f"a page linked as a raw file (should be github.com/.../blob/): {u}")
         for t in left:
             print(f"still relative: {t}")
         for p in missing:
             print(f"links to a file that doesn't exist: {p}")
         print(f"{len(MD.findall(text)) + len(HTML.findall(text))} links checked")
-        return 1 if left or missing else 0
+        return 1 if left or missing or raw_pages else 0
     out = rewrite(text, sys.argv[1])
     README.write_text(out, encoding="utf-8")
     print(f"README.md: links pinned to {sys.argv[1]} for PyPI")

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.1 (2026-10-23)
+
+- **PyPI page:** the licence badge links to the licence page on GitHub (it opened the raw file). The README link check
+  now also fails when a page would be linked as a raw file.
+
 ## v0.10.0 (2026-10-23)
 
 A GitHub Action, and a working PyPI page.

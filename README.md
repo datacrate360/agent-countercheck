@@ -156,7 +156,7 @@ Pick one. Every option gives you the same `countercheck` command.
 Check it worked:
 
 ```sh
-countercheck --version        # countercheck 0.10.0
+countercheck --version        # countercheck 0.10.1
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win)**: Countercheck calls `git`, and checks run
@@ -312,7 +312,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: datacrate360/agent-countercheck@v0.10.0
+      - uses: datacrate360/agent-countercheck@v0.10.1
 ```
 
 Any other CI: when the work is already committed on a branch, pass where it started:
