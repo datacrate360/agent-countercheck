@@ -129,6 +129,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - name: README links absolute for PyPI
+        shell: bash
+        run: $(command -v python3 || command -v python) packaging/pypi_readme.py "$GITHUB_REF_NAME"
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
@@ -142,6 +145,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: README links absolute for PyPI
+        shell: bash
+        run: $(command -v python3 || command -v python) packaging/pypi_readme.py "$GITHUB_REF_NAME"
       - uses: PyO3/maturin-action@v1
         with: { command: sdist, args: --out dist }
       - uses: actions/upload-artifact@v4

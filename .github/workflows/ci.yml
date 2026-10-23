@@ -32,6 +32,8 @@ jobs:
         run: cargo test --workspace
       - name: Eval tasks are valid
         run: cargo build --release && python3 eval/validate.py
+      - name: README links work on PyPI once made absolute
+        run: python3 packaging/pypi_readme.py --check
       - name: Recipes give the expected verdicts
         run: sh recipes/oracle-to-snowflake/test/run-test.sh "$PWD/target/release/countercheck"
 
