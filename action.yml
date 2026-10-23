@@ -69,6 +69,7 @@ outputs:
 runs:
   using: composite
   steps:
+    # The installers from this action's own checkout (pinned with the action), which verify the download's SHA-256.
     - name: Install countercheck
       shell: bash
       env:
@@ -83,10 +84,9 @@ runs:
         mkdir -p "$dir"
         if [ "$RUNNER_OS" = "Windows" ]; then
           COUNTERCHECK_VERSION="$v" COUNTERCHECK_INSTALL_DIR="$(cygpath -w "$dir")" \
-            pwsh -NoProfile -Command 'irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 | iex'
+            pwsh -NoProfile -File "$(cygpath -w "$GITHUB_ACTION_PATH/install.ps1")"
         else
-          curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh \
-            | COUNTERCHECK_VERSION="$v" COUNTERCHECK_INSTALL_DIR="$dir" sh
+          COUNTERCHECK_VERSION="$v" COUNTERCHECK_INSTALL_DIR="$dir" sh "$GITHUB_ACTION_PATH/install.sh"
         fi
         echo "$dir" >> "$GITHUB_PATH"
 

@@ -4,6 +4,9 @@
 
 A GitHub Action, and a working PyPI page.
 
+- **Installers:** when GitHub's API rate-limits the "latest version" lookup (common on shared CI runners), `install.sh`
+  and `install.ps1` read it from the `releases/latest` page instead of failing. The Action uses the installers from its
+  own pinned checkout.
 - **GitHub Action**: `uses: datacrate360/agent-countercheck@<tag>` verifies every pull request with the checks
   from its base commit; a job summary (verdict, checks, protected changes, failing output), outputs, and the receipt
   plus an HTML report as an artifact. `fail-on`: unverified (default), failed or never. Linux, macOS and Windows

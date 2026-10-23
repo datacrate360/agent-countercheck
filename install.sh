@@ -48,8 +48,14 @@ esac
 version="${COUNTERCHECK_VERSION:-}"
 if [ -z "$version" ]; then
   tmp_json="$(mktemp)"
-  fetch "https://api.github.com/repos/$REPO/releases/latest" "$tmp_json" || die "could not look up the latest release"
-  version="$(sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' "$tmp_json" | head -n 1)"
+  if fetch "https://api.github.com/repos/$REPO/releases/latest" "$tmp_json" 2>/dev/null; then
+    version="$(sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' "$tmp_json" | head -n 1)"
+  elif command -v curl >/dev/null 2>&1; then
+    # The API is rate-limited per IP (shared CI runners hit it): github.com/<repo>/releases/latest redirects to the tag.
+    url="$(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" \
+      || die "could not look up the latest release; set COUNTERCHECK_VERSION"
+    case "$url" in */tag/*) version="${url##*/tag/}" ;; esac
+  fi
   rm -f "$tmp_json"
   [ -n "$version" ] || die "could not find the latest version; set COUNTERCHECK_VERSION"
 fi

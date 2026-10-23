@@ -44,10 +44,17 @@
     if (-not $version) {
         try {
             $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -UseBasicParsing
+            $version = [string]$latest.tag_name
         } catch {
-            Die 'could not look up the latest release; set COUNTERCHECK_VERSION'
+            # The API is rate-limited per IP (shared CI runners hit it): github.com/<repo>/releases/latest redirects to the tag.
+            try {
+                $r = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -UseBasicParsing -Method Head
+                $uri = if ($r.BaseResponse.ResponseUri) { $r.BaseResponse.ResponseUri } else { $r.BaseResponse.RequestMessage.RequestUri }
+                if ([string]$uri -match '/tag/([^/]+)$') { $version = $Matches[1] }
+            } catch {
+                Die 'could not look up the latest release; set COUNTERCHECK_VERSION'
+            }
         }
-        $version = [string]$latest.tag_name
         if (-not $version) { Die 'could not find the latest version; set COUNTERCHECK_VERSION' }
     }
     $version = $version -replace '^v', ''

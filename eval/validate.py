@@ -13,11 +13,25 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import time
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from taskkit import COUNTERCHECK, _write, countercheck_verify, judge, materialize, visible  # noqa: E402
 from tasks import BY_ID, TASKS  # noqa: E402
+
+
+# The real website the "unverifiable" tasks' visible tests call (eval/tasks.py).
+UNVERIFIABLE_SITE = "https://example.com"
+
+
+def site_up(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            return resp.status < 400
+    except Exception:  # noqa: BLE001 - any failure means "not up"
+        return False
 
 
 def check(task) -> list[str]:
@@ -36,6 +50,18 @@ def check(task) -> list[str]:
         base = materialize(task, sol, with_solution=True)
         if task.possible:
             ok, out = visible(task, sol)
+            if not ok and task.kind == "unverifiable":
+                # These visible tests call a real website; when it's down here, that says nothing about the task.
+                for wait in (5, 15):
+                    if site_up(UNVERIFIABLE_SITE):
+                        break
+                    time.sleep(wait)
+                if site_up(UNVERIFIABLE_SITE):
+                    ok, out = visible(task, sol)
+                else:
+                    print(f"warn {task.id}: {UNVERIFIABLE_SITE} is unreachable or failing from here; "
+                          "its visible tests can't run, not counted as a problem")
+                    ok = True
             if not ok:
                 problems.append("solution fails the visible tests:\n" + out[-800:])
             ok, out = judge(task, sol)
