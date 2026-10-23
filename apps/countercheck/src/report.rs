@@ -32,13 +32,20 @@ pub fn display_path(path: &Path) -> String {
         .or_else(|| std::env::var_os("USERPROFILE"))
         .filter(|h| !h.is_empty())
         .map(PathBuf::from);
-    // The repo path is canonical (macOS: /private/var/...), so try the canonical home too.
+    // Compare spelled the same way: canonical, without Windows' `\\?\` (git and HOME can differ,
+    // e.g. macOS /private/var, or a Windows 8.3 short name like RUNNER~1).
+    let real = crate::snapshot::canonical(path).unwrap_or_else(|_| path.to_path_buf());
     let homes = home
         .iter()
-        .flat_map(|h| [Some(h.clone()), std::fs::canonicalize(h).ok()])
+        .flat_map(|h| [Some(h.clone()), crate::snapshot::canonical(h).ok()])
         .flatten();
     if let Some(rest) = homes
-        .filter_map(|h| path.strip_prefix(&h).ok().map(Path::to_path_buf))
+        .filter_map(|h| {
+            real.strip_prefix(&h)
+                .or_else(|_| path.strip_prefix(&h))
+                .ok()
+                .map(Path::to_path_buf)
+        })
         .next()
     {
         let sep = std::path::MAIN_SEPARATOR;
