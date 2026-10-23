@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **PyPI page:** the README's images and links work there (the logo, diagrams and demo were broken). The release
+  pins them to the tag's absolute URLs while building the Python packages (`packaging/pypi_readme.py`); CI checks
+  every link resolves.
+
 ## v0.9.0 (2026-10-22)
 
 The full sandbox on Windows (opt-in, experimental) and a logo.
