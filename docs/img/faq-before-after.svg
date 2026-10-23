@@ -1,48 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="450" viewBox="0 0 960 450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="450" viewBox="0 0 960 450" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>How Countercheck knows the before and after versions of your tests</title>
   <desc>Git keeps every committed version. Before: the base commit, recorded when the agent session starts (or HEAD, or --base). After: the files on disk when the agent says done. git diff lists what changed. Files matching protected (your tests) and .countercheck are taken from the base commit with git show; everything else comes from the agent. The checks run in that clean copy; the agent's own folder is never touched.</desc>
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#55554F"/></marker>
     <marker id="arrowCoral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker>
-    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0F766E"/></marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0F4C4C"/></marker>
   </defs>
   <rect width="960" height="450" rx="16" fill="#FFFFFF"/>
-  <text x="40" y="38" font-size="13" fill="#64748B" font-weight="700" letter-spacing="1">GIT TIMELINE</text>
-  <line x1="60" y1="78" x2="900" y2="78" stroke="#94A3B8" stroke-width="3"/>
-  <circle cx="100" cy="78" r="9" fill="#0F766E"/>
-  <text x="100" y="108" font-size="14" fill="#0F172A" font-weight="700" text-anchor="middle">base commit</text>
-  <text x="100" y="126" font-size="12" fill="#64748B" text-anchor="middle">session start / HEAD / --base</text>
-  <circle cx="480" cy="78" r="9" fill="#64748B"/>
-  <text x="480" y="108" font-size="14" fill="#0F172A" font-weight="700" text-anchor="middle">agent works</text>
-  <text x="480" y="126" font-size="12" fill="#64748B" text-anchor="middle">edits files</text>
+  <text x="40" y="38" font-size="13" fill="#6B6B66" font-weight="700" letter-spacing="1">GIT TIMELINE</text>
+  <line x1="60" y1="78" x2="900" y2="78" stroke="#A3A39C" stroke-width="3"/>
+  <circle cx="100" cy="78" r="9" fill="#0F4C4C"/>
+  <text x="100" y="108" font-size="14" fill="#141414" font-weight="700" text-anchor="middle">base commit</text>
+  <text x="100" y="126" font-size="12" fill="#6B6B66" text-anchor="middle">session start / HEAD / --base</text>
+  <circle cx="480" cy="78" r="9" fill="#6B6B66"/>
+  <text x="480" y="108" font-size="14" fill="#141414" font-weight="700" text-anchor="middle">agent works</text>
+  <text x="480" y="126" font-size="12" fill="#6B6B66" text-anchor="middle">edits files</text>
   <circle cx="860" cy="78" r="9" fill="#C2410C"/>
-  <text x="860" y="108" font-size="14" fill="#0F172A" font-weight="700" text-anchor="middle">"done"</text>
-  <text x="860" y="126" font-size="12" fill="#64748B" text-anchor="middle">files on disk now</text>
-  <text x="100" y="62" font-size="12" fill="#0F766E" font-weight="800" text-anchor="middle" letter-spacing="1">BEFORE</text>
+  <text x="860" y="108" font-size="14" fill="#141414" font-weight="700" text-anchor="middle">"done"</text>
+  <text x="860" y="126" font-size="12" fill="#6B6B66" text-anchor="middle">files on disk now</text>
+  <text x="100" y="62" font-size="12" fill="#0F4C4C" font-weight="800" text-anchor="middle" letter-spacing="1">BEFORE</text>
   <text x="860" y="62" font-size="12" fill="#C2410C" font-weight="800" text-anchor="middle" letter-spacing="1">AFTER</text>
-  <rect x="20" y="150" width="280" height="150" rx="12" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.5"/>
-  <text x="36" y="174" font-size="13" fill="#134E4A" font-weight="700" letter-spacing="1">BASE COMMIT (git show)</text>
-  <text x="36" y="202" font-size="13" fill="#0F172A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">tests/test_pricing.py</text>
-  <text x="36" y="222" font-size="12" fill="#334155" font-family="SFMono-Regular, Menlo, Consolas, monospace">assert discount(10,150) == 0</text>
-  <text x="36" y="252" font-size="13" fill="#0F172A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">.countercheck/checks.toml</text>
-  <text x="36" y="272" font-size="12" fill="#334155">the rules, locked</text>
+  <rect x="20" y="150" width="280" height="150" rx="12" fill="#EEF4F3" stroke="#0F4C4C" stroke-width="1.5"/>
+  <text x="36" y="174" font-size="13" fill="#0B3A3A" font-weight="700" letter-spacing="1">BASE COMMIT (git show)</text>
+  <text x="36" y="202" font-size="13" fill="#141414" font-weight="600" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">tests/test_pricing.py</text>
+  <text x="36" y="222" font-size="12" fill="#3A3A36" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">assert discount(10,150) == 0</text>
+  <text x="36" y="252" font-size="13" fill="#141414" font-weight="600" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">.countercheck/checks.toml</text>
+  <text x="36" y="272" font-size="12" fill="#3A3A36">the rules, locked</text>
   <rect x="660" y="150" width="280" height="150" rx="12" fill="#FFF7ED" stroke="#C2410C" stroke-width="1.5"/>
   <text x="676" y="174" font-size="13" fill="#C2410C" font-weight="700" letter-spacing="1">AGENT'S FOLDER (git diff)</text>
-  <text x="676" y="202" font-size="13" fill="#0F172A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">tests/test_pricing.py</text>
-  <text x="676" y="222" font-size="12" fill="#C2410C" font-weight="700" font-family="SFMono-Regular, Menlo, Consolas, monospace">@unittest.skip   ← edited!</text>
-  <text x="676" y="252" font-size="13" fill="#0F172A" font-weight="600" font-family="SFMono-Regular, Menlo, Consolas, monospace">src/pricing.py</text>
-  <text x="676" y="272" font-size="12" fill="#334155">the agent's fix</text>
-  <rect x="330" y="150" width="300" height="150" rx="16" fill="#0F766E"/>
+  <text x="676" y="202" font-size="13" fill="#141414" font-weight="600" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">tests/test_pricing.py</text>
+  <text x="676" y="222" font-size="12" fill="#C2410C" font-weight="700" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">@unittest.skip   ← edited!</text>
+  <text x="676" y="252" font-size="13" fill="#141414" font-weight="600" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">src/pricing.py</text>
+  <text x="676" y="272" font-size="12" fill="#3A3A36">the agent's fix</text>
+  <rect x="330" y="150" width="300" height="150" rx="16" fill="#0F4C4C"/>
   <text x="480" y="178" font-size="13" fill="#FFFFFF" font-weight="800" text-anchor="middle" letter-spacing="1">CLEAN COPY</text>
-  <text x="480" y="206" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle" font-family="SFMono-Regular, Menlo, Consolas, monospace">tests/test_pricing.py</text>
-  <text x="480" y="224" font-size="12" fill="#CCFBF1" text-anchor="middle">← from the base (put back)</text>
-  <text x="480" y="252" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle" font-family="SFMono-Regular, Menlo, Consolas, monospace">src/pricing.py</text>
-  <text x="480" y="270" font-size="12" fill="#CCFBF1" text-anchor="middle">← from the agent</text>
-  <line x1="302" y1="225" x2="326" y2="225" stroke="#0F766E" stroke-width="2" marker-end="url(#arrowTeal)"/>
-  <line x1="658" y1="260" x2="634" y2="260" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-  <rect x="20" y="322" width="920" height="108" rx="12" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5"/>
-  <text x="40" y="348" font-size="13" fill="#64748B" font-weight="700" letter-spacing="1">WHICH FILES ARE "TESTS"? YOU SAY SO IN checks.toml</text>
-  <text x="40" y="378" font-size="15" fill="#134E4A" font-weight="700" font-family="SFMono-Regular, Menlo, Consolas, monospace">protected = ["tests/**"]</text>
-  <text x="290" y="378" font-size="14" fill="#334155">+ everything under .countercheck/ is always protected</text>
-  <text x="40" y="408" font-size="14" fill="#0F172A" font-weight="600">So commit your tests before the agent starts: if they aren't in git, there's no "before" to go back to.</text>
+  <text x="480" y="206" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">tests/test_pricing.py</text>
+  <text x="480" y="224" font-size="12" fill="#D3E5E2" text-anchor="middle">← from the base (put back)</text>
+  <text x="480" y="252" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">src/pricing.py</text>
+  <text x="480" y="270" font-size="12" fill="#D3E5E2" text-anchor="middle">← from the agent</text>
+  <line x1="302" y1="225" x2="326" y2="225" stroke="#0F4C4C" stroke-width="2" marker-end="url(#arrowTeal)"/>
+  <line x1="658" y1="260" x2="634" y2="260" stroke="#55554F" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="20" y="322" width="920" height="108" rx="12" fill="#FAFAF9" stroke="#A3A39C" stroke-width="1.5"/>
+  <text x="40" y="348" font-size="13" fill="#6B6B66" font-weight="700" letter-spacing="1">WHICH FILES ARE "TESTS"? YOU SAY SO IN checks.toml</text>
+  <text x="40" y="378" font-size="15" fill="#0B3A3A" font-weight="700" font-family="'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace">protected = ["tests/**"]</text>
+  <text x="290" y="378" font-size="14" fill="#3A3A36">+ everything under .countercheck/ is always protected</text>
+  <text x="40" y="408" font-size="14" fill="#141414" font-weight="600">So commit your tests before the agent starts: if they aren't in git, there's no "before" to go back to.</text>
 </svg>

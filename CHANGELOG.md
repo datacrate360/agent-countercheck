@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Look:** the logo's wordmark and colours follow DataCrate360's current style (Inter, one colour, teal `#0F4C4C`;
+  coral only on the seal), in the README, the HTML report and the live UI. The README is rewritten: shorter, and
+  current for v0.10 (GitHub Action on the Marketplace, the Windows sandbox, the platform table).
+
 ## v0.10.1 (2026-10-23)
 
 - **PyPI page:** the licence badge links to the licence page on GitHub (it opened the raw file). The README link check
