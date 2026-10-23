@@ -101,7 +101,8 @@ The code behind each rule, one run step by step, and where new work plugs in: [d
 | Cortex Code (Snowflake) | same hooks as Claude Code ([what differs](docs/hooks/claude-code.md#cortex-code); not yet tried on a real install) |
 | Hermes Agent | `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | Codex, Cursor, Copilot, Aider, OpenClaw, your scripts | run `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); dedicated hooks planned |
-| CI | `countercheck verify --base origin/main`; fail the job on any exit code but `0` ([step 4d](#4d-ci)) |
+| CI, GitHub | the action `datacrate360/agent-countercheck` on every pull request: job summary + receipt ([step 4d](#4d-ci)) |
+| CI, anything else | `countercheck verify --base origin/main`; fail the job on any exit code but `0` ([step 4d](#4d-ci)) |
 
 Ready recipes for real projects (check files, helper scripts, a 5-minute start): [recipes/](recipes) — first one:
 [Oracle → Snowflake conversion with Cortex Code](recipes/oracle-to-snowflake/).
@@ -299,7 +300,22 @@ checks.
 
 #### 4d. CI
 
-When the work is already committed on a branch, pass where it started:
+On GitHub, add the action ([full guide](docs/guides/github-action.md)): every pull request is verified with the checks
+from its base, with a job summary and the receipt as an artifact.
+
+```yaml
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: datacrate360/agent-countercheck@v0.10.0
+```
+
+Any other CI: when the work is already committed on a branch, pass where it started:
 
 ```sh
 countercheck verify --base origin/main

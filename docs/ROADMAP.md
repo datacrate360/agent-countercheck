@@ -56,7 +56,8 @@ section. Ideas and use cases are welcome as issues.
    `~/.snowflake/connections.toml`); never credentials in Countercheck files. Needed for checks that run against a
    database.
 7. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
-8. **More hooks**: Codex, Cursor, a GitHub Action (verify every PR and post the receipt).
+8. **More hooks**: Codex, Cursor. The GitHub Action could also post the verdict as a PR comment (today: job summary
+   and artifact), and be listed on the GitHub Marketplace (needs its own repository).
 9. **Windows full sandbox, after the experimental release** (ADR-0004, built: `countercheck windows-setup`): try it on
    real Windows 11 machines and drop "experimental"; then the two follow-ups: no stored password for the runner
    account, and `network = true` checks fully sandboxed (a second account without the firewall rule).

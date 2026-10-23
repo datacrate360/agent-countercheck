@@ -157,6 +157,65 @@ jobs:
   # Evidence for docs/decisions/0003-windows-sandbox.md: what an AppContainer allows on this
   # runner (internet, localhost between processes, Git's sh, Python), with and without the
   # admin-only loopback exemption. Informational; it never fails the build.
+  # The GitHub Action (action.yml) as users run it: installs the released binary, verifies fixture repos.
+  action:
+    name: action (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fixture repos (a good change, and one that edits a protected test)
+        id: fx
+        shell: bash
+        run: |
+          set -eu
+          mk() {
+            d="$RUNNER_TEMP/fx-$1"; mkdir -p "$d/.countercheck" "$d/tests"; cd "$d"
+            git init -q -b main; git config user.email ci@example.com; git config user.name ci
+            printf 'def add(a, b): return a + b\n' > calc.py
+            printf 'from calc import add\nassert add(2, 2) == 4\n' > tests/test_calc.py
+            printf 'protected = ["tests/**"]\n[[check]]\nname = "unit tests"\nrun = "PYTHONPATH=. $(python3 -c 1 2>/dev/null && echo python3 || echo python) tests/test_calc.py"\n' > .countercheck/checks.toml
+            git add -A; git commit -qm base
+            echo "$1-base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            if [ "$1" = good ]; then printf 'def add(a, b):\n    return a + b\n' > calc.py
+            else printf 'def add(a, b): return a - b\n' > calc.py; printf 'print(1)\n' > tests/test_calc.py; fi
+            git add -A; git commit -qm change
+          }
+          mk good; mk tamper
+      - name: Good change
+        id: good
+        uses: ./
+        with:
+          path: ${{ runner.temp }}/fx-good
+          base: ${{ steps.fx.outputs.good-base }}
+          claim: Fixed add; all tests pass
+          agent: ci
+      - name: Tampered change (expected to fail the step)
+        id: tamper
+        continue-on-error: true
+        uses: ./
+        with:
+          path: ${{ runner.temp }}/fx-tamper
+          base: ${{ steps.fx.outputs.tamper-base }}
+          claim: Fixed add; all tests pass
+      - name: The verdicts are right
+        shell: bash
+        env:
+          GOOD: ${{ steps.good.outputs.verdict }}
+          TAMPER: ${{ steps.tamper.outputs.verdict }}
+          TAMPER_OUTCOME: ${{ steps.tamper.outcome }}
+          RECEIPT: ${{ steps.good.outputs.receipt-path }}
+        run: |
+          echo "good=$GOOD tamper=$TAMPER ($TAMPER_OUTCOME) receipt=$RECEIPT"
+          [ "$GOOD" = verified ] && [ "$TAMPER" = failed ] && [ "$TAMPER_OUTCOME" = failure ] && [ -f "$RECEIPT" ]
+      - name: Every verdict and fail-on mode (packaging/github-action/test-action.sh)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash packaging/github-action/test-action.sh "$PWD" "$RUNNER_TEMP/countercheck-bin"
+
   appcontainer-evidence:
     name: AppContainer evidence (windows)
     runs-on: windows-latest
