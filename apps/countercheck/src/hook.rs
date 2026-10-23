@@ -4,7 +4,9 @@
 
 use crate::{git, runner, verify};
 use countercheck_core::claim::reports_blocker;
-use countercheck_core::receipt::{Receipt, Verdict, Worker};
+use countercheck_core::receipt::{
+    MAX_ROLE_CHARS, MAX_SESSION_CHARS, Receipt, Verdict, Worker, clean_label,
+};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -63,6 +65,11 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
             agent: Some(input.agent.to_string()),
             model: input.model,
             cost_usd: None,
+            // Several agents on one project: each one's environment says what it is for.
+            role: std::env::var("COUNTERCHECK_ROLE")
+                .ok()
+                .and_then(|r| clean_label(&r, MAX_ROLE_CHARS)),
+            session: clean_label(&input.session, MAX_SESSION_CHARS),
         },
         sandbox,
         sandbox_required: false,

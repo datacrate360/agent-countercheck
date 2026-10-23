@@ -1,7 +1,7 @@
 // Live UI script for `countercheck ui`.
 //
 // Polls /state every 2 seconds (with the page's token) and reloads the page when a receipt is
-// added, removed or rewritten, keeping the runs you had open still open. It talks only to the
+// added, removed or rewritten, keeping the runs you had open still open and the filters you picked. It talks only to the
 // page's own server: the Content-Security-Policy allows nothing else, and the browser runs this
 // script only because it carries the page's one-time nonce.
 //
@@ -33,6 +33,24 @@
     } catch (e) { /* ignore */ }
   }
   document.addEventListener('toggle', saveOpenRuns, true);
+
+  // Keep the chosen filters (verdict, agent) across reloads too.
+  var filterKey = 'countercheck-filters';
+  try {
+    JSON.parse(sessionStorage.getItem(filterKey) || '[]').forEach(function (id) {
+      var input = document.getElementById(id);
+      if (input) { input.checked = true; }
+    });
+  } catch (e) { /* no storage: keep the defaults */ }
+  document.addEventListener('change', function () {
+    try {
+      var ids = Array.prototype.map.call(
+        document.querySelectorAll('.filters input:checked'),
+        function (i) { return i.id; }
+      );
+      sessionStorage.setItem(filterKey, JSON.stringify(ids));
+    } catch (e) { /* ignore */ }
+  });
 
   function poll() {
     fetch('/state?t=' + encodeURIComponent(token), { cache: 'no-store' })

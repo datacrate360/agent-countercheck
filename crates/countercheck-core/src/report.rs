@@ -10,7 +10,7 @@
 //! still can't.
 
 use crate::receipt::{Receipt, Verdict};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 /// One receipt file, read back.
@@ -41,10 +41,23 @@ pub fn escape(s: &str) -> String {
     out
 }
 
+/// Most agents given their own row and filter; runs of the rest stay in the list.
+pub const MAX_AGENTS: usize = 24;
+
+/// Longest claim shown as a run's title; a longer one is cut there and shown in full inside.
+const CLAIM_TITLE_CHARS: usize = 140;
+
+/// What the page is about: the project's name and where it is (shown as given, escaped).
+pub struct Page<'a> {
+    pub title: &'a str,
+    /// The project folder, e.g. `~/code/my-app` (the caller shortens the home folder).
+    pub path: &'a str,
+    pub generated_at: &'a str,
+}
+
 /// Render the static report. `entries` may be in any order; the newest `MAX_RUNS` are shown.
-/// `generated_at` and `title` are shown as given (escaped).
-pub fn render_html(entries: &[Entry], title: &str, generated_at: &str) -> String {
-    render(entries, title, generated_at, None)
+pub fn render_html(entries: &[Entry], page: &Page) -> String {
+    render(entries, page, None)
 }
 
 /// Content-Security-Policy of the live page: only the script with this nonce, fetches only to the
@@ -58,12 +71,228 @@ pub fn live_csp(nonce: &str) -> String {
 
 /// Render the live page served by `countercheck ui`: the same report plus a script that polls
 /// `/state` and reloads when a new receipt lands, keeping open runs open.
-pub fn render_live(entries: &[Entry], title: &str, generated_at: &str, nonce: &str) -> String {
+pub fn render_live(entries: &[Entry], page: &Page, nonce: &str) -> String {
     let nonce: String = nonce.chars().filter(char::is_ascii_alphanumeric).collect();
-    render(entries, title, generated_at, Some(&nonce))
+    render(entries, page, Some(&nonce))
 }
 
-fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>) -> String {
+/// One agent on the project: its role when it has one, else the tool's name.
+struct Agent<'a> {
+    name: String,
+    tools: BTreeSet<&'a str>,
+    models: BTreeSet<&'a str>,
+    sessions: BTreeSet<&'a str>,
+    /// Newest first.
+    runs: Vec<&'a Entry>,
+}
+
+fn agent_name(r: &Receipt) -> String {
+    r.worker
+        .role
+        .clone()
+        .or_else(|| r.worker.agent.clone())
+        .unwrap_or_else(|| "unknown agent".to_string())
+}
+
+/// Agents in order of their latest run (`runs` is newest first).
+fn agents<'a>(runs: &[&'a Entry]) -> Vec<Agent<'a>> {
+    let mut out: Vec<Agent<'a>> = Vec::new();
+    for e in runs {
+        let name = agent_name(&e.receipt);
+        let i = match out.iter().position(|a| a.name == name) {
+            Some(i) => i,
+            None => {
+                out.push(Agent {
+                    name,
+                    tools: BTreeSet::new(),
+                    models: BTreeSet::new(),
+                    sessions: BTreeSet::new(),
+                    runs: Vec::new(),
+                });
+                out.len() - 1
+            }
+        };
+        let (Some(a), w) = (out.get_mut(i), &e.receipt.worker) else {
+            continue;
+        };
+        if let (Some(_), Some(t)) = (&w.role, &w.agent) {
+            a.tools.insert(t);
+        }
+        if let Some(m) = &w.model {
+            a.models.insert(m);
+        }
+        if let Some(s) = &w.session {
+            a.sessions.insert(s);
+        }
+        a.runs.push(e);
+    }
+    out
+}
+
+/// The agent's filter index, when it has one (the first `MAX_AGENTS` agents).
+fn agent_index(agents: &[Agent], r: &Receipt) -> Option<usize> {
+    let name = agent_name(r);
+    agents.iter().take(MAX_AGENTS).position(|a| a.name == name)
+}
+
+/// A round initial for an agent; `i` picks one of 8 colours.
+fn avatar(name: &str, i: usize) -> String {
+    let letter: String = name
+        .chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_else(|| "?".to_string());
+    format!(
+        "<i class=\"av c{}\" aria-hidden=\"true\">{}</i>",
+        i % 8,
+        escape(&letter)
+    )
+}
+
+/// Verified / failed / unverified as a stacked bar (widths in whole percent).
+fn verdict_bar(v: usize, f: usize, u: usize) -> String {
+    let total = (v + f + u).max(1);
+    let pct = |n: usize| n * 100 / total;
+    format!(
+        "<span class=\"vbar\" aria-hidden=\"true\"><i class=\"bv\" style=\"width:{}%\"></i>\
+         <i class=\"bf\" style=\"width:{}%\"></i><i class=\"bu\" style=\"width:{}%\"></i></span>",
+        pct(v),
+        pct(f),
+        pct(u)
+    )
+}
+
+fn agents_html(agents: &[Agent]) -> String {
+    let mut h = String::new();
+    let n = agents.len();
+    let _ = write!(
+        h,
+        "<section class=\"agents\"><p class=\"eyebrow\">Agents</p>\
+         <h2>{n} {} on this project</h2><p class=\"muted hint\">Each row is one agent: its role when it has one \
+         (<code>--role</code> or <code>COUNTERCHECK_ROLE</code>), else the tool. Pick one to see only its runs.</p>\
+         <div class=\"agent-list\">",
+        if n == 1 { "agent" } else { "agents" }
+    );
+    for (i, a) in agents.iter().take(MAX_AGENTS).enumerate() {
+        let count = |v: Verdict| a.runs.iter().filter(|e| e.receipt.verdict == v).count();
+        let (v, f, u) = (
+            count(Verdict::Verified),
+            count(Verdict::Failed),
+            count(Verdict::Unverified),
+        );
+        let mut sub: Vec<String> = a.tools.iter().map(|t| escape(t)).collect();
+        sub.extend(a.models.iter().map(|m| escape(m)));
+        if !a.sessions.is_empty() {
+            let s = a.sessions.len();
+            sub.push(format!("{s} session{}", if s == 1 { "" } else { "s" }));
+        }
+        // Oldest left, newest right: the last 20 runs as dots.
+        let trail: String = a
+            .runs
+            .iter()
+            .take(20)
+            .rev()
+            .map(|e| format!("<i class=\"d {}\"></i>", verdict_class(e.receipt.verdict)))
+            .collect();
+        let latest = a.runs.first().map(|e| &e.receipt);
+        let _ = write!(
+            h,
+            "<label class=\"agent a-{i}\" for=\"fa-{i}\"><span class=\"a-main\">{av}<b>{name}</b>\
+             <small>{sub}</small></span><span class=\"a-trail\" title=\"last runs, oldest first\">{trail}</span>\
+             <span class=\"a-stats\">{bar}<small><b>{runs}</b> run{s}{tally}</small></span>\
+             <span class=\"a-last\">{last}</span></label>",
+            av = avatar(&a.name, i),
+            name = escape(&a.name),
+            sub = if sub.is_empty() {
+                "&nbsp;".to_string()
+            } else {
+                sub.join(" · ")
+            },
+            bar = verdict_bar(v, f, u),
+            runs = a.runs.len(),
+            s = if a.runs.len() == 1 { "" } else { "s" },
+            tally = [(v, "verified"), (f, "failed"), (u, "unverified")]
+                .iter()
+                .filter(|(n, _)| *n > 0)
+                .map(|(n, w)| format!(" · {n} {w}"))
+                .collect::<String>(),
+            last = latest
+                .map(|r| format!(
+                    "<q>{}</q><small><span class=\"badge {}\">{}</span> · latest, {}</small>",
+                    escape(&short(r.claim.as_deref().unwrap_or("(no claim)"), 90)),
+                    verdict_class(r.verdict),
+                    r.verdict.label(),
+                    escape(&pretty_time(&r.created_at))
+                ))
+                .unwrap_or_default(),
+        );
+    }
+    h.push_str("</div>");
+    if n > MAX_AGENTS {
+        let _ = write!(
+            h,
+            "<p class=\"muted\">and {} more agents (their runs are in the list below)</p>",
+            n - MAX_AGENTS
+        );
+    }
+    h.push_str("</section>");
+    h
+}
+
+/// Filters that work without a script: radio buttons, and CSS that hides the runs they rule out.
+fn filters_html(agents: &[Agent], counts: [usize; 4]) -> String {
+    let [all, v, f, u] = counts;
+    let mut h = String::from(
+        "<div class=\"filters\" role=\"group\" aria-label=\"Filter runs\"><div class=\"seg\">",
+    );
+    for (id, label, n, checked) in [
+        ("fv-all", "All", all, true),
+        ("fv-failed", "Failed", f, false),
+        ("fv-unverified", "Unverified", u, false),
+        ("fv-verified", "Verified", v, false),
+    ] {
+        let _ = write!(
+            h,
+            "<input type=\"radio\" name=\"fv\" id=\"{id}\"{}><label for=\"{id}\">{label} <span>{n}</span></label>",
+            if checked { " checked" } else { "" }
+        );
+    }
+    h.push_str("</div>");
+    if agents.len() > 1 {
+        h.push_str("<div class=\"seg\"><input type=\"radio\" name=\"fa\" id=\"fa-all\" checked><label for=\"fa-all\">All agents</label>");
+        for (i, a) in agents.iter().take(MAX_AGENTS).enumerate() {
+            let _ = write!(
+                h,
+                "<input type=\"radio\" name=\"fa\" id=\"fa-{i}\"><label for=\"fa-{i}\">{} <span>{}</span></label>",
+                escape(&a.name),
+                a.runs.len()
+            );
+        }
+        h.push_str("</div>");
+    } else if let Some(a) = agents.first() {
+        // One agent: its radio still exists, so its row in the panel stays a working control.
+        let _ = write!(
+            h,
+            "<input type=\"radio\" name=\"fa\" id=\"fa-all\" checked hidden><input type=\"radio\" name=\"fa\" id=\"fa-0\" hidden aria-label=\"{}\">",
+            escape(&a.name)
+        );
+    }
+    h.push_str("</div>");
+    // Only digits come from the data here.
+    h.push_str("<style>");
+    for i in 0..agents.len().min(MAX_AGENTS) {
+        let _ = write!(
+            h,
+            "body:has(#fa-{i}:checked) .run:not(.a-{i}){{display:none}}\
+             body:has(#fa-{i}:checked) .agent.a-{i}{{border-color:var(--ink);background:var(--card)}}"
+        );
+    }
+    h.push_str("</style>");
+    h
+}
+
+fn render(entries: &[Entry], page: &Page, live: Option<&str>) -> String {
+    let (title, generated_at) = (page.title, page.generated_at);
     let mut runs: Vec<&Entry> = entries.iter().collect();
     runs.sort_by(|a, b| b.receipt.created_at.cmp(&a.receipt.created_at));
     runs.truncate(MAX_RUNS);
@@ -98,9 +327,11 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
     let _ = write!(
         h,
         "<header><p class=\"eyebrow\">Agent Countercheck · receipts</p><h1>{}</h1>\
+         <p class=\"path\" title=\"Project folder\"><code>{}</code></p>\
          <p class=\"lead\">Every time an agent said <q>done</q>, re-checked on rules it couldn't change.</p>\
          <p class=\"meta\">Generated {} · newest first</p></header>",
         escape(title),
+        escape(page.path),
         escape(&pretty_time(generated_at)),
     );
 
@@ -119,19 +350,37 @@ fn render(entries: &[Entry], title: &str, generated_at: &str, live: Option<&str>
         if broken > 0 { "t-failed" } else { "" },
         broken
     );
+    h.push_str(&verdict_bar(
+        count(Verdict::Verified),
+        count(Verdict::Failed),
+        count(Verdict::Unverified),
+    ));
+    let agents = agents(&runs);
 
     if runs.is_empty() {
         h.push_str("<p>No receipts yet. Run <code>countercheck verify</code> first.</p>");
+    }
+    if !agents.is_empty() {
+        h.push_str(&agents_html(&agents));
     }
     if let Some(latest) = runs.first() {
         h.push_str(&matrix_grid(&latest.receipt));
     }
 
     h.push_str(
-        "<section><p class=\"eyebrow\">Runs</p><h2>What each agent claimed, and what ran</h2>",
+        "<section class=\"runs\"><p class=\"eyebrow\">Runs</p><h2>What each agent claimed, and what ran</h2>",
     );
+    h.push_str(&filters_html(
+        &agents,
+        [
+            runs.len(),
+            count(Verdict::Verified),
+            count(Verdict::Failed),
+            count(Verdict::Unverified),
+        ],
+    ));
     for (i, e) in runs.iter().enumerate() {
-        h.push_str(&run_html(e, i == 0));
+        h.push_str(&run_html(e, i == 0, agent_index(&agents, &e.receipt)));
     }
     h.push_str("</section>");
     h.push_str(
@@ -236,23 +485,25 @@ fn short(s: &str, n: usize) -> String {
     }
 }
 
-fn run_html(e: &Entry, open: bool) -> String {
+fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
     let r = &e.receipt;
     let passed = r.checks.iter().filter(|c| c.passed).count();
-    let who = match (&r.worker.agent, &r.worker.model) {
-        (Some(a), Some(m)) => format!("{a} · {m}"),
-        (Some(a), None) => a.clone(),
-        (None, Some(m)) => m.clone(),
-        (None, None) => "unknown worker".to_string(),
-    };
+    let name = agent_name(r);
+    // The role first, then the tool and model that played it.
+    let mut parts = vec![name.clone()];
+    if r.worker.role.is_some() {
+        parts.extend(r.worker.agent.clone());
+    }
+    parts.extend(r.worker.model.clone());
+    let who = parts.join(" · ");
     let claim = r.claim.as_deref().unwrap_or("");
     let mut h = String::new();
     let _ = write!(
         h,
-        "<details class=\"run\" id=\"r-{id}\"{open}><summary>\
+        "<details class=\"run v-{cls}{a}\" id=\"r-{id}\"{open}><summary>\
          <span class=\"badge {cls}\">{label}</span>\
          <span class=\"when\">{when}</span>\
-         <span class=\"who\">{who}</span>\
+         <span class=\"who\">{av}{who}</span>\
          <span class=\"count\">{passed}/{total} checks</span>{seal}\
          <span class=\"claim\">{claim}</span></summary>",
         id = escape(&r.id),
@@ -261,13 +512,15 @@ fn run_html(e: &Entry, open: bool) -> String {
         label = r.verdict.label(),
         when = escape(&pretty_time(&r.created_at)),
         who = escape(&who),
+        a = agent.map(|i| format!(" a-{i}")).unwrap_or_default(),
+        av = avatar(&name, agent.unwrap_or(7)),
         total = r.checks.len(),
         seal = if e.seal_ok {
             "<span class=\"seal ok\">seal intact</span>"
         } else {
             "<span class=\"seal bad\">SEAL BROKEN</span>"
         },
-        claim = escape(&short(claim, 140)),
+        claim = escape(&short(claim, CLAIM_TITLE_CHARS)),
     );
 
     h.push_str("<div class=\"body\">");
@@ -278,7 +531,8 @@ fn run_html(e: &Entry, open: bool) -> String {
         }
         h.push_str("</ul>");
     }
-    if !claim.is_empty() {
+    // The title shows the claim; repeat it in full only when the title had to cut it.
+    if claim.chars().count() > CLAIM_TITLE_CHARS {
         let _ = write!(
             h,
             "<p><b>The worker said:</b></p><blockquote>{}</blockquote>",
@@ -433,6 +687,8 @@ mod tests {
                 agent: Some("claude-code".to_string()),
                 model: None,
                 cost_usd: None,
+                role: None,
+                session: None,
             },
             claim: Some("Done, all tests pass <script>alert(1)</script>".to_string()),
             claim_status: ClaimStatus::NoClaim,
@@ -448,6 +704,14 @@ mod tests {
             checks,
             verdict,
             reasons: vec!["check \"t\" failed".to_string()],
+        }
+    }
+
+    fn page() -> Page<'static> {
+        Page {
+            title: "r",
+            path: "~/r",
+            generated_at: "now",
         }
     }
 
@@ -493,8 +757,11 @@ mod tests {
                 receipt: r,
                 seal_ok: true,
             }],
-            "repo <b>",
-            "now",
+            &Page {
+                title: "repo <b>",
+                path: "~/code/<i>repo",
+                generated_at: "now",
+            },
         );
         assert!(!html.to_lowercase().contains("<script"), "{html}");
         assert!(!html.contains("<img"));
@@ -517,7 +784,7 @@ mod tests {
                 seal_ok: false,
             },
         ];
-        let html = render_html(&entries, "r", "now");
+        let html = render_html(&entries, &page());
         let new = html.find("new.json").unwrap();
         let old = html.find("old.json").unwrap();
         assert!(new < old, "newest first");
@@ -544,8 +811,7 @@ mod tests {
                 receipt: r,
                 seal_ok: true,
             }],
-            "r",
-            "now",
+            &page(),
         );
         assert!(html.contains("Latest run by schema"));
         assert!(html.contains("2 schema value(s), 1 with a failure"));
@@ -576,13 +842,13 @@ mod tests {
             receipt: r,
             seal_ok: true,
         }];
-        let html = render_live(&e, "r", "now", "abc123\"><x");
+        let html = render_live(&e, &page(), "abc123\"><x");
         assert_eq!(html.matches("<script").count(), 1, "{html}");
         assert!(html.contains("<script nonce=\"abc123x\">"));
         assert!(html.contains("script-src 'nonce-abc123x'"));
         assert!(html.contains("connect-src 'self'"));
         assert!(html.contains("id=\"live\""));
-        assert!(!render_html(&e, "r", "now").contains("<script"));
+        assert!(!render_html(&e, &page()).contains("<script"));
     }
 
     #[test]
@@ -597,14 +863,142 @@ mod tests {
                 "no outside resources"
             );
         }
-        let html = render_live(&[], "r", "now", "n1");
+        let html = render_live(&[], &page(), "n1");
         assert!(html.contains("location.reload()"));
         assert!(html.contains("<style>:root") || html.contains("<style>/*"));
     }
 
     #[test]
     fn empty_report_says_how_to_start() {
-        let html = render_html(&[], "r", "now");
+        let html = render_html(&[], &page());
         assert!(html.contains("No receipts yet"));
+    }
+
+    fn by(role: Option<&str>, agent: &str, created: &str, verdict: Verdict) -> Entry {
+        let mut r = receipt(
+            created,
+            verdict,
+            vec![check("t", verdict == Verdict::Verified, "")],
+        );
+        r.worker.role = role.map(str::to_string);
+        r.worker.agent = Some(agent.to_string());
+        r.worker.session = Some(format!("s-{created}"));
+        Entry {
+            file: format!("{created}.json"),
+            receipt: r,
+            seal_ok: true,
+        }
+    }
+
+    #[test]
+    fn agents_panel_has_one_row_per_role_newest_first() {
+        let e = vec![
+            by(
+                Some("UI design"),
+                "claude-code",
+                "2026-01-01T00:00:01Z",
+                Verdict::Failed,
+            ),
+            by(
+                Some("Security <review>"),
+                "claude-code",
+                "2026-01-01T00:00:02Z",
+                Verdict::Verified,
+            ),
+            by(
+                Some("UI design"),
+                "claude-code",
+                "2026-01-01T00:00:03Z",
+                Verdict::Verified,
+            ),
+            by(None, "codex", "2026-01-01T00:00:04Z", Verdict::Unverified),
+        ];
+        let html = render_html(&e, &page());
+        assert!(html.contains("<h2>3 agents on this project</h2>"), "{html}");
+        // Order: the agent with the newest run first; a role names the agent, else the tool.
+        let codex = html.find("<b>codex</b>").unwrap();
+        let ui = html.find("<b>UI design</b>").unwrap();
+        let sec = html.find("<b>Security &lt;review&gt;</b>").unwrap();
+        assert!(codex < ui && ui < sec, "{html}");
+        // Two runs, one session each, the tool shown under the role.
+        assert!(
+            html.contains("<b>2</b> runs · 1 verified · 1 failed"),
+            "{html}"
+        );
+        assert!(html.contains("claude-code · 2 sessions"), "{html}");
+        // The dot trail runs oldest to newest.
+        assert!(
+            html.contains("<i class=\"d failed\"></i><i class=\"d verified\"></i>"),
+            "{html}"
+        );
+        // Every run carries its agent's filter class; each agent has a filter rule.
+        assert_eq!(html.matches("class=\"run v-").count(), 4);
+        assert!(html.contains("class=\"run v-failed a-1\""), "{html}");
+        assert!(
+            html.contains("body:has(#fa-2:checked) .run:not(.a-2){display:none}"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<label for=\"fa-1\">UI design <span>2</span></label>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn agents_beyond_the_limit_keep_their_runs_but_get_no_row() {
+        let e: Vec<Entry> = (0..MAX_AGENTS + 2)
+            .map(|i| {
+                by(
+                    Some(&format!("agent {i}")),
+                    "x",
+                    &format!("2026-01-01T00:00:{i:02}Z"),
+                    Verdict::Verified,
+                )
+            })
+            .collect();
+        let html = render_html(&e, &page());
+        assert_eq!(html.matches("<label class=\"agent ").count(), MAX_AGENTS);
+        assert!(html.contains("and 2 more agents"), "{html}");
+        assert_eq!(html.matches("class=\"run v-").count(), MAX_AGENTS + 2);
+        assert!(
+            !html.contains(&format!("#fa-{MAX_AGENTS}:checked")),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn the_page_shows_the_project_path_and_a_verdict_bar() {
+        let e = vec![
+            by(None, "a", "2026-01-01T00:00:01Z", Verdict::Verified),
+            by(None, "a", "2026-01-01T00:00:02Z", Verdict::Failed),
+        ];
+        let html = render_html(
+            &e,
+            &Page {
+                title: "shop",
+                path: "~/code/<shop>",
+                generated_at: "now",
+            },
+        );
+        assert!(html.contains(
+            "<p class=\"path\" title=\"Project folder\"><code>~/code/&lt;shop&gt;</code></p>"
+        ));
+        assert!(html.contains("<i class=\"bv\" style=\"width:50%\"></i><i class=\"bf\" style=\"width:50%\"></i><i class=\"bu\" style=\"width:0%\"></i>"), "{html}");
+    }
+
+    #[test]
+    fn a_short_claim_is_the_title_only_and_a_long_one_is_also_shown_in_full() {
+        let mut short_one = by(None, "a", "2026-01-01T00:00:01Z", Verdict::Verified);
+        short_one.receipt.claim = Some("Done.".to_string());
+        let html = render_html(&[short_one], &page());
+        assert!(!html.contains("The worker said"), "{html}");
+        let mut long_one = by(None, "a", "2026-01-01T00:00:01Z", Verdict::Verified);
+        let claim = "x".repeat(CLAIM_TITLE_CHARS + 1);
+        long_one.receipt.claim = Some(claim.clone());
+        let html = render_html(&[long_one], &page());
+        assert!(
+            html.contains(&format!("<blockquote>{claim}</blockquote>")),
+            "{html}"
+        );
     }
 }

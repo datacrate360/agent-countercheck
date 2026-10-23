@@ -88,6 +88,33 @@ pub struct Worker {
     pub model: Option<String>,
     /// Reported by the caller; countercheck doesn't measure spend yet.
     pub cost_usd: Option<f64>,
+    /// What this agent is for, e.g. "UI design" or "security review" (`--role`, or
+    /// `COUNTERCHECK_ROLE` in the agent's environment), so several agents on one project can be
+    /// told apart. Absent on older receipts (their seals don't change).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// The agent session that made the run (from the hook's input), so one session's runs group
+    /// together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+}
+
+/// Longest role kept on a receipt (characters).
+pub const MAX_ROLE_CHARS: usize = 60;
+/// Longest session id kept on a receipt (characters).
+pub const MAX_SESSION_CHARS: usize = 128;
+
+/// A label from the caller's environment or hook input, made safe to store and show: control
+/// characters removed, whitespace trimmed and collapsed, at most `max` characters. Empty means none.
+pub fn clean_label(s: &str, max: usize) -> Option<String> {
+    let words: Vec<&str> = s
+        .split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let joined = words.join(" ");
+    let cut: String = joined.chars().take(max).collect();
+    let cut = cut.trim_end().to_string();
+    (!cut.is_empty()).then_some(cut)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -328,6 +355,9 @@ impl Receipt {
             if more > 0 {
                 s.push_str(&format!("            and {more} more\n"));
             }
+        }
+        if let Some(role) = &self.worker.role {
+            s.push_str(&format!("  role:     {role}\n"));
         }
         if let Some(cost) = self.worker.cost_usd {
             s.push_str(&format!("  cost:     ${cost:.4} (reported)\n"));
@@ -589,5 +619,32 @@ mod tests {
                 serde_json::from_str(&serde_json::to_string_pretty(&r).unwrap()).unwrap();
             assert!(back.seal_is_valid(), "cost {cost}");
         }
+    }
+
+    #[test]
+    fn labels_are_trimmed_flattened_and_capped() {
+        assert_eq!(
+            clean_label("  UI   design\n", 60).as_deref(),
+            Some("UI design")
+        );
+        assert_eq!(clean_label("a\u{1b}[31mb", 60).as_deref(), Some("a [31mb"));
+        assert_eq!(clean_label(" \t\n", 60), None);
+        assert_eq!(clean_label("abcdef", 3).as_deref(), Some("abc"));
+        assert_eq!(clean_label("ab cd", 3).as_deref(), Some("ab"));
+        assert_eq!(MAX_ROLE_CHARS, 60);
+        assert_eq!(MAX_SESSION_CHARS, 128);
+    }
+
+    #[test]
+    fn a_role_is_printed_and_receipts_without_one_keep_their_old_json() {
+        let mut r = receipt();
+        let before = serde_json::to_string(&r).unwrap_or_default();
+        assert!(
+            !before.contains("\"role\"") && !before.contains("\"session\""),
+            "{before}"
+        );
+        assert!(!r.render_text().contains("role:"));
+        r.worker.role = Some("Security review".into());
+        assert!(r.render_text().contains("  role:     Security review\n"));
     }
 }

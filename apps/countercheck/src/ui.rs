@@ -38,7 +38,8 @@ pub struct Options {
 }
 
 pub fn run(opts: &Options) -> Result<(), String> {
-    let (dir, title) = report::locate(&opts.repo, opts.receipts.as_deref())?;
+    let report::Located { dir, title, path } =
+        report::locate(&opts.repo, opts.receipts.as_deref())?;
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         if opts.receipts.is_none() {
@@ -81,7 +82,7 @@ pub fn run(opts: &Options) -> Result<(), String> {
     }
     // One thread per connection: a browser's spare (pre-opened) connection that sends nothing
     // must not hold up the page's own requests while we wait for it.
-    let shared = std::sync::Arc::new((token, dir, title));
+    let shared = std::sync::Arc::new((token, dir, title, path));
     let active = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
@@ -91,9 +92,9 @@ pub fn run(opts: &Options) -> Result<(), String> {
         }
         let (shared, done) = (shared.clone(), active.clone());
         let spawned = std::thread::Builder::new().spawn(move || {
-            let (token, dir, title) = &*shared;
+            let (token, dir, title, path) = &*shared;
             // One bad request must not stop the server.
-            let _ = serve(stream, port, token, dir, title);
+            let _ = serve(stream, port, token, dir, title, path);
             done.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
         if spawned.is_err() {
@@ -225,6 +226,7 @@ fn serve(
     token: &str,
     dir: &Path,
     title: &str,
+    path: &str,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
@@ -251,7 +253,12 @@ fn serve(
             let entries = report::read_receipts(dir).unwrap_or_default();
             let nonce = random_hex(16).map_err(std::io::Error::other)?;
             let now = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
-            let html = render_live(&entries, title, &now, &nonce);
+            let page = countercheck_core::report::Page {
+                title,
+                path,
+                generated_at: &now,
+            };
+            let html = render_live(&entries, &page, &nonce);
             respond(
                 &mut stream,
                 200,

@@ -319,9 +319,11 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 
 - `ui` serves the page on this computer only (127.0.0.1, with a random token in the address). It uses port 7357, or
   any free port (`--port N` to choose); running it again opens the one already running for the project.
-- `report` writes `.countercheck/receipts/report.html`: every run, newest first, with the verdict, the claim, each
+- `report` writes `.countercheck/receipts/report.html`: the project's name and folder; one row per agent (its runs as
+  coloured dots, how many passed, its latest claim); then every run, newest first, with the verdict, the claim, each
   check's output, protected and watched files the agent changed, files no check covers, the seal status, and a grid
-  for matrix checks. It loads nothing from the internet and has no scripts, so it's safe to attach to a pull request.
+  for matrix checks. Filter by verdict or by agent. It loads nothing from the internet and has no scripts, so it's
+  safe to attach to a pull request. The home folder shows as `~`.
 
 ## Reference
 
@@ -339,6 +341,18 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 There are no per-agent profiles. Each receipt names its agent (the hooks fill it in, `--agent` sets it by hand), so
 several agents on one project end up side by side in the same list, each session with its own "before" commit.
 
+Several agents on one project, each with its own job (UI design, security review, data pipeline, …)? Give each one a
+**role**: set `COUNTERCHECK_ROLE` in the environment that agent runs in (its hook reads it), or pass `--role` to
+`verify`. The report and `ui` then show one row per role, and you can filter the runs by it:
+
+```sh
+COUNTERCHECK_ROLE="Security review" claude      # this agent's hook runs are labelled "Security review"
+countercheck verify --role "UI design" --agent codex --claim "Restyled the checkout page."
+```
+
+The role is a label the caller chooses, kept on the sealed receipt like `--agent`; it changes no check and no
+verdict.
+
 ### Commands
 
 | Command | What it does | Example |
@@ -352,7 +366,7 @@ several agents on one project end up side by side in the same list, each session
 | `windows-setup` | Windows, once as administrator: the full check sandbox ([below](#platforms-and-the-sandbox)) | `countercheck windows-setup` |
 
 Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
-`--cost-usd`, `--out <folder>`, `--json`, and `--checks-from <suite>@<commit>:<path>` for checks kept outside the
+`--role`, `--cost-usd`, `--out <folder>`, `--json`, and `--checks-from <suite>@<commit>:<path>` for checks kept outside the
 repository ([docs/checks.md](docs/checks.md#checks-from-outside-the-repository)). All options:
 `countercheck help <command>`.
 

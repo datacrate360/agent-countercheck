@@ -17,8 +17,42 @@ pub struct Options {
     pub open: bool,
 }
 
-/// The receipt folder and the page title (the repository's folder name).
-pub fn locate(repo: &Path, receipts: Option<&Path>) -> Result<(PathBuf, String), String> {
+/// Where the receipts are, and what the page shows as the project.
+pub struct Located {
+    pub dir: PathBuf,
+    /// The repository's folder name.
+    pub title: String,
+    /// The repository's folder (else the receipt folder), with the home folder shortened to `~`.
+    pub path: String,
+}
+
+/// `path` with the home folder written as `~`, so a shared report doesn't show the user name.
+pub fn display_path(path: &Path) -> String {
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .filter(|h| !h.is_empty())
+        .map(PathBuf::from);
+    // The repo path is canonical (macOS: /private/var/...), so try the canonical home too.
+    let homes = home
+        .iter()
+        .flat_map(|h| [Some(h.clone()), std::fs::canonicalize(h).ok()])
+        .flatten();
+    if let Some(rest) = homes
+        .filter_map(|h| path.strip_prefix(&h).ok().map(Path::to_path_buf))
+        .next()
+    {
+        let sep = std::path::MAIN_SEPARATOR;
+        return if rest.as_os_str().is_empty() {
+            "~".to_string()
+        } else {
+            format!("~{sep}{}", rest.display())
+        };
+    }
+    path.display().to_string()
+}
+
+/// The receipt folder, the page title (the repository's folder name) and the project's path.
+pub fn locate(repo: &Path, receipts: Option<&Path>) -> Result<Located, String> {
     let root = git::toplevel(repo).ok();
     let dir = match (receipts, &root) {
         (Some(d), _) => d.to_path_buf(),
@@ -35,12 +69,13 @@ pub fn locate(repo: &Path, receipts: Option<&Path>) -> Result<(PathBuf, String),
         .and_then(Path::file_name)
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "receipts".to_string());
-    Ok((dir, title))
+    let path = display_path(root.as_deref().unwrap_or(&dir));
+    Ok(Located { dir, title, path })
 }
 
 /// Write the report; returns its path and how many receipts it shows.
 pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
-    let (dir, title) = locate(&opts.repo, opts.receipts.as_deref())?;
+    let Located { dir, title, path } = locate(&opts.repo, opts.receipts.as_deref())?;
     let entries = read_receipts(&dir)?;
     if entries.is_empty() {
         return Err(format!(
@@ -49,7 +84,14 @@ pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
         ));
     }
     let now = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
-    let html = report::render_html(&entries, &title, &now);
+    let html = report::render_html(
+        &entries,
+        &report::Page {
+            title: &title,
+            path: &path,
+            generated_at: &now,
+        },
+    );
     let out = opts.out.clone().unwrap_or_else(|| dir.join("report.html"));
     std::fs::write(&out, html).map_err(|e| format!("{}: {e}", out.display()))?;
     if opts.open {

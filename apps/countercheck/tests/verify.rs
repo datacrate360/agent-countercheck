@@ -1330,6 +1330,110 @@ fn report_writes_a_page_of_every_run() {
     assert!(!String::from_utf8_lossy(&status.stdout).contains("report.html"));
 }
 
+/// Every receipt in a folder, parsed.
+fn all_receipts(dir: &Path) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    for e in fs::read_dir(dir.join(".countercheck/receipts")).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().is_some_and(|x| x == "json") {
+            out.push(serde_json::from_str(&fs::read_to_string(p).unwrap()).unwrap());
+        }
+    }
+    out
+}
+
+/// Several agents on one project: `--role`, else `COUNTERCHECK_ROLE`, names each one on its receipt
+/// (cleaned up, sealed with the rest); the report lists one row per agent and the project's path.
+#[test]
+fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
+    let d = project(CHECKS);
+    let (_, by_flag) = countercheck(
+        d.path(),
+        &["--role", "  UI\n design ", "--agent", "claude-code"],
+    );
+    assert_eq!(by_flag["worker"]["role"], "UI design");
+    let out = Command::new(BIN)
+        .args([
+            "verify",
+            "--json",
+            "--sandbox",
+            "none",
+            "--agent",
+            "codex",
+            "--repo",
+        ])
+        .arg(d.path())
+        .env("COUNTERCHECK_ROLE", "Security review")
+        .output()
+        .unwrap();
+    let by_env: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(by_env["worker"]["role"], "Security review");
+    // No role: the field is left out, so older readers see the receipt they know.
+    let (_, none) = countercheck(d.path(), &["--role", " \t"]);
+    assert!(none["worker"].get("role").is_none(), "{none}");
+    // The role is sealed like everything else.
+    let id = by_flag["id"].as_str().unwrap();
+    let file = d
+        .path()
+        .join(".countercheck/receipts")
+        .join(format!("{id}.json"));
+    let text = fs::read_to_string(&file).unwrap();
+    fs::write(&file, text.replace("UI design", "Release")).unwrap();
+    let show = Command::new(BIN)
+        .args(["show"])
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert_ne!(
+        show.status.code(),
+        Some(0),
+        "an edited role must break the seal"
+    );
+    fs::write(&file, text).unwrap();
+
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .env("HOME", d.path().parent().unwrap())
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
+    assert!(html.contains("<h2>3 agents on this project</h2>"), "{html}");
+    for name in ["<b>UI design</b>", "<b>Security review</b>"] {
+        assert!(html.contains(name), "{name}: {html}");
+    }
+    // The home folder is shown as ~, so a shared page doesn't carry the user's name.
+    let leaf = d.path().file_name().unwrap().to_string_lossy();
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(
+        html.contains(&format!("<code>~{sep}{leaf}</code>")),
+        "{html}"
+    );
+}
+
+/// A hook records the agent's session, so one session's runs group together; the role comes from
+/// the agent's environment.
+#[test]
+fn hooks_record_the_session_and_the_role() {
+    let d = project(CHECKS);
+    let (code, _) = hermes_hook(
+        &hermes_payload(d.path()),
+        &[("COUNTERCHECK_ROLE", "Data pipeline")],
+    );
+    assert_eq!(code, 0);
+    let r = all_receipts(d.path());
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["worker"]["session"], "s1");
+    assert_eq!(r[0]["worker"]["role"], "Data pipeline");
+    assert_eq!(r[0]["worker"]["agent"], "hermes");
+}
+
 /// A receipt edited after it was written shows as a broken seal; no receipts is a plain error.
 #[test]
 fn report_flags_an_edited_receipt_and_needs_receipts() {
