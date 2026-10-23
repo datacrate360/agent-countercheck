@@ -19,6 +19,9 @@
     if (open) {
       document.querySelectorAll('details.run').forEach(function (d) {
         d.open = open.indexOf(d.id) >= 0;
+        // A run that was already open doesn't replay its steps on every reload.
+        var steps = d.querySelector('.steps');
+        if (d.open && steps) { steps.classList.add('now'); }
       });
     }
   } catch (e) { /* no storage: keep the default */ }
@@ -51,6 +54,38 @@
       sessionStorage.setItem(filterKey, JSON.stringify(ids));
     } catch (e) { /* ignore */ }
   });
+
+  // Flow map: draw only lines that are new since the last reload (a new agent, or an agent whose
+  // latest verdict changed), and light the grid around the pointer.
+  var flow = document.querySelector('.flow');
+  if (flow) {
+    var drawnKey = 'countercheck-drawn';
+    var drawn = [];
+    try { drawn = JSON.parse(sessionStorage.getItem(drawnKey) || '[]'); } catch (e) { drawn = []; }
+    var now = [];
+    flow.querySelectorAll('.fn').forEach(function (node) {
+      var m = node.className.match(/\ba-(\d+)\b/);
+      var name = node.querySelector('b');
+      if (!m || !name) { return; }
+      var key = name.textContent + '|' + node.className.replace(/\b(a|x)-\d+\b/g, '').trim();
+      now.push(key);
+      if (drawn.indexOf(key) >= 0) {
+        flow.querySelectorAll('.fe.a-' + m[1] + ',.pulse.a-' + m[1]).forEach(function (el) {
+          el.classList.add('seen');
+        });
+      }
+    });
+    try { sessionStorage.setItem(drawnKey, JSON.stringify(now)); } catch (e) { /* ignore */ }
+    flow.addEventListener('pointermove', function (e) {
+      var r = flow.getBoundingClientRect();
+      flow.style.setProperty('--x', (e.clientX - r.left) + 'px');
+      flow.style.setProperty('--y', (e.clientY - r.top) + 'px');
+    });
+    flow.addEventListener('pointerleave', function () {
+      flow.style.removeProperty('--x');
+      flow.style.removeProperty('--y');
+    });
+  }
 
   function poll() {
     fetch('/state?t=' + encodeURIComponent(token), { cache: 'no-store' })

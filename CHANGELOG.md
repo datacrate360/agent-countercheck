@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **New: flow map** at the top of the report and live UI: each agent's latest claim runs through Countercheck (the
+  checks locked at the base commit) to *delivered*, *sent back* or *needs a person*. Point at an agent to light its
+  path and the checks it broke; point at a check to see which agents broke it; click an agent to filter the runs.
+  Lines draw in once; a light runs along each delivered one. All CSS, so the offline report (no script) has it too.
+  In the live UI, only new lines draw after a reload, and the grid lights up around the pointer.
+- **New: step replay.** Opening a run plays what happened, from the receipt: the claim, checks locked (or not), clean
+  copy, protected files put back, each check with a bar sized by its time, and the sealed receipt (now a paper card
+  with a wax seal).
+- **Look:** an agent keeps its colour when others join (taken from its name, not its place in the list). On phones,
+  a long check command scrolls inside its table instead of widening the page.
+- **Fix:** the report's check-time total can't overflow on a receipt with absurd durations (found by the property
+  tests; receipts come from the worker's side).
+
 ## v0.11.0 (2026-10-23)
 
 A new report and live UI, and many agents on one project told apart.

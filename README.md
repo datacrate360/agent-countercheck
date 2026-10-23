@@ -319,10 +319,13 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 
 - `ui` serves the page on this computer only (127.0.0.1, with a random token in the address). It uses port 7357, or
   any free port (`--port N` to choose); running it again opens the one already running for the project.
-- `report` writes `.countercheck/receipts/report.html`: the project's name and folder; one row per agent (its runs as
-  coloured dots, how many passed, its latest claim); then every run, newest first, with the verdict, the claim, each
-  check's output, protected and watched files the agent changed, files no check covers, the seal status, and a grid
-  for matrix checks. Filter by verdict or by agent. It loads nothing from the internet and has no scripts, so it's
+- `report` writes `.countercheck/receipts/report.html`: the project's name and folder; a **flow map** (each agent's
+  latest claim running through the locked checks to *delivered*, *sent back* or *needs a person*; point at an agent
+  to light its path and the checks it broke, or at a check to see who broke it); one row per agent (its runs as
+  coloured dots, how many passed, its latest claim); then every run, newest first. Open a run and it replays what
+  happened step by step (checks locked, clean copy, protected files put back, each check timed, receipt sealed),
+  with each check's output, protected and watched files the agent changed, files no check covers, and a grid for
+  matrix checks. Filter by verdict or by agent. It loads nothing from the internet and has no scripts, so it's
   safe to attach to a pull request. The home folder shows as `~`.
 
 ## Reference
