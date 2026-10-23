@@ -12,10 +12,22 @@ The mark: the agent (a ghost) hands in its receipt, and Countercheck's coral sea
 | `readme-header.svg` | Compact lockup for documents |
 | `social-preview.svg`, `png/social-preview.png` | GitHub social preview (1280 x 640): Settings > General > Social preview |
 
-Colours: teal `#0F766E` (dark `#083F3B`, light `#1BA393`), coral `#C2410C` (`#FB923C` on dark), ink `#0F172A`.
-Wordmark: Poppins Bold, "Agent Counter" in ink and "check" in coral; all text in these files is converted to outlines.
+Look: the v5 style of datacrate360.com (its `docs/design-direction.md`). Logo teal is the one accent; coral appears
+only on the seal (the verdict); the wordmark is one colour.
 
-Rebuild everything after a change: `python src/build_brand.py <out> <folder with poppins-*-latin.woff2>` (needs
+| Colour | Hex | Use |
+|---|---|---|
+| Teal | `#0F4C4C` (tile `#1E7A72` → `#082B2B`) | the tile, links, accents |
+| Coral | `#C2410C` | the seal only |
+| Ink | `#141414` | wordmark on light |
+| Paper | `#FAFAF9` | wordmark on dark |
+| Night | `#0E1211` | dark bands (social preview), with a faint 44 px grid |
+
+Type: wordmark **Inter 600**, tracking −0.035 em; code and commands **JetBrains Mono**. All text in these files is
+converted to outlines.
+
+Rebuild everything after a change: `python src/build_brand.py <out> <fonts>` where `<fonts>` holds
+`inter-latin.woff2` and `jetbrains-mono-latin.woff2` (the variable fonts datacrate360.com self-hosts; needs
 `fonttools` and `brotli`), then `python src/export_png.py <out>` (needs Pillow and Google Chrome).
 
 ## Licence

@@ -1,9 +1,9 @@
-"""Build the Agent Countercheck logo set from one source geometry.
+"""Build the Agent Countercheck logo set from one source geometry (v5 look: Inter 600, one-colour wordmark).
 
 Outputs (in OUT): mark.svg (app icon, 1024), mark-small.svg (simplified for <= 48 px),
 glyph.svg (no background tile), glyph-mono.svg, lockup-light.svg, lockup-dark.svg,
-social-preview.svg (1280x640), readme-header.svg. Text is converted to outlines (Poppins,
-OFL) so every SVG renders the same everywhere.
+social-preview.svg (1280x640), readme-header.svg. Text is converted to outlines (Inter and JetBrains Mono,
+OFL; the variable fonts from datacrate360.com's public/fonts) so every SVG renders the same everywhere.
 """
 import math
 import sys
@@ -12,12 +12,15 @@ from pathlib import Path
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 OUT = Path(sys.argv[1])
 FONTS = Path(sys.argv[2])
 OUT.mkdir(parents=True, exist_ok=True)
 
-TEAL, TEAL_D, TEAL_L, CORAL, INK = "#0F766E", "#083F3B", "#1BA393", "#C2410C", "#0F172A"
+# v5 palette (datacrate360.com docs/design-direction.md): logo teal is the one accent, coral only on the seal.
+TEAL, TEAL_D, TEAL_L, CORAL, INK = "#0F4C4C", "#082B2B", "#1E7A72", "#C2410C", "#141414"
+NIGHT, PAPER, MUTED = "#0E1211", "#FAFAF9", "#6B6B66"
 
 # ---------------------------------------------------------------- the mark
 DEFS = f'''
@@ -134,92 +137,105 @@ mono = (
 (OUT / "glyph-mono.svg").write_text(svg(1024, 1024, mono))
 
 # ------------------------------------------------------------- the wordmark
-font = TTFont(FONTS / "poppins-700-latin.woff2")
-gs = font.getGlyphSet()
-cmap = font.getBestCmap()
-upm = font["head"].unitsPerEm
-hmtx = font["hmtx"]
+class Face:
+    """A font at one weight (variable fonts are instanced), drawn as SVG outlines."""
+
+    def __init__(self, file, weight):
+        f = TTFont(FONTS / file)
+        if "fvar" in f:
+            f = instantiateVariableFont(f, {"wght": weight})
+        self.gs, self.cmap = f.getGlyphSet(), f.getBestCmap()
+        self.upm, self.hmtx = f["head"].unitsPerEm, f["hmtx"]
+
+    def path(self, text, x, baseline, size, tracking=0.0):
+        """`text` as one SVG path, glyph advances plus tracking (em fraction); returns (d, width)."""
+        scale = size / self.upm
+        pen = SVGPathPen(self.gs)
+        cur = 0.0
+        for ch in text:
+            name = self.cmap[ord(ch)]
+            self.gs[name].draw(TransformPen(pen, (scale, 0, 0, -scale, x + cur, baseline)))
+            cur += self.hmtx[name][0] * scale + tracking * size
+        return pen.getCommands(), cur - tracking * size
 
 
-def text_path(text, x, baseline, size, tracking=-0.02):
-    """`text` as one SVG path, glyph advances plus tracking (em fraction)."""
-    scale = size / upm
-    pen = SVGPathPen(gs)
-    cur = 0.0
-    for ch in text:
-        name = cmap[ord(ch)]
-        tp = TransformPen(pen, (scale, 0, 0, -scale, x + cur, baseline))
-        gs[name].draw(tp)
-        cur += hmtx[name][0] * scale + tracking * size
-    return pen.getCommands(), cur
+INTER600 = Face("inter-latin.woff2", 600)
+INTER400 = Face("inter-latin.woff2", 400)
+MONO = Face("jetbrains-mono-latin.woff2", 500)
+NAME = "Agent Countercheck"
 
 
-def wordmark(x, baseline, size, ink, coral=CORAL):
-    a, wa = text_path("Agent Counter", x, baseline, size)
-    b, wb = text_path("check", x + wa, baseline, size)
-    return f'<path d="{a}" fill="{ink}"/><path d="{b}" fill="{coral}"/>', wa + wb
+def wordmark(size, ink):
+    """One colour, tight tracking like the site's headlines (never a two-colour wordmark)."""
+    d, w = INTER600.path(NAME, 0, 0, size, tracking=-0.035)
+    return f'<path d="{d}" fill="{ink}"/>', w
 
 
-def lockup(ink, coral, name, tile=True):
-    size = 168
-    body_w, total = wordmark(0, 0, size, ink, coral)
-    mark_h = 260
-    gap = 56
-    w = int(mark_h + gap + total + 20)
-    h = 300
-    m = TILE + figure() if tile else figure()
+def lockup(ink, name):
+    size = 150
+    body, total = wordmark(size, ink)
+    mark_h, gap, h = 260, 52, 300
+    w = int(20 + mark_h + gap + total + 24)
     s = (
-        f'<g transform="translate(20 20) scale({mark_h / 1024})">{m}</g>'
-        f'<g transform="translate({20 + mark_h + gap} {h / 2 + size * 0.36:.1f})">{body_w}</g>'
+        f'<g transform="translate(20 20) scale({mark_h / 1024})">{TILE + figure()}</g>'
+        # Optical centre: cap height of Inter is ~0.727 em.
+        f'<g transform="translate({20 + mark_h + gap} {h / 2 + size * 0.727 / 2:.1f})">{body}</g>'
     )
     (OUT / name).write_text(svg(w, h, s))
-    return w, h
 
 
-lockup(INK, CORAL, "lockup-light.svg")
-lockup("#F8FAFC", "#FB923C", "lockup-dark.svg")
+lockup(INK, "lockup-light.svg")
+lockup(PAPER, "lockup-dark.svg")
+
+
+def fit(face, text, want, max_w, tracking=0.0):
+    """The size (<= want) at which `text` fits max_w."""
+    _, w = face.path(text, 0, 0, want, tracking)
+    return want if w <= max_w else want * max_w / w
+
 
 # --------------------------------------------- GitHub social preview 1280x640
-TEXT_X, MAX_W = 470, 1280 - 470 - 80
-
-
-def fitted(text_fn, want):
-    """Render at `want`; if wider than MAX_W, scale the size down to fit."""
-    body, w = text_fn(want)
-    if w <= MAX_W:
-        return body, w, want
-    size = want * MAX_W / w
-    body, w = text_fn(size)
-    return body, w, size
-
-
-wm, _, wm_size = fitted(lambda z: wordmark(0, 0, z, INK), 80)
-tag, _, _ = fitted(lambda z: text_path("Proof that AI agents' work really happened.", 0, 0, z, tracking=-0.01), 36)
-social = (
-    '<rect width="1280" height="640" fill="#F7F9F8"/>'
-    '<rect x="0" y="600" width="1280" height="40" fill="#0F766E"/>'
-    f'<g transform="translate(90 150) scale({340 / 1024})">{TILE + figure()}</g>'
-    f'<g transform="translate({TEXT_X} 300)">{wm}</g>'
-    f'<g transform="translate({TEXT_X + 3} 368)"><path d="{tag}" fill="#334155"/></g>'
+# v5 "C" marketing look: near-black teal-tinted night band, faint 44 px grid, one soft teal light behind the product.
+TEXT_X = 476
+MAX_W = 1280 - TEXT_X - 72
+grid = "".join(f'<line x1="{x}" y1="0" x2="{x}" y2="640"/>' for x in range(0, 1281, 44)) + "".join(
+    f'<line x1="0" y1="{y}" x2="1280" y2="{y}"/>' for y in range(0, 641, 44)
 )
-small_lines = [
-    "Re-runs your checks in a clean copy the agent can't edit,",
-    "and writes a sealed receipt. Open source: pip install agent-countercheck",
-]
-# One size for both lines: the one that fits the longer line.
-line_size = min(fitted(lambda z, t=t: text_path(t, 0, 0, z, tracking=0), 24)[2] for t in small_lines)
-y = 436
-for line in small_lines:
-    p, _ = text_path(line, 0, 0, line_size, tracking=0)
-    social += f'<g transform="translate({TEXT_X + 3} {y})"><path d="{p}" fill="#64748B"/></g>'
+wm_size = fit(INTER600, NAME, 76, MAX_W, -0.035)
+wm, _ = wordmark(wm_size, PAPER)
+tag_text = "Proof that AI agents' work really happened."
+tag_d, _ = INTER400.path(tag_text, 0, 0, fit(INTER400, tag_text, 34, MAX_W, -0.01), -0.01)
+lines = ["Re-runs your checks in a clean copy the agent can't edit,", "and writes a sealed receipt. macOS, Linux, Windows, CI."]
+line_size = min(fit(INTER400, t, 24, MAX_W) for t in lines)
+cmd = "pip install agent-countercheck"
+cmd_d, cmd_w = MONO.path(cmd, 0, 0, 22)
+social = (
+    f'<rect width="1280" height="640" fill="{NIGHT}"/>'
+    f'<g stroke="#FFFFFF" stroke-opacity=".045" stroke-width="1">{grid}</g>'
+    '<radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1E7A72" stop-opacity=".55"/>'
+    '<stop offset="1" stop-color="#1E7A72" stop-opacity="0"/></radialGradient>'
+    '<circle cx="262" cy="318" r="300" fill="url(#glow)"/>'
+    f'<g transform="translate(92 148) scale({340 / 1024})">{TILE + figure()}</g>'
+    f'<g transform="translate({TEXT_X} 246)">{wm}</g>'
+    f'<g transform="translate({TEXT_X + 2} 308)"><path d="{tag_d}" fill="#D6DBD8"/></g>'
+)
+y = 374
+for t in lines:
+    d, _ = INTER400.path(t, 0, 0, line_size)
+    social += f'<g transform="translate({TEXT_X + 2} {y})"><path d="{d}" fill="#9AA39F"/></g>'
     y += 36
+social += (
+    f'<rect x="{TEXT_X}" y="434" width="{cmd_w + 40:.0f}" height="48" rx="24" fill="#FFFFFF" fill-opacity=".06" '
+    'stroke="#FFFFFF" stroke-opacity=".14"/>'
+    f'<g transform="translate({TEXT_X + 20} 465)"><path d="{cmd_d}" fill="#8FD1C6"/></g>'
+)
 (OUT / "social-preview.svg").write_text(svg(1280, 640, social))
 
-# README header: lockup on a transparent background, wide and short.
-hdr_wm, hdr_w = wordmark(0, 0, 64, INK)
+# README header: compact lockup on a transparent background.
+hdr_body, hdr_w = wordmark(60, INK)
 hdr = (
     f'<g transform="translate(8 8) scale({112 / 1024})">{TILE + figure()}</g>'
-    f'<g transform="translate(144 84)">{hdr_wm}</g>'
+    f'<g transform="translate(140 {64 + 60 * 0.727 / 2:.1f})">{hdr_body}</g>'
 )
-(OUT / "readme-header.svg").write_text(svg(int(144 + hdr_w + 16), 128, hdr))
+(OUT / "readme-header.svg").write_text(svg(int(140 + hdr_w + 16), 128, hdr))
 print("built", sorted(p.name for p in OUT.iterdir()))

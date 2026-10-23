@@ -1,66 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="494" viewBox="0 0 960 494" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="494" viewBox="0 0 960 494" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Benchmark: false done claims per setup</title>
   <desc>False done claims out of 87 runs. GPT 6.1 all tasks: Hermes 7, with verify_on_stop 11, with Countercheck 3, both 2. GPT 6.1 impossible tasks: 6, 8, 0, 0. DeepSeek V4 Pro all tasks: 7, 6, 6, 6.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#55554F"/>
     </marker>
     <marker id="arrowCoral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/>
     </marker>
   </defs>
   <rect width="960" height="494" rx="16" fill="#FFFFFF"/>
-  <line x1="230" y1="86" x2="230" y2="416" stroke="#E2E8F0" stroke-width="1"/>
-  <text x="230" y="432" font-size="11" fill="#64748B" text-anchor="middle">0</text>
-  <line x1="342" y1="86" x2="342" y2="416" stroke="#E2E8F0" stroke-width="1"/>
-  <text x="342" y="432" font-size="11" fill="#64748B" text-anchor="middle">2</text>
-  <line x1="454" y1="86" x2="454" y2="416" stroke="#E2E8F0" stroke-width="1"/>
-  <text x="454" y="432" font-size="11" fill="#64748B" text-anchor="middle">4</text>
-  <line x1="566" y1="86" x2="566" y2="416" stroke="#E2E8F0" stroke-width="1"/>
-  <text x="566" y="432" font-size="11" fill="#64748B" text-anchor="middle">6</text>
-  <line x1="678" y1="86" x2="678" y2="416" stroke="#E2E8F0" stroke-width="1"/>
-  <text x="678" y="432" font-size="11" fill="#64748B" text-anchor="middle">8</text>
-  <line x1="790" y1="86" x2="790" y2="416" stroke="#E2E8F0" stroke-width="1"/>
-  <text x="790" y="432" font-size="11" fill="#64748B" text-anchor="middle">10</text>
-  <text x="20" y="38" font-size="15" fill="#0F172A" font-weight="700">False "done" claims: the agent said it succeeded, hidden tests said no (lower is better)</text>
-  <rect x="20" y="54" width="14" height="14" rx="3" fill="#CBD5E1"/>
-  <text x="40" y="66" font-size="12.5" fill="#334155">Hermes alone</text>
-  <rect x="136.4" y="54" width="14" height="14" rx="3" fill="#94A3B8"/>
-  <text x="156.4" y="66" font-size="12.5" fill="#334155">+ its verify_on_stop</text>
-  <rect x="310.4" y="54" width="14" height="14" rx="3" fill="#0F766E"/>
-  <text x="330.4" y="66" font-size="12.5" fill="#334155">+ Countercheck</text>
-  <rect x="441.2" y="54" width="14" height="14" rx="3" fill="#134E4A"/>
-  <text x="461.2" y="66" font-size="12.5" fill="#334155">both</text>
-  <text x="20" y="128" font-size="15" fill="#0F172A" font-weight="700">GPT 6.1</text>
-  <text x="20" y="148" font-size="12.5" fill="#64748B">all 29 tasks</text>
-  <rect x="230" y="92" width="392" height="18" rx="4" fill="#CBD5E1"/>
-  <text x="630" y="106" font-size="13" fill="#334155">7</text>
-  <rect x="230" y="115" width="616" height="18" rx="4" fill="#94A3B8"/>
-  <text x="854" y="129" font-size="13" fill="#334155">11</text>
-  <rect x="230" y="138" width="168" height="18" rx="4" fill="#0F766E"/>
-  <text x="406" y="152" font-size="13" fill="#0F766E" font-weight="700">3</text>
-  <rect x="230" y="161" width="112" height="18" rx="4" fill="#134E4A"/>
-  <text x="350" y="175" font-size="13" fill="#334155">2</text>
-  <text x="20" y="242" font-size="15" fill="#0F172A" font-weight="700">GPT 6.1</text>
-  <text x="20" y="262" font-size="12.5" fill="#64748B">impossible tasks only</text>
-  <rect x="230" y="206" width="336" height="18" rx="4" fill="#CBD5E1"/>
-  <text x="574" y="220" font-size="13" fill="#334155">6</text>
-  <rect x="230" y="229" width="448" height="18" rx="4" fill="#94A3B8"/>
-  <text x="686" y="243" font-size="13" fill="#334155">8</text>
-  <rect x="230" y="252" width="2" height="18" rx="4" fill="#0F766E"/>
-  <text x="240" y="266" font-size="13" fill="#0F766E" font-weight="700">0</text>
-  <rect x="230" y="275" width="2" height="18" rx="4" fill="#134E4A"/>
-  <text x="240" y="289" font-size="13" fill="#334155">0</text>
-  <text x="20" y="356" font-size="15" fill="#0F172A" font-weight="700">DeepSeek V4 Pro</text>
-  <text x="20" y="376" font-size="12.5" fill="#64748B">all 29 tasks</text>
-  <rect x="230" y="320" width="392" height="18" rx="4" fill="#CBD5E1"/>
-  <text x="630" y="334" font-size="13" fill="#334155">7</text>
-  <rect x="230" y="343" width="336" height="18" rx="4" fill="#94A3B8"/>
-  <text x="574" y="357" font-size="13" fill="#334155">6</text>
-  <rect x="230" y="366" width="336" height="18" rx="4" fill="#0F766E"/>
-  <text x="574" y="380" font-size="13" fill="#0F766E" font-weight="700">6</text>
-  <rect x="230" y="389" width="336" height="18" rx="4" fill="#134E4A"/>
-  <text x="574" y="403" font-size="13" fill="#334155">6</text>
-  <text x="20" y="456" font-size="12.5" fill="#334155">Hermes Agent, 29 small coding tasks, 3 runs each per setup, graded by hidden tests the agent never saw (full method: docs/eval).</text>
-  <text x="20" y="476" font-size="12.5" fill="#334155">GPT edited protected tests when stuck; Countercheck restored them and pushed back. DeepSeek rarely gamed tests.</text>
+  <line x1="230" y1="86" x2="230" y2="416" stroke="#E8E6E1" stroke-width="1"/>
+  <text x="230" y="432" font-size="11" fill="#6B6B66" text-anchor="middle">0</text>
+  <line x1="342" y1="86" x2="342" y2="416" stroke="#E8E6E1" stroke-width="1"/>
+  <text x="342" y="432" font-size="11" fill="#6B6B66" text-anchor="middle">2</text>
+  <line x1="454" y1="86" x2="454" y2="416" stroke="#E8E6E1" stroke-width="1"/>
+  <text x="454" y="432" font-size="11" fill="#6B6B66" text-anchor="middle">4</text>
+  <line x1="566" y1="86" x2="566" y2="416" stroke="#E8E6E1" stroke-width="1"/>
+  <text x="566" y="432" font-size="11" fill="#6B6B66" text-anchor="middle">6</text>
+  <line x1="678" y1="86" x2="678" y2="416" stroke="#E8E6E1" stroke-width="1"/>
+  <text x="678" y="432" font-size="11" fill="#6B6B66" text-anchor="middle">8</text>
+  <line x1="790" y1="86" x2="790" y2="416" stroke="#E8E6E1" stroke-width="1"/>
+  <text x="790" y="432" font-size="11" fill="#6B6B66" text-anchor="middle">10</text>
+  <text x="20" y="38" font-size="15" fill="#141414" font-weight="700">False "done" claims: the agent said it succeeded, hidden tests said no (lower is better)</text>
+  <rect x="20" y="54" width="14" height="14" rx="3" fill="#D6D3CC"/>
+  <text x="40" y="66" font-size="12.5" fill="#3A3A36">Hermes alone</text>
+  <rect x="136.4" y="54" width="14" height="14" rx="3" fill="#A3A39C"/>
+  <text x="156.4" y="66" font-size="12.5" fill="#3A3A36">+ its verify_on_stop</text>
+  <rect x="310.4" y="54" width="14" height="14" rx="3" fill="#0F4C4C"/>
+  <text x="330.4" y="66" font-size="12.5" fill="#3A3A36">+ Countercheck</text>
+  <rect x="441.2" y="54" width="14" height="14" rx="3" fill="#0B3A3A"/>
+  <text x="461.2" y="66" font-size="12.5" fill="#3A3A36">both</text>
+  <text x="20" y="128" font-size="15" fill="#141414" font-weight="700">GPT 6.1</text>
+  <text x="20" y="148" font-size="12.5" fill="#6B6B66">all 29 tasks</text>
+  <rect x="230" y="92" width="392" height="18" rx="4" fill="#D6D3CC"/>
+  <text x="630" y="106" font-size="13" fill="#3A3A36">7</text>
+  <rect x="230" y="115" width="616" height="18" rx="4" fill="#A3A39C"/>
+  <text x="854" y="129" font-size="13" fill="#3A3A36">11</text>
+  <rect x="230" y="138" width="168" height="18" rx="4" fill="#0F4C4C"/>
+  <text x="406" y="152" font-size="13" fill="#0F4C4C" font-weight="700">3</text>
+  <rect x="230" y="161" width="112" height="18" rx="4" fill="#0B3A3A"/>
+  <text x="350" y="175" font-size="13" fill="#3A3A36">2</text>
+  <text x="20" y="242" font-size="15" fill="#141414" font-weight="700">GPT 6.1</text>
+  <text x="20" y="262" font-size="12.5" fill="#6B6B66">impossible tasks only</text>
+  <rect x="230" y="206" width="336" height="18" rx="4" fill="#D6D3CC"/>
+  <text x="574" y="220" font-size="13" fill="#3A3A36">6</text>
+  <rect x="230" y="229" width="448" height="18" rx="4" fill="#A3A39C"/>
+  <text x="686" y="243" font-size="13" fill="#3A3A36">8</text>
+  <rect x="230" y="252" width="2" height="18" rx="4" fill="#0F4C4C"/>
+  <text x="240" y="266" font-size="13" fill="#0F4C4C" font-weight="700">0</text>
+  <rect x="230" y="275" width="2" height="18" rx="4" fill="#0B3A3A"/>
+  <text x="240" y="289" font-size="13" fill="#3A3A36">0</text>
+  <text x="20" y="356" font-size="15" fill="#141414" font-weight="700">DeepSeek V4 Pro</text>
+  <text x="20" y="376" font-size="12.5" fill="#6B6B66">all 29 tasks</text>
+  <rect x="230" y="320" width="392" height="18" rx="4" fill="#D6D3CC"/>
+  <text x="630" y="334" font-size="13" fill="#3A3A36">7</text>
+  <rect x="230" y="343" width="336" height="18" rx="4" fill="#A3A39C"/>
+  <text x="574" y="357" font-size="13" fill="#3A3A36">6</text>
+  <rect x="230" y="366" width="336" height="18" rx="4" fill="#0F4C4C"/>
+  <text x="574" y="380" font-size="13" fill="#0F4C4C" font-weight="700">6</text>
+  <rect x="230" y="389" width="336" height="18" rx="4" fill="#0B3A3A"/>
+  <text x="574" y="403" font-size="13" fill="#3A3A36">6</text>
+  <text x="20" y="456" font-size="12.5" fill="#3A3A36">Hermes Agent, 29 small coding tasks, 3 runs each per setup, graded by hidden tests the agent never saw (full method: docs/eval).</text>
+  <text x="20" y="476" font-size="12.5" fill="#3A3A36">GPT edited protected tests when stuck; Countercheck restored them and pushed back. DeepSeek rarely gamed tests.</text>
 </svg>

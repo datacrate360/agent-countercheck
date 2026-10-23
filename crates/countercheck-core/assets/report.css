@@ -12,8 +12,8 @@ body{margin:0;color:var(--ink);font:15px/1.6 var(--sans);background-color:var(--
 a{color:var(--coral)}
 .top{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:12px 24px;background:rgba(255,255,255,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
-.brand{display:flex;align-items:center;font:700 18px/1 var(--display);letter-spacing:-.02em;color:var(--ink)}
-.brand em{font-style:normal;color:var(--coral)}
+.brand{display:flex;align-items:center;font:600 18px/1 var(--display);letter-spacing:-.035em;color:var(--ink)}
+.brand em{font-style:normal;color:inherit}
 .mark{margin-right:9px;width:26px;height:26px;flex:none}
 .pill{display:inline-flex;align-items:center;gap:7px;font:600 12px/1 var(--mono);text-transform:uppercase;
   letter-spacing:.08em;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 12px}
