@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **GitHub Action**: `uses: datacrate360/agent-countercheck@<tag>` verifies every pull request with the checks
+  from its base commit; a job summary (verdict, checks, protected changes, failing output), outputs, and the receipt
+  plus an HTML report as an artifact. `fail-on`: unverified (default), failed or never. Linux, macOS and Windows
+  runners. Guide: `docs/guides/github-action.md`.
 - **PyPI page:** the README's images and links work there (the logo, diagrams and demo were broken). The release
   pins them to the tag's absolute URLs while building the Python packages (`packaging/pypi_readme.py`); CI checks
   every link resolves.
