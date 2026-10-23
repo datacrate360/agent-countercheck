@@ -1,0 +1,117 @@
+name: Agent Countercheck
+description: Verify an AI agent's pull request with the checks from the base revision, and write a sealed receipt.
+author: Srikanth Pinisetti
+branding:
+  icon: check-circle
+  color: green
+
+# Inputs reach the shell through env: only (never ${{ }} inside run:), so a PR title can't inject commands.
+inputs:
+  base:
+    description: >-
+      The revision before the change. Default: the pull request's base commit; on a push, the commit before it.
+    required: false
+    default: ""
+  claim:
+    description: What the agent said it did. Default on a pull request is its title.
+    required: false
+    default: ""
+  agent:
+    description: Which agent did the work (claude-code, codex, cursor, hermes...).
+    required: false
+    default: ""
+  model:
+    description: Which model did the work.
+    required: false
+    default: ""
+  path:
+    description: The repository to verify (any folder inside it).
+    required: false
+    default: "."
+  sandbox:
+    description: auto, seatbelt, landlock, windows or none (see `countercheck verify --help`).
+    required: false
+    default: auto
+  checks-from:
+    description: Read the checks from outside the repository, `<suite repo>@<full commit id>:<path>` or a file.
+    required: false
+    default: ""
+  checks-sha256:
+    description: The SHA-256 the --checks-from file must have.
+    required: false
+    default: ""
+  fail-on:
+    description: >-
+      `unverified` (default): fail the step unless the verdict is VERIFIED. `failed`: fail only on FAILED or an error.
+      `never`: report only.
+    required: false
+    default: unverified
+  version:
+    description: Countercheck version to install, e.g. 0.9.0. Default is the version of this action's tag, else the latest.
+    required: false
+    default: ""
+  upload-receipt:
+    description: Upload the receipt (JSON + HTML report) as a workflow artifact.
+    required: false
+    default: "true"
+
+outputs:
+  verdict:
+    description: verified, failed, unverified, or error.
+    value: ${{ steps.verify.outputs.verdict }}
+  receipt-id:
+    description: The receipt's id.
+    value: ${{ steps.verify.outputs.receipt-id }}
+  receipt-path:
+    description: Path to the receipt JSON.
+    value: ${{ steps.verify.outputs.receipt-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install countercheck
+      shell: bash
+      env:
+        WANT: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        set -eu
+        v="$WANT"
+        # Pinned to a release tag (uses: ...@v0.10.0): install that same version.
+        if [ -z "$v" ] && printf '%s' "$ACTION_REF" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then v="${ACTION_REF#v}"; fi
+        dir="$RUNNER_TEMP/countercheck-bin"
+        mkdir -p "$dir"
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          COUNTERCHECK_VERSION="$v" COUNTERCHECK_INSTALL_DIR="$(cygpath -w "$dir")" \
+            pwsh -NoProfile -Command 'irm https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.ps1 | iex'
+        else
+          curl -fsSL https://raw.githubusercontent.com/datacrate360/agent-countercheck/PROD/install.sh \
+            | COUNTERCHECK_VERSION="$v" COUNTERCHECK_INSTALL_DIR="$dir" sh
+        fi
+        echo "$dir" >> "$GITHUB_PATH"
+
+    - name: Countercheck verify
+      id: verify
+      shell: bash
+      env:
+        IN_BASE: ${{ inputs.base }}
+        IN_CLAIM: ${{ inputs.claim }}
+        IN_AGENT: ${{ inputs.agent }}
+        IN_MODEL: ${{ inputs.model }}
+        IN_PATH: ${{ inputs.path }}
+        IN_SANDBOX: ${{ inputs.sandbox }}
+        IN_CHECKS_FROM: ${{ inputs.checks-from }}
+        IN_CHECKS_SHA: ${{ inputs.checks-sha256 }}
+        IN_FAIL_ON: ${{ inputs.fail-on }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      run: bash "$GITHUB_ACTION_PATH/packaging/github-action/verify.sh"
+
+    - name: Upload the receipt
+      if: always() && inputs.upload-receipt == 'true' && steps.verify.outputs.receipt-dir != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: countercheck-receipt-${{ steps.verify.outputs.receipt-id || github.run_attempt }}
+        path: ${{ steps.verify.outputs.receipt-dir }}
+        if-no-files-found: ignore
