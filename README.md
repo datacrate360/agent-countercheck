@@ -156,7 +156,7 @@ Pick one. Every option gives you the same `countercheck` command.
 Check it worked:
 
 ```sh
-countercheck --version        # countercheck 0.9.0
+countercheck --version        # countercheck 0.10.0
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win)**: Countercheck calls `git`, and checks run
@@ -597,10 +597,10 @@ and will use a web stack. The full reasoning is in [docs/decisions/0001-stack.md
 
 ## Status
 
-v0.9 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows has a partial one by default (writes confined
+v0.10 ([CHANGELOG](CHANGELOG.md)). macOS and Linux have a sandbox; Windows has a partial one by default (writes confined
 for `pwsh`/`cmd` checks) and a full one after `countercheck windows-setup` (experimental). Not yet: signed
 receipts, a per-host network allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, more agent
-hooks (Codex, Cursor, a GitHub Action). See [docs/ROADMAP.md](docs/ROADMAP.md).
+hooks (Codex, Cursor). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Contribute: make it fit your domain
 

@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: README links absolute for PyPI
         shell: bash
-        run: $(command -v python3 || command -v python) packaging/pypi_readme.py "$GITHUB_REF_NAME"
+        run: for py in python3 python; do "$py" -c 1 >/dev/null 2>&1 && exec "$py" packaging/pypi_readme.py "$GITHUB_REF_NAME"; done; exit 1
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: README links absolute for PyPI
         shell: bash
-        run: $(command -v python3 || command -v python) packaging/pypi_readme.py "$GITHUB_REF_NAME"
+        run: for py in python3 python; do "$py" -c 1 >/dev/null 2>&1 && exec "$py" packaging/pypi_readme.py "$GITHUB_REF_NAME"; done; exit 1
       - uses: PyO3/maturin-action@v1
         with: { command: sdist, args: --out dist }
       - uses: actions/upload-artifact@v4

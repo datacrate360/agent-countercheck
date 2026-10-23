@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.10.0 (2026-10-23)
+
+A GitHub Action, and a working PyPI page.
 
 - **GitHub Action**: `uses: datacrate360/agent-countercheck@<tag>` verifies every pull request with the checks
   from its base commit; a job summary (verdict, checks, protected changes, failing output), outputs, and the receipt
