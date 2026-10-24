@@ -253,10 +253,12 @@ fn serve(
             let entries = report::read_receipts(dir).unwrap_or_default();
             let nonce = random_hex(16).map_err(std::io::Error::other)?;
             let now = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
+            let running = crate::progress::read_running(dir);
             let page = countercheck_core::report::Page {
                 title,
                 path,
                 generated_at: &now,
+                running: &running,
             };
             let html = render_live(&entries, &page, &nonce);
             respond(
@@ -276,10 +278,17 @@ fn serve(
     }
 }
 
-/// Changes whenever a receipt is added, removed or rewritten (count, newest change, total size).
+/// Changes whenever a receipt is added, removed or rewritten, or a run in progress moves on
+/// (count, newest change, total size, over both folders).
 fn state(dir: &Path) -> String {
     let (mut n, mut newest, mut size) = (0u64, 0u128, 0u64);
-    if let Ok(rd) = std::fs::read_dir(dir) {
+    for dir in [
+        dir.to_path_buf(),
+        dir.join(countercheck_core::progress::DIR),
+    ] {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in rd.flatten() {
             if e.path().extension().is_none_or(|x| x != "json") {
                 continue;

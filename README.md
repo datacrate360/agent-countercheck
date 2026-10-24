@@ -321,7 +321,9 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
   any free port (`--port N` to choose); running it again opens the one already running for the project.
 - `report` writes `.countercheck/receipts/report.html`: the project's name and folder; a **flow map** (each agent's
   latest claim running through the locked checks to *delivered*, *sent back* or *needs a person*; point at an agent
-  to light its path and the checks it broke, or at a check to see who broke it); one row per agent (its runs as
+  to light its path and the checks it broke, or at a check to see who broke it; with more than 12 agents it groups
+  them by tool, with a switch to show each one; runs still going show as a moving line and in a *Checking now* list
+  with their current step); one row per agent (its runs as
   coloured dots, how many passed, its latest claim); then every run, newest first. Open a run and it replays what
   happened step by step (checks locked, clean copy, protected files put back, each check timed, receipt sealed),
   with each check's output, protected and watched files the agent changed, files no check covers, and a grid for
@@ -337,6 +339,7 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 | The program | where you installed it (`/opt/homebrew/bin`, `~/.local/bin`, …) | keeps no data |
 | Your rules | `<project>/.countercheck/checks.toml` | committed; one per project |
 | Receipts | `<project>/.countercheck/receipts/<id>.json` | one per run; git-ignored; `--out <folder>` writes elsewhere |
+| Runs in progress | `<project>/.countercheck/receipts/running/<id>.json` | while `verify` runs, for the report and live UI; removed when the receipt is written; display only, never a verdict |
 | Session start commits | `<project>/.git/countercheck/sessions/<session>.json` | each agent session's "before" commit; inside `.git`, never copied or committed |
 | Claude Code hook | `<project>/.claude/settings.json` | step 4a |
 | Hermes hook | `~/.hermes/config.yaml` or `~/.hermes/profiles/<name>/config.yaml` | step 4b; approvals in that profile's `shell-hooks-allowlist.json` |

@@ -1406,7 +1406,7 @@ fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
     let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
     assert!(html.contains("<h2>3 agents on this project</h2>"), "{html}");
     // The flow map draws one node per agent, and each run replays its steps.
-    assert_eq!(html.matches("<label class=\"fn a-").count(), 3, "{html}");
+    assert_eq!(html.matches("\" class=\"fn a-").count(), 3, "{html}");
     assert_eq!(html.matches("<ol class=\"steps").count(), 3, "{html}");
     for name in ["<b>UI design</b>", "<b>Security review</b>"] {
         assert!(html.contains(name), "{name}: {html}");
@@ -1418,6 +1418,122 @@ fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
         html.contains(&format!("<code>~{sep}{leaf}</code>")),
         "{html}"
     );
+}
+
+/// While `verify` runs, `<receipts>/running/<id>.json` says what it is doing (for the report and
+/// live UI); it is gone once the receipt is written.
+#[test]
+fn a_run_in_progress_is_visible_until_its_receipt_is_written() {
+    let d = project(
+        "[[check]]\nname = \"slow check\"\nrun = \"sh tests/slow.sh\"\ntimeout_secs = 60\n",
+    );
+    fs::write(d.path().join("tests/slow.sh"), "sleep 3\n").unwrap();
+    sh(d.path(), "git add -A && git commit -qm slow");
+    let mut cmd = Command::new(BIN);
+    cmd.args([
+        "verify",
+        "--json",
+        "--role",
+        "Data pipeline",
+        "--agent",
+        "hermes",
+    ])
+    .args(["--claim", "Backfilled <beta>.", "--repo"])
+    .arg(d.path())
+    .stdout(std::process::Stdio::piped());
+    if nested() {
+        cmd.args(["--sandbox", "none"]);
+    }
+    let child = cmd.spawn().unwrap();
+    let running = d.path().join(".countercheck/receipts/running");
+    let seen = (0..100).find_map(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let file = fs::read_dir(&running)
+            .ok()?
+            .flatten()
+            .find(|e| e.path().extension().is_some_and(|x| x == "json"))?;
+        let v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(file.path()).ok()?).ok()?;
+        (v["stage"] == "check").then_some(v)
+    });
+    let out = child.wait_with_output().unwrap();
+    let v = seen.expect("a progress file while the check ran");
+    assert_eq!(v["schema"], "countercheck.progress/v1");
+    assert_eq!(v["current"], "slow check");
+    assert_eq!(
+        (v["checks_done"].as_u64(), v["checks_total"].as_u64()),
+        (Some(0), Some(1))
+    );
+    assert_eq!(v["worker"]["role"], "Data pipeline");
+    assert_eq!(v["claim"], "Backfilled <beta>.");
+    assert!(v["stale_after_unix"].as_u64() > v["updated_unix"].as_u64());
+    // Done: the receipt exists and the progress file is gone.
+    let r: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(r["verdict"], "verified");
+    let left: Vec<_> = fs::read_dir(&running)
+        .map(|rd| rd.flatten().map(|e| e.file_name()).collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "left behind: {left:?}");
+    // The receipts folder (and with it the progress files) is ignored by git from the first run.
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(d.path())
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&status.stdout).contains(".countercheck/receipts"));
+}
+
+/// A stale progress file (its run was killed) or a forged one is not shown; a live one is.
+#[test]
+fn the_report_shows_live_runs_and_skips_stale_or_broken_ones() {
+    let d = project(CHECKS);
+    let (_, _) = countercheck(d.path(), &[]);
+    let running = d.path().join(".countercheck/receipts/running");
+    fs::create_dir_all(&running).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let record = |id: &str, role: &str, stale_after: u64| {
+        serde_json::json!({
+            "schema": "countercheck.progress/v1", "id": id, "started_at": "2026-10-23T10:00:00Z",
+            "updated_unix": now, "stale_after_unix": stale_after,
+            "worker": {"agent": "codex", "role": role},
+            "claim": "<b>done</b>", "stage": "check", "checks_total": 2, "checks_done": 1,
+            "current": "unit tests",
+        })
+        .to_string()
+    };
+    fs::write(running.join("a1.json"), record("a1", "Live one", now + 600)).unwrap();
+    fs::write(running.join("b2.json"), record("b2", "Dead one", now - 1)).unwrap();
+    fs::write(
+        running.join("c3.json"),
+        "{\"schema\":\"countercheck.progress/v1\"",
+    )
+    .unwrap();
+    fs::write(running.join("d4.json"), "x".repeat(70 * 1024)).unwrap();
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
+    assert!(html.contains("<h2>1 run in progress</h2>"), "{html}");
+    assert!(
+        html.contains("<b>Live one · codex</b><q>&lt;b&gt;done&lt;/b&gt;</q>"),
+        "{html}"
+    );
+    assert!(html.contains("check 2 of 2 · unit tests"), "{html}");
+    assert!(!html.contains("Dead one"), "{html}");
+    // Reading never removes anything: the report is read-only.
+    assert_eq!(fs::read_dir(&running).unwrap().count(), 4);
 }
 
 /// A hook records the agent's session, so one session's runs group together; the role comes from

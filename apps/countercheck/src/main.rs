@@ -15,6 +15,7 @@ mod golden;
 mod hook;
 #[cfg(target_os = "linux")]
 mod linux_sandbox;
+mod progress;
 mod report;
 mod runner;
 mod scan;

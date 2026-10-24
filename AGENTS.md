@@ -8,6 +8,7 @@ code: the rules, one run step by step, and where each part lives.
 
 - `crates/countercheck-core`: pure logic, no I/O: `config` (`.countercheck/checks.toml`, matrix expansion), `protect`
   (protected paths, junk files), `receipt` (receipt, verdict rules, seal), `claim` (does an answer report a blocker),
+  `report` + `report/flow` (the HTML page and flow map), `progress` (a run in progress, display only),
   check types `matrix`, `forbid`, `golden`, `budget`, `coverage`.
 - `crates/countercheck-winsandbox`: the Windows sandbox's Win32 calls (restricted token, file permissions) behind a
   safe API; the **only crate allowed `unsafe`**, every block with a `SAFETY:` note (ADR-0003).

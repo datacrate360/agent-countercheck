@@ -1,8 +1,10 @@
 //! The verify flow: lock the checks, snapshot, restore protected files, run, decide, seal.
 
+use crate::progress::Reporter;
 use crate::{external, git, golden, runner, scan, snapshot};
 use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::gitobj::{self, Diff, Files};
+use countercheck_core::progress::Stage;
 use countercheck_core::protect::{Change, Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
 use countercheck_core::{uncovered, watched};
@@ -42,6 +44,16 @@ enum Rules {
 
 pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let root = git::toplevel(&opts.repo)?;
+    let dir = opts
+        .out
+        .clone()
+        .unwrap_or_else(|| root.join(".countercheck").join("receipts"));
+    // Before the clean copy, so the receipt folder is git-ignored (and not copied) from the start.
+    if std::fs::create_dir_all(&dir).is_ok() {
+        ensure_receipts_ignored(&root, &dir);
+    }
+    // What this run is doing, for the report and live UI; removed when this function returns.
+    let mut progress = Reporter::start(&dir, &opts.worker, opts.claim.as_deref());
     let base_commit = git::resolve_commit(&root, &opts.base)?;
     let head_commit = git::resolve_commit(&root, "HEAD")?;
     let git_dirty = git::is_dirty(&root)?;
@@ -123,6 +135,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let protected = Protected::new(&checks.protected_patterns())?;
 
     // 2. A clean copy of the worker's files.
+    progress.stage(Stage::Copy);
     let scratch = tempfile::Builder::new()
         .prefix("countercheck-")
         .tempdir()
@@ -160,6 +173,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
 
     // 3. What changed: the clean copy's own bytes against the base. Protected files the worker
     // changed go back to their base version.
+    progress.stage(Stage::Protect);
     let copied = snapshot::file_ids(&work, base.format(), &links_as_text)?;
     let diff = compare(&mut base, &copied, &work)?;
     let dirty =
@@ -252,7 +266,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         });
     }
     let mut results = Vec::new();
-    for (spec, writes) in planned.iter().zip(&writes) {
+    for (i, (spec, writes)) in planned.iter().zip(&writes).enumerate() {
+        progress.check(i, planned.len(), &spec.name, spec.timeout_secs);
         let Some(g) = &spec.golden else {
             let mut result = runner::run_check(spec, &work, &tmp, sandbox, writes)?;
             note_links_as_text(&mut result, &links_as_text);
@@ -299,6 +314,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         results.push(result);
     }
     results.extend(scan_results);
+    progress.stage(Stage::Seal);
 
     // 5. Decide (uncovered changed files can only add a reason or turn VERIFIED into UNVERIFIED),
     // seal, save.
@@ -361,10 +377,6 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     }
     .seal()?;
 
-    let dir = opts
-        .out
-        .clone()
-        .unwrap_or_else(|| root.join(".countercheck").join("receipts"));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     ensure_receipts_ignored(&root, &dir);
     let path = dir.join(format!("{}.json", receipt.id));

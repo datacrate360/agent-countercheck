@@ -48,7 +48,7 @@
   document.addEventListener('change', function () {
     try {
       var ids = Array.prototype.map.call(
-        document.querySelectorAll('.filters input:checked'),
+        document.querySelectorAll('.filters input:checked, .fl-view input:checked'),
         function (i) { return i.id; }
       );
       sessionStorage.setItem(filterKey, JSON.stringify(ids));
@@ -63,14 +63,14 @@
     var drawn = [];
     try { drawn = JSON.parse(sessionStorage.getItem(drawnKey) || '[]'); } catch (e) { drawn = []; }
     var now = [];
-    flow.querySelectorAll('.fn').forEach(function (node) {
-      var m = node.className.match(/\ba-(\d+)\b/);
+    flow.querySelectorAll('.fl .fn').forEach(function (node) {
+      var m = node.className.match(/\b([agr]-\d+)\b/);
       var name = node.querySelector('b');
       if (!m || !name) { return; }
-      var key = name.textContent + '|' + node.className.replace(/\b(a|x)-\d+\b/g, '').trim();
+      var key = name.textContent + '|' + node.className.replace(/\b[agrx]-\d+\b/g, '').trim();
       now.push(key);
       if (drawn.indexOf(key) >= 0) {
-        flow.querySelectorAll('.fe.a-' + m[1] + ',.pulse.a-' + m[1]).forEach(function (el) {
+        node.closest('.fl').querySelectorAll('.fe.' + m[1] + ',.pulse.' + m[1]).forEach(function (el) {
           el.classList.add('seen');
         });
       }

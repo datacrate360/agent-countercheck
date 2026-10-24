@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **New: runs in progress.** While `verify` works it keeps `.countercheck/receipts/running/<id>.json` (stage, check
+  *n of m*, the check's name, the agent and its claim), replaced whole at each step and removed when the receipt is
+  written. The report and live UI show it as a moving line into Countercheck and a *Checking now* list with the
+  current step. Display only: no verdict reads it, the page says it isn't a receipt, and since the agent could write
+  such a file too, every field is treated as hostile (size cap, labels cleaned, a run past its `stale_after` time is
+  skipped, so a killed run doesn't linger). The receipts folder is now git-ignored before the clean copy is made.
+- **New: many agents.** With more than 12 agents the flow map groups them by tool (`claude-code · 7 agents`, a line
+  per outcome, wider for more agents), with a *By tool / Each agent* switch (CSS; the live UI remembers it).
+
 ## v0.12.0 (2026-10-23)
 
 See how each agent's "done" went: a flow map and a step-by-step replay of every run.
