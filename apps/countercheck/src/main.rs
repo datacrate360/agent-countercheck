@@ -70,7 +70,8 @@ enum Cmd {
         /// What the worker said it did, e.g. "fixed the bug, all tests pass".
         #[arg(long)]
         claim: Option<String>,
-        /// Which agent did the work (claude-code, codex, hermes...).
+        /// Which agent did the work (claude-code, codex, hermes...). Default: the agent whose shell
+        /// this is, when it marks it (Claude Code, Cursor, Codex, Hermes).
         #[arg(long)]
         agent: Option<String>,
         /// Which model did the work.
@@ -333,7 +334,8 @@ fn run(cli: Cli) -> Result<u8, String> {
                 base,
                 claim,
                 worker: countercheck_core::receipt::Worker {
-                    agent,
+                    // Not named: the agent whose shell this is, if it marks it.
+                    agent: agent.or_else(|| verify::agent_from_env().map(str::to_string)),
                     model,
                     cost_usd,
                     role: role
@@ -344,7 +346,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                                 countercheck_core::receipt::MAX_ROLE_CHARS,
                             )
                         }),
-                    session: None,
+                    session: verify::session_from_env(),
                 },
                 sandbox,
                 sandbox_required,

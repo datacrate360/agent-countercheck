@@ -1420,6 +1420,77 @@ fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
     );
 }
 
+/// Without `--agent`, `verify` names the agent whose shell it runs in, from the marker each agent
+/// sets; `--agent` still wins, and with no marker the agent stays unnamed.
+#[test]
+fn verify_names_the_agent_from_its_shell_when_not_told() {
+    let d = project(CHECKS);
+    let markers = [
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDECODE",
+        "CURSOR_AGENT",
+        "CODEX_SANDBOX",
+        "CODEX_SANDBOX_NETWORK_DISABLED",
+        "HERMES_SESSION_ID",
+    ];
+    let run = |set: &[(&str, &str)], args: &[&str]| -> serde_json::Value {
+        let mut cmd = Command::new(BIN);
+        cmd.args(["verify", "--json", "--sandbox", "none", "--repo"])
+            .arg(d.path())
+            .args(args);
+        for m in markers {
+            cmd.env_remove(m);
+        }
+        for (k, v) in set {
+            cmd.env(k, v);
+        }
+        serde_json::from_slice(&cmd.output().unwrap().stdout).unwrap()
+    };
+    let agent = |v: serde_json::Value| v["worker"]["agent"].as_str().map(str::to_string);
+    assert_eq!(agent(run(&[], &[])), None);
+    assert_eq!(
+        agent(run(&[("CURSOR_AGENT", "1")], &[])).as_deref(),
+        Some("cursor")
+    );
+    assert_eq!(
+        agent(run(&[("CODEX_SANDBOX", "seatbelt")], &[])).as_deref(),
+        Some("codex")
+    );
+    assert_eq!(
+        agent(run(&[("CLAUDECODE", "1")], &[])).as_deref(),
+        Some("claude-code")
+    );
+    let h = run(&[("HERMES_SESSION_ID", "20261023_x\n")], &[]);
+    assert_eq!(h["worker"]["agent"], "hermes");
+    assert_eq!(h["worker"]["session"], "20261023_x");
+    // Claude Code started from Hermes inherits both: the inner spawner's marker wins.
+    let both = [
+        ("HERMES_SESSION_ID", "s"),
+        ("CLAUDE_CODE_CHILD_SESSION", "1"),
+    ];
+    assert_eq!(agent(run(&both, &[])).as_deref(), Some("claude-code"));
+    // An empty marker is no marker, and --agent always wins.
+    assert_eq!(agent(run(&[("CURSOR_AGENT", "")], &[])), None);
+    assert_eq!(
+        agent(run(&[("CURSOR_AGENT", "1")], &["--agent", "aider"])).as_deref(),
+        Some("aider")
+    );
+    // The report calls the unnamed runs what they are.
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
+    assert!(html.contains("<b>unnamed agent</b>"), "{html}");
+    assert!(
+        html.contains("run without <code>--agent</code> or a role"),
+        "{html}"
+    );
+    assert!(!html.contains("unknown agent"), "{html}");
+}
+
 /// While `verify` runs, `<receipts>/running/<id>.json` says what it is doing (for the report and
 /// live UI); it is gone once the receipt is written.
 #[test]

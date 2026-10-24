@@ -43,6 +43,9 @@ pub fn escape(s: &str) -> String {
     out
 }
 
+/// The name of runs that say nothing about their agent (no `--agent`, no role, no marker).
+pub const UNNAMED: &str = "unnamed agent";
+
 /// Most agents given their own row and filter; runs of the rest stay in the list.
 pub const MAX_AGENTS: usize = 24;
 
@@ -95,7 +98,7 @@ fn agent_name(r: &Receipt) -> String {
         .role
         .clone()
         .or_else(|| r.worker.agent.clone())
-        .unwrap_or_else(|| "unknown agent".to_string())
+        .unwrap_or_else(|| UNNAMED.to_string())
 }
 
 /// Agents in order of their latest run (`runs` is newest first).
@@ -195,6 +198,9 @@ fn agents_html(agents: &[Agent]) -> String {
             let s = a.sessions.len();
             sub.push(format!("{s} session{}", if s == 1 { "" } else { "s" }));
         }
+        if a.name == UNNAMED {
+            sub.push("run without <code>--agent</code> or a role".to_string());
+        }
         // Oldest left, newest right: the last 20 runs as dots.
         let trail: String = a
             .runs
@@ -227,8 +233,11 @@ fn agents_html(agents: &[Agent]) -> String {
                 .collect::<String>(),
             last = latest
                 .map(|r| format!(
-                    "<q>{}</q><small><span class=\"badge {}\">{}</span> · latest, {}</small>",
-                    escape(&short(r.claim.as_deref().unwrap_or("(no claim)"), 90)),
+                    "{}<small><span class=\"badge {}\">{}</span> · latest, {}</small>",
+                    match r.claim.as_deref() {
+                        Some(c) => format!("<q>{}</q>", escape(&short(c, 90))),
+                        None => "<small class=\"no-claim\">no claim given</small>".to_string(),
+                    },
                     verdict_class(r.verdict),
                     r.verdict.label(),
                     escape(&pretty_time(&r.created_at))
@@ -686,7 +695,16 @@ fn steps_html(e: &Entry, who: &str, open: bool) -> String {
     let passed = r.checks.iter().filter(|c| c.passed).count();
     let protected = r.protected_changes.len();
     let mut steps: Vec<(&str, String, String)> = vec![
-        ("ok", "Agent said done".to_string(), escape(who)),
+        (
+            "ok",
+            if r.claim.is_some() {
+                "Agent said done"
+            } else {
+                "Agent asked for a check (no claim given)"
+            }
+            .to_string(),
+            escape(who),
+        ),
         if r.checks_locked {
             (
                 "ok",
