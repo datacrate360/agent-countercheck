@@ -70,7 +70,8 @@ def visible(task: Task, workdir: Path) -> tuple[bool, str]:
     return run(task.check_cmd, workdir)
 
 
-def countercheck_verify(workdir: Path, base: str, sandbox: str = "seatbelt") -> int:
+def countercheck_verify(workdir: Path, base: str, sandbox: str = "auto") -> int:
+    # "auto": Seatbelt on macOS, Landlock + namespaces on Linux, the job sandbox on Windows.
     p = subprocess.run([str(COUNTERCHECK), "verify", "--repo", str(workdir), "--base", base,
                         "--sandbox", sandbox], capture_output=True, text=True)
     return p.returncode
