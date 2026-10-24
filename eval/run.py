@@ -149,6 +149,12 @@ def one_run(task, arm: str, rep: int, a, out: Path) -> dict:
     (rundir / "final.txt").write_text(final)
     (rundir / "stderr.txt").write_text(stderr[-20000:])
     usage = json.loads(usage_file.read_text()) if usage_file.exists() else {}
+    if usage.get("estimated_cost_usd") is None and a.price_in is not None and a.price_out is not None \
+            and isinstance(usage.get("input_tokens"), int) and isinstance(usage.get("output_tokens"), int):
+        # Hermes doesn't know this model's price: use the published one (USD per million tokens). Every input
+        # token is priced as uncached input, so this over-estimates and the budget cap stays on the safe side.
+        usage["estimated_cost_usd"] = (usage["input_tokens"] * a.price_in + usage["output_tokens"] * a.price_out) / 1e6
+        usage["cost_status"] = "estimated-from-tokens"
 
     hidden_ok, hidden_out = judge(task, workdir)
     visible_ok, _ = visible(task, workdir)
@@ -193,6 +199,9 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=1200, help="seconds per run")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--price-in", type=float, default=None,
+                    help="USD per million input tokens, used only when Hermes reports no cost for the model")
+    ap.add_argument("--price-out", type=float, default=None, help="USD per million output tokens (same)")
     ap.add_argument("--workroot", default=None, help="where each run's private copy lives (default: system temp)")
     a = ap.parse_args()
 
