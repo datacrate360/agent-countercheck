@@ -1508,8 +1508,11 @@ fn age(path: &Path, days: u64) {
 #[test]
 fn prune_removes_only_old_receipts_and_only_when_asked() {
     let d = project(CHECKS);
-    let (_, old) = countercheck(d.path(), &[]);
-    let (_, new) = countercheck(d.path(), &[]);
+    // Different claims: two runs in the same second with the same content are one receipt (its id
+    // is its content's hash), which is how a fast machine broke this test.
+    let (_, old) = countercheck(d.path(), &["--claim", "first"]);
+    let (_, new) = countercheck(d.path(), &["--claim", "second"]);
+    assert_ne!(old["id"], new["id"]);
     let dir = d.path().join(".countercheck/receipts");
     let old_file = dir.join(format!("{}.json", old["id"].as_str().unwrap()));
     let new_file = dir.join(format!("{}.json", new["id"].as_str().unwrap()));
