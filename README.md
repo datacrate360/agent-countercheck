@@ -338,9 +338,9 @@ countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 |---|---|---|
 | The program | where you installed it (`/opt/homebrew/bin`, `~/.local/bin`, …) | keeps no data |
 | Your rules | `<project>/.countercheck/checks.toml` | committed; one per project |
-| Receipts | `<project>/.countercheck/receipts/<id>.json` | one per run; git-ignored; `--out <folder>` writes elsewhere |
-| Runs in progress | `<project>/.countercheck/receipts/running/<id>.json` | while `verify` runs, for the report and live UI; removed when the receipt is written; display only, never a verdict |
-| Session start commits | `<project>/.git/countercheck/sessions/<session>.json` | each agent session's "before" commit; inside `.git`, never copied or committed |
+| Receipts | `<project>/.countercheck/receipts/<id>.json` | one per run; git-ignored; `--out <folder>` writes elsewhere; kept until you run `countercheck prune` |
+| Runs in progress | `<project>/.countercheck/receipts/running/<id>.json` | while `verify` runs, for the report and live UI; removed when the receipt is written (what a killed run leaves is cleared by the next `verify`); display only, never a verdict |
+| Session start commits | `<project>/.git/countercheck/sessions/<session>.json` | each agent session's "before" commit; inside `.git`, never copied or committed; removed after 30 days unused |
 | Claude Code hook | `<project>/.claude/settings.json` | step 4a |
 | Hermes hook | `~/.hermes/config.yaml` or `~/.hermes/profiles/<name>/config.yaml` | step 4b; approvals in that profile's `shell-hooks-allowlist.json` |
 
@@ -370,6 +370,7 @@ verdict.
 | `show` | Check a saved receipt's seal and print it | `countercheck show .countercheck/receipts/<id>.json` |
 | `ui` | A live page of every run, on this computer only | `countercheck ui` |
 | `report` | The same page as one offline HTML file | `countercheck report --open` |
+| `prune` | Delete receipts older than an age (by their own date); nothing else ever deletes them | `countercheck prune --older-than 90d --dry-run` |
 | `hook` | Run as an agent hook: `session-start`, `claude-stop`, `hermes-pre-verify` | `countercheck hook claude-stop` |
 | `windows-setup` | Windows, once as administrator: the full check sandbox ([below](#platforms-and-the-sandbox)) | `countercheck windows-setup` |
 

@@ -16,6 +16,7 @@ mod hook;
 #[cfg(target_os = "linux")]
 mod linux_sandbox;
 mod progress;
+mod prune;
 mod report;
 mod runner;
 mod scan;
@@ -167,6 +168,22 @@ enum Cmd {
         /// Don't open the browser.
         #[arg(long)]
         no_open: bool,
+    },
+    /// Delete receipts older than an age, to get the space back. Receipts are never deleted
+    /// otherwise; try --dry-run first.
+    Prune {
+        /// Age from each receipt's own date: 90d, 12weeks, 6months...
+        #[arg(long)]
+        older_than: String,
+        /// List what would go; delete nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Repository whose receipts to prune (any folder inside it).
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+        /// Receipt folder (default: <repo>/.countercheck/receipts).
+        #[arg(long)]
+        receipts: Option<PathBuf>,
     },
     /// Write an HTML page of the saved receipts (newest first; no scripts, works offline).
     Report {
@@ -405,6 +422,27 @@ fn run(cli: Cli) -> Result<u8, String> {
                 port,
                 open: !no_open,
             })?;
+            Ok(0)
+        }
+        Cmd::Prune {
+            older_than,
+            dry_run,
+            repo,
+            receipts,
+        } => {
+            let p = prune::run(&prune::Options {
+                repo,
+                receipts,
+                older_than,
+                dry_run,
+            })?;
+            println!(
+                "{} {} receipt(s), {} KB; {} kept",
+                if dry_run { "would remove" } else { "removed" },
+                p.removed,
+                p.bytes.div_ceil(1024),
+                p.kept
+            );
             Ok(0)
         }
         Cmd::Report {

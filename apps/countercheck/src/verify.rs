@@ -53,6 +53,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         ensure_receipts_ignored(&root, &dir);
     }
     // What this run is doing, for the report and live UI; removed when this function returns.
+    // First clear what killed runs left behind.
+    crate::progress::sweep(&dir);
     let mut progress = Reporter::start(&dir, &opts.worker, opts.claim.as_deref());
     let base_commit = git::resolve_commit(&root, &opts.base)?;
     let head_commit = git::resolve_commit(&root, "HEAD")?;

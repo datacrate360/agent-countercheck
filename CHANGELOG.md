@@ -6,6 +6,12 @@
   (`CLAUDE_CODE_CHILD_SESSION` / `CLAUDECODE`), Cursor (`CURSOR_AGENT`), Codex (`CODEX_SANDBOX*`), Hermes
   (`HERMES_SESSION_ID`, which also gives the session). A label like `--agent`, never a proof; `--agent` still wins.
   Runs that say nothing are shown as *unnamed agent* ("run without `--agent` or a role"), not "unknown agent".
+- **New: `countercheck prune --older-than 90d`** deletes receipts older than an age, by each receipt's own date
+  (`--dry-run` lists them first). Receipts are still never deleted otherwise; files that aren't receipts are never
+  touched.
+- **Cleanup:** each `verify` clears what killed runs left in `running/` (stale or broken progress files, half writes)
+  once they've been quiet a minute; the Claude Code hook's push-back counters of sessions unused for 30 days are
+  removed, like session records already were.
 - **Fix (report):** an agent's run counts wrap in their column instead of running into its latest claim; a run with
   no claim says "no claim given" (and its replay starts "Agent asked for a check"); runs in progress show the time
   of day.
