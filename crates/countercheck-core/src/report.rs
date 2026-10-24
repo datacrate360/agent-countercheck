@@ -9,6 +9,8 @@
 //! receipts. Only a script carrying that response's random nonce may run, so text from a receipt
 //! still can't.
 
+mod flow;
+
 use crate::receipt::{Receipt, Verdict};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -135,8 +137,13 @@ fn agent_index(agents: &[Agent], r: &Receipt) -> Option<usize> {
     agents.iter().take(MAX_AGENTS).position(|a| a.name == name)
 }
 
-/// A round initial for an agent; `i` picks one of 8 colours.
-fn avatar(name: &str, i: usize) -> String {
+/// A round initial for an agent. Its colour (one of 8) comes from the name, so an agent keeps its
+/// colour when others join or the order changes.
+fn avatar(name: &str) -> String {
+    // FNV-1a: stable across runs and platforms (std's hasher is randomly seeded).
+    let hash = name.bytes().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    });
     let letter: String = name
         .chars()
         .find(|c| c.is_alphanumeric())
@@ -144,7 +151,7 @@ fn avatar(name: &str, i: usize) -> String {
         .unwrap_or_else(|| "?".to_string());
     format!(
         "<i class=\"av c{}\" aria-hidden=\"true\">{}</i>",
-        i % 8,
+        hash % 8,
         escape(&letter)
     )
 }
@@ -201,7 +208,7 @@ fn agents_html(agents: &[Agent]) -> String {
              <small>{sub}</small></span><span class=\"a-trail\" title=\"last runs, oldest first\">{trail}</span>\
              <span class=\"a-stats\">{bar}<small><b>{runs}</b> run{s}{tally}</small></span>\
              <span class=\"a-last\">{last}</span></label>",
-            av = avatar(&a.name, i),
+            av = avatar(&a.name),
             name = escape(&a.name),
             sub = if sub.is_empty() {
                 "&nbsp;".to_string()
@@ -278,8 +285,12 @@ fn filters_html(agents: &[Agent], counts: [usize; 4]) -> String {
         );
     }
     h.push_str("</div>");
-    // Only digits come from the data here.
-    h.push_str("<style>");
+    h
+}
+
+/// The filter rules (digits and fixed text only).
+fn filters_css(agents: &[Agent]) -> String {
+    let mut h = String::new();
     for i in 0..agents.len().min(MAX_AGENTS) {
         let _ = write!(
             h,
@@ -287,7 +298,6 @@ fn filters_html(agents: &[Agent], counts: [usize; 4]) -> String {
              body:has(#fa-{i}:checked) .agent.a-{i}{{border-color:var(--ink);background:var(--card)}}"
         );
     }
-    h.push_str("</style>");
     h
 }
 
@@ -356,9 +366,15 @@ fn render(entries: &[Entry], page: &Page, live: Option<&str>) -> String {
         count(Verdict::Unverified),
     ));
     let agents = agents(&runs);
+    // Rules built from numbers only, emitted once at the end of the page.
+    let mut css = filters_css(&agents);
 
     if runs.is_empty() {
         h.push_str("<p>No receipts yet. Run <code>countercheck verify</code> first.</p>");
+    }
+    if let Some(f) = flow::flow(&agents) {
+        h.push_str(&f.html);
+        css.push_str(&f.css);
     }
     if !agents.is_empty() {
         h.push_str(&agents_html(&agents));
@@ -383,6 +399,7 @@ fn render(entries: &[Entry], page: &Page, live: Option<&str>) -> String {
         h.push_str(&run_html(e, i == 0, agent_index(&agents, &e.receipt)));
     }
     h.push_str("</section>");
+    let _ = write!(h, "<style>{css}</style>");
     h.push_str(
         "<footer class=\"muted\"><b>Agent Countercheck</b> · the agent never grades itself. Each receipt is sealed with SHA-256; a broken seal means the file was \
          edited after it was written. Check one with <code>countercheck show &lt;file&gt;</code>.</footer>",
@@ -513,7 +530,7 @@ fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
         when = escape(&pretty_time(&r.created_at)),
         who = escape(&who),
         a = agent.map(|i| format!(" a-{i}")).unwrap_or_default(),
-        av = avatar(&name, agent.unwrap_or(7)),
+        av = avatar(&name),
         total = r.checks.len(),
         seal = if e.seal_ok {
             "<span class=\"seal ok\">seal intact</span>"
@@ -524,6 +541,7 @@ fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
     );
 
     h.push_str("<div class=\"body\">");
+    h.push_str(&steps_html(e, &who, open));
     if !r.reasons.is_empty() {
         h.push_str("<ul class=\"reasons\">");
         for reason in &r.reasons {
@@ -625,7 +643,8 @@ fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
 
     let _ = write!(
         h,
-        "<dl class=\"facts\">\
+        "<div class=\"rcpt {cls}\"><span class=\"wax\" aria-hidden=\"true\"></span><p class=\"rcpt-h\">Receipt {id} · {label}</p>\
+         <dl class=\"facts\">\
          <dt>receipt</dt><dd><code>{file}</code> · id {id}</dd>\
          <dt>checks</dt><dd>{src}{locked}</dd>\
          <dt>base</dt><dd><code>{base_rev}</code> = {base}</dd>\
@@ -650,8 +669,126 @@ fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
         },
         sandbox = escape(&r.sandbox),
         tree = escape(&short(&r.tree_sha256, 16)),
+        cls = verdict_class(r.verdict),
+        label = r.verdict.label(),
     );
-    h.push_str("</div></details>");
+    h.push_str("</div></div></details>");
+    h
+}
+
+/// What happened after the agent said "done", step by step, from the receipt. Opening a run plays
+/// the steps in order (CSS); the run open when the page loads shows them at once.
+fn steps_html(e: &Entry, who: &str, open: bool) -> String {
+    let r = &e.receipt;
+    let passed = r.checks.iter().filter(|c| c.passed).count();
+    let protected = r.protected_changes.len();
+    let mut steps: Vec<(&str, String, String)> = vec![
+        ("ok", "Agent said done".to_string(), escape(who)),
+        if r.checks_locked {
+            (
+                "ok",
+                "Checks locked at the base commit".to_string(),
+                escape(&r.checks_source),
+            )
+        } else {
+            (
+                "warn",
+                "Checks not locked".to_string(),
+                format!("{}: not in the base revision", escape(&r.checks_source)),
+            )
+        },
+        (
+            "ok",
+            "Clean copy of the work".to_string(),
+            format!("tree sha256 {}", escape(&short(&r.tree_sha256, 12))),
+        ),
+        if protected > 0 {
+            (
+                "bad",
+                format!(
+                    "Put back {protected} protected file{}",
+                    if protected == 1 { "" } else { "s" }
+                ),
+                format!(
+                    "the agent changed {}; the checks used the base version",
+                    escape(
+                        &r.protected_changes
+                            .iter()
+                            .map(|p| p.path.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                ),
+            )
+        } else {
+            (
+                "ok",
+                "No protected file changed".to_string(),
+                "tests and check files are as they were".to_string(),
+            )
+        },
+    ];
+    // One bar per check, its width from how long it ran.
+    let bars: String = r
+        .checks
+        .iter()
+        .map(|c| {
+            format!(
+                "<i class=\"{}\" style=\"flex-grow:{}\" title=\"{} · {} ms\"></i>",
+                if c.passed { "ok" } else { "bad" },
+                c.duration_ms.max(1),
+                escape(&flow::check_label(&c.name)),
+                c.duration_ms
+            )
+        })
+        .collect();
+    // Saturating: durations come from a file the worker could have edited.
+    let total_ms = r
+        .checks
+        .iter()
+        .fold(0u64, |t, c| t.saturating_add(c.duration_ms));
+    steps.push((
+        if r.checks.is_empty() {
+            "warn"
+        } else if passed == r.checks.len() {
+            "ok"
+        } else {
+            "bad"
+        },
+        format!("Checks ran: {passed} of {} passed", r.checks.len()),
+        format!("{total_ms} ms in the sandbox<span class=\"bars\">{bars}</span>"),
+    ));
+    steps.push(if e.seal_ok {
+        (
+            match r.verdict {
+                Verdict::Verified => "ok",
+                Verdict::Failed => "bad",
+                Verdict::Unverified => "warn",
+            },
+            format!("Receipt sealed: {}", r.verdict.label()),
+            "SHA-256 over every field; editing it later breaks the seal".to_string(),
+        )
+    } else {
+        (
+            "bad",
+            "Seal broken".to_string(),
+            "this receipt was edited after it was written".to_string(),
+        )
+    });
+    let mut h = format!("<ol class=\"steps{}\">", if open { " now" } else { "" });
+    for (i, (cls, title, sub)) in steps.iter().enumerate() {
+        let _ = write!(
+            h,
+            "<li class=\"st {cls}\" style=\"--i:{i}\"><span class=\"k\">{}</span><span><b>{}</b><small>{sub}</small></span></li>",
+            if *cls == "bad" {
+                "!".to_string()
+            } else {
+                (i + 1).to_string()
+            },
+            escape(title),
+        );
+    }
+    h.push_str("</ol>");
     h
 }
 
@@ -999,6 +1136,181 @@ mod tests {
         assert!(
             html.contains(&format!("<blockquote>{claim}</blockquote>")),
             "{html}"
+        );
+    }
+
+    fn by_checks(role: &str, created: &str, verdict: Verdict, checks: Vec<CheckResult>) -> Entry {
+        let mut e = by(Some(role), "claude-code", created, verdict);
+        e.receipt.checks = checks;
+        e
+    }
+
+    #[test]
+    fn flow_map_routes_each_agent_to_its_outcome_and_links_failed_checks() {
+        let e = vec![
+            by_checks(
+                "UI design",
+                "2026-01-01T00:00:01Z",
+                Verdict::Verified,
+                vec![check("unit", true, ""), check("lint", true, "")],
+            ),
+            by_checks(
+                "Security",
+                "2026-01-01T00:00:02Z",
+                Verdict::Failed,
+                vec![check("unit", false, "boom"), check("lint", true, "")],
+            ),
+            by_checks(
+                "Refactor",
+                "2026-01-01T00:00:03Z",
+                Verdict::Unverified,
+                vec![check("unit", true, "")],
+            ),
+        ];
+        let html = render_html(&e, &page());
+        assert!(html.contains("<section class=\"flow\""), "{html}");
+        // Newest first: Refactor a-0, Security a-1, UI design a-2. Each node is a label for its filter.
+        assert!(
+            html.contains("<label class=\"fn a-1 x-0 failed\" for=\"fa-1\""),
+            "{html}"
+        );
+        assert!(
+            html.contains("<label class=\"fn a-0 unverified\" for=\"fa-0\""),
+            "{html}"
+        );
+        // Two lines per agent; only the delivered one gets the pulse.
+        assert_eq!(html.matches("<path class=\"fe ").count(), 6);
+        assert_eq!(html.matches("<path class=\"pulse a-2\"").count(), 1);
+        // The failed check knows who failed it; outcomes count each agent once.
+        assert!(
+            html.contains("<li class=\"fc c-0 f-1\" title=\"unit\">unit</li>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<li class=\"fc c-1\" title=\"lint\">lint</li>"),
+            "{html}"
+        );
+        for (cls, n) in [("verified", 1), ("failed", 1), ("unverified", 1)] {
+            assert!(html.contains(&format!("<div class=\"fo {cls}\"")), "{cls}");
+            let at = html.find(&format!("<div class=\"fo {cls}\"")).unwrap_or(0);
+            assert!(
+                html[at..].contains(&format!("<b class=\"fo-n\">{n}</b>")),
+                "{cls}"
+            );
+        }
+        // Highlight rules for every agent and check, in the one generated stylesheet.
+        assert!(
+            html.contains(".fl:has(.fn.a-1:hover) :is(.fe,.fn,.pulse):not(.a-1)"),
+            "{html}"
+        );
+        assert!(
+            html.contains(".fl:has(.fc.c-0:hover) :is(.fe,.fn,.pulse):not(.x-0)"),
+            "{html}"
+        );
+        assert_eq!(html.matches("<style>").count(), 2);
+    }
+
+    #[test]
+    fn flow_map_caps_agents_and_checks() {
+        let many: Vec<Entry> = (0..flow::MAX_FLOW_AGENTS + 3)
+            .map(|i| {
+                by_checks(
+                    &format!("agent {i}"),
+                    &format!("2026-01-01T00:00:{i:02}Z"),
+                    Verdict::Verified,
+                    (0..flow::MAX_FLOW_CHECKS + 2)
+                        .map(|k| check(&format!("c{k}"), true, ""))
+                        .collect(),
+                )
+            })
+            .collect();
+        let html = render_html(&many, &page());
+        assert_eq!(
+            html.matches("<label class=\"fn ").count(),
+            flow::MAX_FLOW_AGENTS
+        );
+        assert!(
+            html.contains("and 3 more agents: see the Agents panel below"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<li class=\"fc more\">and 2 more</li>"),
+            "{html}"
+        );
+        // All agents still count in the outcome, not only the drawn ones.
+        assert!(html.contains(&format!(
+            "<b class=\"fo-n\">{}</b>",
+            flow::MAX_FLOW_AGENTS + 3
+        )));
+        assert!(
+            render_html(&[], &page())
+                .find("<section class=\"flow\"")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn matrix_check_names_are_shortened_on_the_map() {
+        assert_eq!(
+            flow::check_label("tenant {tenant} [tenant=beta]"),
+            "tenant · beta"
+        );
+        assert_eq!(flow::check_label("{schema} [schema=CA1]"), "schema · CA1");
+        assert_eq!(flow::check_label("unit tests"), "unit tests");
+    }
+
+    #[test]
+    fn steps_replay_what_happened_from_the_receipt() {
+        let mut e = by_checks(
+            "UI",
+            "2026-01-01T00:00:01Z",
+            Verdict::Failed,
+            vec![check("unit", false, "x"), check("lint", true, "")],
+        );
+        e.receipt.protected_changes = vec![crate::protect::ProtectedChange::decide(
+            "tests/a<b>.py",
+            crate::protect::Change::Modified,
+        )];
+        let older = by(
+            Some("UI"),
+            "claude-code",
+            "2026-01-01T00:00:00Z",
+            Verdict::Verified,
+        );
+        let html = render_html(&[e, older], &page());
+        // The open run shows its steps at once; a closed one replays them when opened.
+        assert!(html.contains("<ol class=\"steps now\">"), "{html}");
+        assert!(html.contains("<ol class=\"steps\">"), "{html}");
+        assert!(
+            html.contains(
+                "Put back 1 protected file</b><small>the agent changed tests/a&lt;b&gt;.py"
+            ),
+            "{html}"
+        );
+        assert!(html.contains("<b>Checks ran: 1 of 2 passed</b>"), "{html}");
+        assert!(html.contains("<b>Receipt sealed: FAILED</b>"), "{html}");
+        assert!(
+            html.contains("<div class=\"rcpt failed\"><span class=\"wax\""),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn an_agent_keeps_its_colour_whatever_the_order() {
+        assert_eq!(avatar("UI design"), avatar("UI design"));
+        let colour = |n: &str| {
+            avatar(n)
+                .split("av c")
+                .nth(1)
+                .and_then(|s| s.chars().next())
+        };
+        let seen: BTreeSet<_> = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+            .iter()
+            .map(|n| colour(n))
+            .collect();
+        assert!(
+            seen.len() > 3,
+            "names should spread over the colours: {seen:?}"
         );
     }
 }

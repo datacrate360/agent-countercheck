@@ -1405,6 +1405,9 @@ fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
     );
     let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
     assert!(html.contains("<h2>3 agents on this project</h2>"), "{html}");
+    // The flow map draws one node per agent, and each run replays its steps.
+    assert_eq!(html.matches("<label class=\"fn a-").count(), 3, "{html}");
+    assert_eq!(html.matches("<ol class=\"steps").count(), 3, "{html}");
     for name in ["<b>UI design</b>", "<b>Security review</b>"] {
         assert!(html.contains(name), "{name}: {html}");
     }
