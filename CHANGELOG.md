@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.14.0 (2026-10-24)
+
+Every run says which agent made it, and Countercheck cleans up after itself.
 
 - **Agents name themselves:** without `--agent`, `verify` takes the agent from the shell it runs in: Claude Code
   (`CLAUDE_CODE_CHILD_SESSION` / `CLAUDECODE`), Cursor (`CURSOR_AGENT`), Codex (`CODEX_SANDBOX*`), Hermes

@@ -35,6 +35,7 @@ section. Ideas and use cases are welcome as issues.
 | Report and live UI redesign (project folder, Agents panel, filters by verdict and agent); `--role` / `COUNTERCHECK_ROLE` and session id on receipts; Claude Code model recorded | v0.11.0 |
 | Flow map (agents → locked checks → delivered / sent back / needs a person, hover highlights, CSS only) and step-by-step run replay with a receipt card | v0.12.0 |
 | Runs in progress shown live (display only, never a verdict); flow map groups more than 12 agents by tool with a By tool / Each agent switch | v0.13.0 |
+| Agent named from its shell when `--agent` is missing (Claude Code, Cursor, Codex, Hermes); `countercheck prune`; dead runs' progress files and old hook counters cleaned | v0.14.0 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |
