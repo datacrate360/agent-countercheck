@@ -1168,6 +1168,16 @@ proptest! {
         role in hostile(), agent in hostile(), model in hostile(), path in hostile(),
     ) {
         use countercheck_core::report::{render_html, Entry, Page};
+        // A run in progress, read back like a hostile file from the worker's tree.
+        let prog = serde_json::json!({
+            "schema": countercheck_core::progress::SCHEMA, "id": "p1",
+            "started_at": "2026-01-01T00:00:00Z", "updated_unix": 0, "stale_after_unix": u64::MAX,
+            "worker": {"agent": agent.clone(), "model": model.clone(), "role": role.clone()},
+            "claim": claim.clone(), "stage": "check", "checks_total": 3, "checks_done": 1,
+            "current": out.clone(),
+        });
+        let running: Vec<_> = countercheck_core::progress::read(&prog.to_string(), 1).into_iter().collect();
+        prop_assert_eq!(running.len(), 1);
         let mut r = r;
         r.claim = Some(claim);
         r.worker.role = Some(role);
@@ -1180,7 +1190,7 @@ proptest! {
             c.output_tail = out;
             c.passed = false;
         }
-        let page = Page { title: "t", path: &path, generated_at: "now" };
+        let page = Page { title: "t", path: &path, generated_at: "now", running: &running };
         let html = render_html(&[Entry { file, receipt: r, seal_ok }], &page);
         let tag = regex::Regex::new(
             r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|ol|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer|nav|q|em|i|small|label|input|svg|defs|radialGradient|linearGradient|stop|rect|path|circle|ellipse|polyline)[ >]",

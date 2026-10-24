@@ -55,6 +55,8 @@ pub struct Page<'a> {
     /// The project folder, e.g. `~/code/my-app` (the caller shortens the home folder).
     pub path: &'a str,
     pub generated_at: &'a str,
+    /// Runs in progress (display only; see [`crate::progress`]).
+    pub running: &'a [crate::progress::Progress],
 }
 
 /// Render the static report. `entries` may be in any order; the newest `MAX_RUNS` are shown.
@@ -369,13 +371,14 @@ fn render(entries: &[Entry], page: &Page, live: Option<&str>) -> String {
     // Rules built from numbers only, emitted once at the end of the page.
     let mut css = filters_css(&agents);
 
-    if runs.is_empty() {
+    if runs.is_empty() && page.running.is_empty() {
         h.push_str("<p>No receipts yet. Run <code>countercheck verify</code> first.</p>");
     }
-    if let Some(f) = flow::flow(&agents) {
+    if let Some(f) = flow::flow(&agents, page.running) {
         h.push_str(&f.html);
         css.push_str(&f.css);
     }
+    h.push_str(&flow::running_html(page.running, live.is_some()));
     if !agents.is_empty() {
         h.push_str(&agents_html(&agents));
     }
@@ -849,6 +852,7 @@ mod tests {
             title: "r",
             path: "~/r",
             generated_at: "now",
+            running: &[],
         }
     }
 
@@ -898,6 +902,7 @@ mod tests {
                 title: "repo <b>",
                 path: "~/code/<i>repo",
                 generated_at: "now",
+                running: &[],
             },
         );
         assert!(!html.to_lowercase().contains("<script"), "{html}");
@@ -1115,6 +1120,7 @@ mod tests {
                 title: "shop",
                 path: "~/code/<shop>",
                 generated_at: "now",
+                running: &[],
             },
         );
         assert!(html.contains(
@@ -1171,11 +1177,11 @@ mod tests {
         assert!(html.contains("<section class=\"flow\""), "{html}");
         // Newest first: Refactor a-0, Security a-1, UI design a-2. Each node is a label for its filter.
         assert!(
-            html.contains("<label class=\"fn a-1 x-0 failed\" for=\"fa-1\""),
+            html.contains("<label for=\"fa-1\" class=\"fn a-1 x-0 failed\""),
             "{html}"
         );
         assert!(
-            html.contains("<label class=\"fn a-0 unverified\" for=\"fa-0\""),
+            html.contains("<label for=\"fa-0\" class=\"fn a-0 unverified\""),
             "{html}"
         );
         // Two lines per agent; only the delivered one gets the pulse.
@@ -1183,7 +1189,7 @@ mod tests {
         assert_eq!(html.matches("<path class=\"pulse a-2\"").count(), 1);
         // The failed check knows who failed it; outcomes count each agent once.
         assert!(
-            html.contains("<li class=\"fc c-0 f-1\" title=\"unit\">unit</li>"),
+            html.contains("<li class=\"fc c-0 f-a-1\" title=\"unit\">unit</li>"),
             "{html}"
         );
         assert!(
@@ -1200,53 +1206,163 @@ mod tests {
         }
         // Highlight rules for every agent and check, in the one generated stylesheet.
         assert!(
-            html.contains(".fl:has(.fn.a-1:hover) :is(.fe,.fn,.pulse):not(.a-1)"),
+            html.contains(".fl.m-each:has(.fn.a-1:hover) :is(.fe,.fe-run,.fn,.pulse):not(.a-1)"),
             "{html}"
         );
         assert!(
-            html.contains(".fl:has(.fc.c-0:hover) :is(.fe,.fn,.pulse):not(.x-0)"),
+            html.contains(".fl.m-each:has(.fc.c-0:hover) :is(.fe,.fe-run,.fn,.pulse):not(.x-0)")
+                && html.contains("body:has(#fa-1:checked) .fl.m-each"),
             "{html}"
         );
         assert_eq!(html.matches("<style>").count(), 2);
     }
 
     #[test]
-    fn flow_map_caps_agents_and_checks() {
-        let many: Vec<Entry> = (0..flow::MAX_FLOW_AGENTS + 3)
+    fn many_agents_are_grouped_by_tool_with_a_switch_to_each_agent() {
+        let total = MAX_AGENTS + 3;
+        let many: Vec<Entry> = (0..total)
             .map(|i| {
-                by_checks(
+                let failed = i % 3 == 0;
+                let mut e = by_checks(
                     &format!("agent {i}"),
-                    &format!("2026-01-01T00:00:{i:02}Z"),
-                    Verdict::Verified,
+                    &format!("2026-01-01T00:{:02}:{:02}Z", i / 60, i % 60),
+                    if failed {
+                        Verdict::Failed
+                    } else {
+                        Verdict::Verified
+                    },
                     (0..flow::MAX_FLOW_CHECKS + 2)
-                        .map(|k| check(&format!("c{k}"), true, ""))
+                        .map(|k| check(&format!("c{k}"), !(failed && k == 0), ""))
                         .collect(),
-                )
+                );
+                e.receipt.worker.agent =
+                    Some(if i % 2 == 0 { "codex" } else { "claude-code" }.into());
+                e
             })
             .collect();
         let html = render_html(&many, &page());
-        assert_eq!(
-            html.matches("<label class=\"fn ").count(),
-            flow::MAX_FLOW_AGENTS
-        );
+        // Grouped by tool by default; "Each agent" shows the newest MAX_AGENTS.
+        assert!(html.contains("<input type=\"radio\" name=\"flv\" id=\"flv-tool\" checked>"));
+        assert!(html.contains("<div class=\"fl m-tool\" style="), "{html}");
         assert!(
-            html.contains("and 3 more agents: see the Agents panel below"),
+            html.contains("<div class=\"fl m-each\" data-alt style="),
             "{html}"
         );
+        assert_eq!(html.matches("<div class=\"fn g-").count(), 2, "{html}");
+        assert_eq!(
+            html.matches("\" class=\"fn a-").count(),
+            MAX_AGENTS,
+            "{html}"
+        );
+        assert!(
+            html.contains(&format!("<small>{} agents", total.div_ceil(2))),
+            "{html}"
+        );
+        assert!(
+            html.contains("3 more are in the Agents panel below"),
+            "{html}"
+        );
+        // A group with mixed outcomes: one line per outcome, wider for more agents.
+        assert!(html.contains("<path class=\"fe g-0"), "{html}");
+        assert!(html.contains(" mixed\" style="), "{html}");
+        assert!(html.contains("stroke-width:"), "{html}");
         assert!(
             html.contains("<li class=\"fc more\">and 2 more</li>"),
             "{html}"
         );
-        // All agents still count in the outcome, not only the drawn ones.
-        assert!(html.contains(&format!(
-            "<b class=\"fo-n\">{}</b>",
-            flow::MAX_FLOW_AGENTS + 3
-        )));
+        // Outcome counts include every agent.
+        let failed = total.div_ceil(3);
+        assert!(html.contains(&format!("<b class=\"fo-n\">{}</b>", total - failed)));
+        assert!(html.contains(&format!("<b class=\"fo-n\">{failed}</b>")));
+        // Rules are scoped per map, so the two maps' lanes don't light each other.
+        assert!(html.contains(".fl.m-tool:has(.fn.g-0:hover)"), "{html}");
+        assert!(html.contains(" .fc.f-g-"), "{html}");
+        assert!(!render_html(&[], &page()).contains("<section class=\"flow\""));
+    }
+
+    fn progress(
+        role: &str,
+        stage: crate::progress::Stage,
+        current: Option<&str>,
+    ) -> crate::progress::Progress {
+        crate::progress::Progress {
+            schema: crate::progress::SCHEMA.into(),
+            id: "p1".into(),
+            started_at: "2026-01-01T00:01:00Z".into(),
+            updated_unix: 0,
+            stale_after_unix: u64::MAX,
+            worker: crate::receipt::Worker {
+                agent: Some("codex".into()),
+                model: Some("m<1>".into()),
+                cost_usd: None,
+                role: Some(role.into()),
+                session: None,
+            },
+            claim: Some("Fixed <it>.".into()),
+            stage,
+            checks_total: 4,
+            checks_done: 1,
+            current: current.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn runs_in_progress_show_on_the_map_and_in_a_list() {
+        use crate::progress::Stage;
+        let e = vec![by(
+            Some("UI design"),
+            "claude-code",
+            "2026-01-01T00:00:01Z",
+            Verdict::Verified,
+        )];
+        let running = vec![
+            progress("UI design", Stage::Check, Some("tenant {t} [t=beta]")),
+            progress("Docs <x>", Stage::Copy, None),
+        ];
+        let with = |entries: &[Entry], running: &[crate::progress::Progress]| {
+            render_html(
+                entries,
+                &Page {
+                    title: "r",
+                    path: "~/r",
+                    generated_at: "now",
+                    running,
+                },
+            )
+        };
+        let html = with(&e, &running);
+        // A known agent's lane turns "checking"; a new agent gets its own lane first.
+        assert!(html.contains("<div class=\"fn r-0 checking\""), "{html}");
         assert!(
-            render_html(&[], &page())
-                .find("<section class=\"flow\"")
-                .is_none()
+            html.contains("<label for=\"fa-0\" class=\"fn a-0 checking\""),
+            "{html}"
         );
+        assert!(
+            html.contains("checking now · check 2 of 4 · tenant · beta"),
+            "{html}"
+        );
+        assert_eq!(html.matches("<path class=\"fe-run ").count(), 2, "{html}");
+        assert!(
+            html.contains("<small class=\"fg-run\">2 checking now</small>"),
+            "{html}"
+        );
+        // The list says it isn't a receipt, and escapes what the progress file says.
+        assert!(html.contains("<h2>2 runs in progress</h2>"), "{html}");
+        assert!(html.contains("Not receipts: a verdict exists only once the receipt is sealed."));
+        assert!(
+            html.contains("<b>Docs &lt;x&gt; · codex · m&lt;1&gt;</b><q>Fixed &lt;it&gt;.</q>"),
+            "{html}"
+        );
+        assert!(html.contains("making a clean copy · started"), "{html}");
+        // Steps 1-2 done, step 3 (copy) now, the rest to come.
+        assert!(
+            html.contains("<i class=\"done\"></i><i class=\"done\"></i><i class=\"now\"></i><i class=\"\"></i>"),
+            "{html}"
+        );
+        // Progress alone (no receipt yet) still draws a map.
+        let html = with(&[], &running[1..]);
+        assert!(html.contains("<section class=\"flow\""), "{html}");
+        assert!(!html.contains("No receipts yet"), "{html}");
     }
 
     #[test]

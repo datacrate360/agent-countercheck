@@ -91,12 +91,14 @@ pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
         ));
     }
     let now = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
+    let running = crate::progress::read_running(&dir);
     let html = report::render_html(
         &entries,
         &report::Page {
             title: &title,
             path: &path,
             generated_at: &now,
+            running: &running,
         },
     );
     let out = opts.out.clone().unwrap_or_else(|| dir.join("report.html"));
