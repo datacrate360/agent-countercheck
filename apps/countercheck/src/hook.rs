@@ -368,7 +368,7 @@ pub fn session_start() -> Result<(), String> {
     .map_err(|e| format!("{}: {e}", file.display()))
 }
 
-/// Remove session records older than 30 days.
+/// Remove files in `dir` (session records, hook counters) not changed for 30 days.
 fn prune_old(dir: &Path) {
     const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -398,6 +398,8 @@ fn take_nudge(receipt: &Path, session: &str) -> bool {
     let Some(dir) = receipt.parent().map(|d| d.join("hook-state")) else {
         return true;
     };
+    // Counters of sessions nobody has used for 30 days go (like session records).
+    prune_old(&dir);
     let file = dir.join(format!("{}.json", safe_id(session)));
     let used = std::fs::read_to_string(&file)
         .ok()

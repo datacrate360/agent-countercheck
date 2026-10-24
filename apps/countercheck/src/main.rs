@@ -16,6 +16,7 @@ mod hook;
 #[cfg(target_os = "linux")]
 mod linux_sandbox;
 mod progress;
+mod prune;
 mod report;
 mod runner;
 mod scan;
@@ -70,7 +71,8 @@ enum Cmd {
         /// What the worker said it did, e.g. "fixed the bug, all tests pass".
         #[arg(long)]
         claim: Option<String>,
-        /// Which agent did the work (claude-code, codex, hermes...).
+        /// Which agent did the work (claude-code, codex, hermes...). Default: the agent whose shell
+        /// this is, when it marks it (Claude Code, Cursor, Codex, Hermes).
         #[arg(long)]
         agent: Option<String>,
         /// Which model did the work.
@@ -166,6 +168,22 @@ enum Cmd {
         /// Don't open the browser.
         #[arg(long)]
         no_open: bool,
+    },
+    /// Delete receipts older than an age, to get the space back. Receipts are never deleted
+    /// otherwise; try --dry-run first.
+    Prune {
+        /// Age from each receipt's own date: 90d, 12weeks, 6months...
+        #[arg(long)]
+        older_than: String,
+        /// List what would go; delete nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Repository whose receipts to prune (any folder inside it).
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+        /// Receipt folder (default: <repo>/.countercheck/receipts).
+        #[arg(long)]
+        receipts: Option<PathBuf>,
     },
     /// Write an HTML page of the saved receipts (newest first; no scripts, works offline).
     Report {
@@ -333,7 +351,8 @@ fn run(cli: Cli) -> Result<u8, String> {
                 base,
                 claim,
                 worker: countercheck_core::receipt::Worker {
-                    agent,
+                    // Not named: the agent whose shell this is, if it marks it.
+                    agent: agent.or_else(|| verify::agent_from_env().map(str::to_string)),
                     model,
                     cost_usd,
                     role: role
@@ -344,7 +363,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                                 countercheck_core::receipt::MAX_ROLE_CHARS,
                             )
                         }),
-                    session: None,
+                    session: verify::session_from_env(),
                 },
                 sandbox,
                 sandbox_required,
@@ -403,6 +422,27 @@ fn run(cli: Cli) -> Result<u8, String> {
                 port,
                 open: !no_open,
             })?;
+            Ok(0)
+        }
+        Cmd::Prune {
+            older_than,
+            dry_run,
+            repo,
+            receipts,
+        } => {
+            let p = prune::run(&prune::Options {
+                repo,
+                receipts,
+                older_than,
+                dry_run,
+            })?;
+            println!(
+                "{} {} receipt(s), {} KB; {} kept",
+                if dry_run { "would remove" } else { "removed" },
+                p.removed,
+                p.bytes.div_ceil(1024),
+                p.kept
+            );
             Ok(0)
         }
         Cmd::Report {

@@ -106,6 +106,46 @@ impl Drop for Reporter {
     }
 }
 
+/// Remove what dead runs left in `receipts/running/`: progress files past their `stale_after` time
+/// (a killed run can't remove its own), files that aren't progress records, and half-written
+/// `.tmp` files. Only files untouched for a minute go, so a run that is starting is never raced.
+/// Live runs are kept. Best effort; never fails.
+pub fn sweep(receipts: &Path) {
+    const QUIET: std::time::Duration = std::time::Duration::from_secs(60);
+    let Ok(rd) = std::fs::read_dir(receipts.join(progress::DIR)) else {
+        return;
+    };
+    let now = now_unix();
+    for e in rd.flatten() {
+        let path = e.path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        let quiet = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > QUIET);
+        if !meta.is_file() || !quiet {
+            continue;
+        }
+        let dead = match path.extension().and_then(|x| x.to_str()) {
+            Some("tmp") => true,
+            Some("json") => {
+                meta.len() > progress::MAX_BYTES
+                    || std::fs::read_to_string(&path)
+                        .ok()
+                        .and_then(|t| progress::read(&t, now))
+                        .is_none()
+            }
+            _ => false,
+        };
+        if dead {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 /// Runs in progress in `receipts/running/`, newest first, read as hostile input: size-capped,
 /// cleaned, stale ones skipped. Never fails.
 pub fn read_running(receipts: &Path) -> Vec<Progress> {

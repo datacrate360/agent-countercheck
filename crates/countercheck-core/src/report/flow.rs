@@ -63,7 +63,7 @@ pub fn running_name(p: &Progress) -> String {
         .role
         .clone()
         .or_else(|| p.worker.agent.clone())
-        .unwrap_or_else(|| "unknown agent".to_string())
+        .unwrap_or_else(|| super::UNNAMED.to_string())
 }
 
 /// "check 2 of 5 · unit tests", or the stage.
@@ -622,14 +622,22 @@ pub fn running_html(running: &[Progress], live: bool) -> String {
             .collect();
         let _ = write!(
             h,
-            "<div class=\"rn\">{av}<span class=\"rn-main\"><b>{who}</b><q>{claim}</q></span>\
+            "<div class=\"rn\">{av}<span class=\"rn-main\"><b>{who}</b>{claim}</span>\
              <span class=\"rn-prog\"><span class=\"rn-segs\" aria-hidden=\"true\">{segs}</span>\
              <small>{status} · started {at}</small></span></div>",
             av = avatar(&name),
             who = who.join(" · "),
-            claim = escape(p.claim.as_deref().unwrap_or("(no claim)")),
+            claim = match p.claim.as_deref() {
+                Some(c) => format!("<q>{}</q>", escape(c)),
+                None => "<small>no claim given (<code>--claim</code>)</small>".to_string(),
+            },
             status = escape(&running_status(p)),
-            at = escape(&super::pretty_time(&p.started_at)),
+            // Runs in progress are recent: the time of day is enough.
+            at = escape(
+                super::pretty_time(&p.started_at)
+                    .split_once(' ')
+                    .map_or(p.started_at.as_str(), |(_, t)| t)
+            ),
         );
     }
     h.push_str("</section>");

@@ -53,6 +53,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         ensure_receipts_ignored(&root, &dir);
     }
     // What this run is doing, for the report and live UI; removed when this function returns.
+    // First clear what killed runs left behind.
+    crate::progress::sweep(&dir);
     let mut progress = Reporter::start(&dir, &opts.worker, opts.claim.as_deref());
     let base_commit = git::resolve_commit(&root, &opts.base)?;
     let head_commit = git::resolve_commit(&root, "HEAD")?;
@@ -383,6 +385,33 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let text = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((receipt, path))
+}
+
+/// Which agent's shell `verify` runs in, when `--agent` isn't given: each agent marks the commands
+/// it runs (Claude Code `CLAUDE_CODE_CHILD_SESSION` / `CLAUDECODE`, Cursor `CURSOR_AGENT`, Codex
+/// `CODEX_SANDBOX*`, Hermes `HERMES_SESSION_ID`). A label like `--agent`, never a proof: the
+/// worker controls its environment, and it changes no check and no verdict. An agent started by
+/// another inherits both markers; the most specific one (the innermost spawner's) wins.
+pub fn agent_from_env() -> Option<&'static str> {
+    let set = |k: &str| std::env::var_os(k).is_some_and(|v| !v.is_empty());
+    if set("CLAUDE_CODE_CHILD_SESSION") || set("CLAUDECODE") {
+        Some("claude-code")
+    } else if set("CURSOR_AGENT") {
+        Some("cursor")
+    } else if set("CODEX_SANDBOX") || set("CODEX_SANDBOX_NETWORK_DISABLED") {
+        Some("codex")
+    } else if set("HERMES_SESSION_ID") {
+        Some("hermes")
+    } else {
+        None
+    }
+}
+
+/// The agent session `verify` runs in, when its environment says (Hermes `HERMES_SESSION_ID`).
+pub fn session_from_env() -> Option<String> {
+    std::env::var("HERMES_SESSION_ID").ok().and_then(|s| {
+        countercheck_core::receipt::clean_label(&s, countercheck_core::receipt::MAX_SESSION_CHARS)
+    })
 }
 
 /// The clean copy against the base, by bytes. A file that differs only by CRLF line endings is

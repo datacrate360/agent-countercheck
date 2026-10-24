@@ -1420,6 +1420,198 @@ fn roles_tell_agents_apart_on_the_receipt_and_the_report() {
     );
 }
 
+/// Without `--agent`, `verify` names the agent whose shell it runs in, from the marker each agent
+/// sets; `--agent` still wins, and with no marker the agent stays unnamed.
+#[test]
+fn verify_names_the_agent_from_its_shell_when_not_told() {
+    let d = project(CHECKS);
+    let markers = [
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDECODE",
+        "CURSOR_AGENT",
+        "CODEX_SANDBOX",
+        "CODEX_SANDBOX_NETWORK_DISABLED",
+        "HERMES_SESSION_ID",
+    ];
+    let run = |set: &[(&str, &str)], args: &[&str]| -> serde_json::Value {
+        let mut cmd = Command::new(BIN);
+        cmd.args(["verify", "--json", "--sandbox", "none", "--repo"])
+            .arg(d.path())
+            .args(args);
+        for m in markers {
+            cmd.env_remove(m);
+        }
+        for (k, v) in set {
+            cmd.env(k, v);
+        }
+        serde_json::from_slice(&cmd.output().unwrap().stdout).unwrap()
+    };
+    let agent = |v: serde_json::Value| v["worker"]["agent"].as_str().map(str::to_string);
+    assert_eq!(agent(run(&[], &[])), None);
+    assert_eq!(
+        agent(run(&[("CURSOR_AGENT", "1")], &[])).as_deref(),
+        Some("cursor")
+    );
+    assert_eq!(
+        agent(run(&[("CODEX_SANDBOX", "seatbelt")], &[])).as_deref(),
+        Some("codex")
+    );
+    assert_eq!(
+        agent(run(&[("CLAUDECODE", "1")], &[])).as_deref(),
+        Some("claude-code")
+    );
+    let h = run(&[("HERMES_SESSION_ID", "20261023_x\n")], &[]);
+    assert_eq!(h["worker"]["agent"], "hermes");
+    assert_eq!(h["worker"]["session"], "20261023_x");
+    // Claude Code started from Hermes inherits both: the inner spawner's marker wins.
+    let both = [
+        ("HERMES_SESSION_ID", "s"),
+        ("CLAUDE_CODE_CHILD_SESSION", "1"),
+    ];
+    assert_eq!(agent(run(&both, &[])).as_deref(), Some("claude-code"));
+    // An empty marker is no marker, and --agent always wins.
+    assert_eq!(agent(run(&[("CURSOR_AGENT", "")], &[])), None);
+    assert_eq!(
+        agent(run(&[("CURSOR_AGENT", "1")], &["--agent", "aider"])).as_deref(),
+        Some("aider")
+    );
+    // The report calls the unnamed runs what they are.
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let html = fs::read_to_string(d.path().join(".countercheck/receipts/report.html")).unwrap();
+    assert!(html.contains("<b>unnamed agent</b>"), "{html}");
+    assert!(
+        html.contains("run without <code>--agent</code> or a role"),
+        "{html}"
+    );
+    assert!(!html.contains("unknown agent"), "{html}");
+}
+
+/// Make `path` look untouched for `days` days.
+fn age(path: &Path, days: u64) {
+    let when =
+        std::time::SystemTime::now() - std::time::Duration::from_secs(days * 24 * 3600 + 120);
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(when)
+        .unwrap();
+}
+
+/// `countercheck prune` deletes receipts older than the age given (by their own date), lists them
+/// first with --dry-run, and never touches anything that isn't a receipt.
+#[test]
+fn prune_removes_only_old_receipts_and_only_when_asked() {
+    let d = project(CHECKS);
+    let (_, old) = countercheck(d.path(), &[]);
+    let (_, new) = countercheck(d.path(), &[]);
+    let dir = d.path().join(".countercheck/receipts");
+    let old_file = dir.join(format!("{}.json", old["id"].as_str().unwrap()));
+    let new_file = dir.join(format!("{}.json", new["id"].as_str().unwrap()));
+    let text = fs::read_to_string(&old_file).unwrap();
+    let created = old["created_at"].as_str().unwrap();
+    fs::write(&old_file, text.replace(created, "2020-01-02T03:04:05Z")).unwrap();
+    // Old file times don't count: only the receipt's own date.
+    age(&new_file, 400);
+    fs::write(
+        dir.join("notes.json"),
+        "{\"created_at\": \"2001-01-01T00:00:00Z\"}",
+    )
+    .unwrap();
+    age(&dir.join("notes.json"), 400);
+    let prune = |args: &[&str]| {
+        Command::new(BIN)
+            .arg("prune")
+            .args(args)
+            .arg("--repo")
+            .arg(d.path())
+            .output()
+            .unwrap()
+    };
+    // No age, no pruning; a bad age is a plain error.
+    assert!(!prune(&[]).status.success());
+    let bad = prune(&["--older-than", "soon"]);
+    assert_eq!(bad.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("examples: 90d"));
+    let dry = prune(&["--older-than", "90d", "--dry-run"]);
+    let text = String::from_utf8_lossy(&dry.stdout);
+    assert!(text.contains("would remove 2020-01-02T03:04:05Z"), "{text}");
+    assert!(
+        text.contains("would remove 1 receipt(s)") && text.contains("1 kept"),
+        "{text}"
+    );
+    assert!(old_file.exists());
+    let real = prune(&["--older-than", "90d"]);
+    assert_eq!(real.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&real.stdout).contains("removed 1 receipt(s)"));
+    assert!(!old_file.exists());
+    assert!(new_file.exists() && dir.join("notes.json").exists());
+}
+
+/// `verify` clears what killed runs left in `running/` (stale or broken progress files, half
+/// writes) once they've been quiet a minute; live runs and fresh files stay.
+#[test]
+fn verify_sweeps_progress_files_left_by_dead_runs() {
+    let d = project(CHECKS);
+    let running = d.path().join(".countercheck/receipts/running");
+    fs::create_dir_all(&running).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let record = |id: &str, stale_after: u64| {
+        serde_json::json!({
+            "schema": "countercheck.progress/v1", "id": id, "started_at": "2026-10-23T10:00:00Z",
+            "updated_unix": now, "stale_after_unix": stale_after, "worker": {},
+            "stage": "check",
+        })
+        .to_string()
+    };
+    for (name, body) in [
+        ("dead.json", record("dead", now - 5)),
+        ("live.json", record("live", now + 3600)),
+        ("junk.json", "not json".to_string()),
+        ("half.tmp", "{".to_string()),
+        ("fresh.json", "not json yet".to_string()),
+    ] {
+        fs::write(running.join(name), body).unwrap();
+        if name != "fresh.json" {
+            age(&running.join(name), 1);
+        }
+    }
+    countercheck(d.path(), &[]);
+    let mut left: Vec<String> = fs::read_dir(&running)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["fresh.json", "live.json"]);
+}
+
+/// The Claude Code hook's push-back counters of sessions unused for 30 days are removed.
+#[test]
+fn hook_counters_of_old_sessions_are_pruned() {
+    let d = project(CHECKS);
+    let state = d.path().join(".countercheck/receipts/hook-state");
+    fs::create_dir_all(&state).unwrap();
+    for (name, days) in [("old.json", 31), ("recent.json", 2)] {
+        fs::write(state.join(name), "{\"nudges\": 1}").unwrap();
+        age(&state.join(name), days);
+    }
+    // The work fails, so the hook pushes back and counts it.
+    let (code, out) = claude_hook(&claude_payload(d.path(), "s-now", "Fixed it."), &[]);
+    assert_eq!(code, 0);
+    assert!(out.contains("\"decision\":\"block\""), "{out}");
+    assert!(!state.join("old.json").exists());
+    assert!(state.join("recent.json").exists() && state.join("s-now.json").exists());
+}
+
 /// While `verify` runs, `<receipts>/running/<id>.json` says what it is doing (for the report and
 /// live UI); it is gone once the receipt is written.
 #[test]
