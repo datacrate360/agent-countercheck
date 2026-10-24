@@ -40,9 +40,9 @@
   <text x="436" y="215" font-size="13" fill="#FFFFFF">no internet during the checks *</text>
   <circle cx="424" cy="240" r="3.5" fill="#FFFFFF"/>
   <text x="436" y="245" font-size="13" fill="#FFFFFF">a receipt sealed with SHA-256</text>
-  <text x="530" y="278" font-size="11" fill="#D3E5E2" text-anchor="middle">* sandbox on macOS, Linux, Windows; network = true opts in</text>
-  <rect x="710" y="56" width="230" height="96" rx="12" fill="#ECFDF5" stroke="#047857" stroke-width="1.5"/>
-  <text x="726" y="84" font-size="15" fill="#047857" font-weight="700">VERIFIED</text>
+  <text x="530" y="278" font-size="11" fill="#D3E5E2" text-anchor="middle">* sandbox on macOS, Linux and Windows</text>
+  <rect x="710" y="56" width="230" height="96" rx="12" fill="#EEF4F3" stroke="#0F4C4C" stroke-width="1.5"/>
+  <text x="726" y="84" font-size="15" fill="#0F4C4C" font-weight="700">VERIFIED</text>
   <text x="726" y="108" font-size="13" fill="#3A3A36">every locked check passed:</text>
   <text x="726" y="128" font-size="13" fill="#3A3A36">the agent may finish</text>
   <rect x="710" y="172" width="230" height="120" rx="12" fill="#FFF7ED" stroke="#C2410C" stroke-width="1.5"/>

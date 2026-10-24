@@ -29,13 +29,13 @@
   <text x="36" y="270" font-size="13" fill="#3A3A36">your own scripts, a teammate</text>
   <text x="36" y="294" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">countercheck verify \</text>
   <text x="36" y="312" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">  --claim "what it said"</text>
-  <text x="36" y="328" font-size="11" fill="#6B6B66">dedicated hooks: planned</text>
+  <text x="36" y="328" font-size="11" fill="#6B6B66">named from its shell (Codex, Cursor) or --agent</text>
 
   <rect x="20" y="350" width="260" height="92" rx="12" fill="#FAFAF9" stroke="#A3A39C" stroke-width="1.5"/>
   <text x="36" y="374" font-size="14" font-weight="700" fill="#141414">CI on every pull request</text>
   <text x="36" y="396" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">countercheck verify --base main</text>
   <text x="36" y="416" font-size="13" fill="#3A3A36">in any CI runner today</text>
-  <text x="36" y="434" font-size="11" fill="#6B6B66">GitHub Action: planned</text>
+  <text x="36" y="434" font-size="11" fill="#6B6B66">GitHub Action on the Marketplace</text>
 
   <line x1="280" y1="121" x2="336" y2="170" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
   <line x1="280" y1="270" x2="336" y2="250" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>

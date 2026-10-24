@@ -27,9 +27,13 @@ passes, or never run it. Agent Countercheck checks the claim. When the agent say
 It is **not an AI agent**. It's a plain program, like `git` or `pytest`, with no model inside. Your agent does the
 work; Countercheck re-runs your own checks on rules the agent couldn't change.
 
+<img src="docs/img/a-run.svg" alt="One run, animated. The agent Discount fix (claude-code) says: Fixed the discount bug, all tests pass, but it skipped the failing test. Countercheck locks the checks from the base commit, makes a clean copy, puts the edited test back and runs the checks: compiles passes, unit tests and full suite fail with -5.0 != 0. The receipt is sealed FAILED and the agent is sent back: fix the code, not the tests. It fixes pricing.py and says done again: no protected file changed, all three checks pass, the receipt is sealed VERIFIED and the work is delivered." width="880">
+
+The same thing in a real terminal:
+
 <img src="docs/assets/demos/verify.gif" alt="The agent's own test run says OK (skipped=1); countercheck verify puts the edited test back, runs it and says FAILED with AssertionError -5.0 != 0; after the agent fixes the code, countercheck verify says VERIFIED" width="880">
 
-The same run as text. The agent's own test run had said `OK (skipped=1)`: it had marked the failing test as skipped.
+As text. The agent's own test run had said `OK (skipped=1)`: it had marked the failing test as skipped.
 
 ```text
 $ countercheck verify --claim "Fixed the discount bug. All tests pass." --agent claude-code --cost-usd 0.42
@@ -59,20 +63,13 @@ work.
 
 **The agent never grades itself.** Its claim is compared with what actually runs, on rules it couldn't change:
 
-```text
-base revision (locked)        agent's work + claim
-  checks.toml, your tests          files, "Done, all tests pass."
-          \                           /
-           +--> countercheck verify <+
-                1 lock the checks     (from the base revision)
-                2 clean copy          (edited tests put back)
-                3 run in a sandbox    (no internet unless a check opts in)
-                4 decide + seal       (receipt with a SHA-256 seal)
-                        |
-      VERIFIED -> agent may finish
-      FAILED + "done" -> the hook sends the failure back; the agent fixes the code (3 rounds at most)
-      FAILED + honest "can't, because ..." -> agent may stop; the receipt still says FAILED
-```
+| The agent says | Countercheck finds | What happens |
+|---|---|---|
+| "done" | every locked check passed | **VERIFIED**: the agent may finish |
+| "done" | a check failed | **FAILED**: the hook sends the failure back; the agent fixes the code (3 rounds at most) |
+| "can't, because …" (an honest blocker) | a check failed, no protected file changed | the agent may stop; the receipt still says FAILED |
+
+Seven rules keep the referee honest:
 
 | Rule | In plain words |
 |---|---|
@@ -84,7 +81,27 @@ base revision (locked)        agent's work + claim
 | Fail closed on the verdict, open in the hooks | a broken referee never waves work through, and never traps your agent |
 | Leave evidence | every run writes a sealed receipt anyone can re-check |
 
+### Architecture
+
+![Countercheck architecture. Who asks: Claude Code and Cortex Code through hook claude-session-start and hook claude-stop, Hermes Agent through hook hermes-pre-verify, any agent, script or person through countercheck verify (the agent is named from its shell or --agent), and CI or the GitHub Action with verify --base origin/main. One run reads the base commit and the working tree of your git repository, then 1 locks the checks (git.rs, config), 2 makes a clean copy and puts back every protected file (snapshot.rs, protect), 3 runs each check in a sandbox (runner.rs: macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job) with six check types, 4 decides, 5 seals with SHA-256. Results: a sealed receipt file, an answer back to the agent through the hook, and an exit code for CI; receipts are read with show, report, ui and removed with prune. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.](docs/img/architecture.svg)
+
+| Part | Where | What it does |
+|---|---|---|
+| The rules | `crates/countercheck-core` | pure logic, no I/O: check files, protected paths, receipts and verdicts, the report page, the six check types |
+| The program | `apps/countercheck` | git, the clean copy, running checks, the sandboxes, the agent hooks, `report`, `ui`, `prune` |
+| Windows calls | `crates/countercheck-winsandbox` | the restricted token and file permissions; the only code allowed `unsafe` |
+
 The code behind each rule, one run step by step, and where new work plugs in: [docs/architecture.md](docs/architecture.md).
+
+### Watch your agents
+
+Several agents can work in one folder, each with its own task. Give each a role (`--role "Docs"` or
+`COUNTERCHECK_ROLE`) and `countercheck ui` shows them side by side, live: who is checking now, what was delivered,
+what was sent back, and, for any run, a step-by-step replay ending in its sealed receipt.
+
+<img src="docs/assets/demos/ui.gif" alt="The live countercheck ui page with three agents in one folder. Discount fix (claude-code) is checking now as a moving line, then is sent back FAILED. Docs (codex) and Refactor (hermes) check at the same time and are both delivered. Pointing at Discount fix lights its path and the checks it broke. Its run opens as a replay: agent said done, checks locked at the base commit, clean copy, 1 protected file put back, 1 of 3 checks passed, receipt sealed FAILED. Discount fix runs again after fixing the code and all three agents are delivered." width="880">
+
+Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 
 ### Where it fits
 
@@ -315,7 +332,7 @@ countercheck report --open   # the same page as one offline HTML file
 countercheck show .countercheck/receipts/<id>.json   # one receipt + seal check
 ```
 
-<img src="docs/assets/demos/ui.gif" alt="The countercheck ui page updates by itself: a FAILED run appears, opening it shows the failing test output, then a VERIFIED run appears on top" width="880">
+What it looks like: [Watch your agents](#watch-your-agents).
 
 - `ui` serves the page on this computer only (127.0.0.1, with a random token in the address). It uses port 7357, or
   any free port (`--port N` to choose); running it again opens the one already running for the project.

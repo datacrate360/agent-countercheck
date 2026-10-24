@@ -73,8 +73,8 @@
   <line x1="630" y1="330" x2="688" y2="335" stroke="#55554F" stroke-width="1.6" marker-end="url(#arrow)"/>
 
   <g>
-    <rect x="690" y="56" width="250" height="82" rx="12" fill="#ECFDF5" stroke="#059669" stroke-width="1.5"/>
-    <text x="706" y="84" font-size="15" font-weight="700" fill="#047857">VERIFIED</text>
+    <rect x="690" y="56" width="250" height="82" rx="12" fill="#EEF4F3" stroke="#059669" stroke-width="1.5"/>
+    <text x="706" y="84" font-size="15" font-weight="700" fill="#0F4C4C">VERIFIED</text>
     <text x="706" y="106" font-size="13" fill="#3A3A36">every check passed with the</text>
     <text x="706" y="124" font-size="13" fill="#3A3A36">original tests: the agent may finish</text>
   </g>
@@ -100,6 +100,6 @@
   <!-- Receipt -->
   <rect x="330" y="478" width="300" height="62" rx="12" fill="#FAFAF9" stroke="#0F4C4C" stroke-width="1.5"/>
   <text x="480" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#141414">Receipt (every run)</text>
-  <text x="480" y="525" text-anchor="middle" font-size="12.5" fill="#3A3A36">.countercheck/receipts/&lt;id&gt;.json · countercheck show / report / ui</text>
+  <text x="480" y="525" text-anchor="middle" font-size="12.5" fill="#3A3A36">receipts/&lt;id&gt;.json · show · report · ui</text>
   <line x1="480" y1="406" x2="480" y2="474" stroke="#0F4C4C" stroke-width="1.6" marker-end="url(#arrow)"/>
 </svg>
