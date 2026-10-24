@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.13.0 (2026-10-24)
+
+Watch agents' claims being checked as it happens, and keep a busy project readable.
 
 - **New: runs in progress.** While `verify` works it keeps `.countercheck/receipts/running/<id>.json` (stage, check
   *n of m*, the check's name, the agent and its claim), replaced whole at each step and removed when the receipt is
