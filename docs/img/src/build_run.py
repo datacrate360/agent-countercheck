@@ -193,7 +193,8 @@ caps = [
 ]
 for a, b, s in caps:
     col = CORAL_L if s.startswith("FAILED") else (TEAL_L if s.startswith("VERIFIED") else TXT)
-    g(vis((a + 0.05, b - 0.05), fade=0.15), text(W / 2, H - 14, s, 13.5, 500, col, "middle"))
+    # Fade out before the next one fades in: two captions never overlap.
+    g(vis((a + 0.15, b - 0.15), fade=0.12), text(W / 2, H - 14, s, 13.5, 500, col, "middle"))
 
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <title>One run of Countercheck, animated</title>
