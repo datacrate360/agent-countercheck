@@ -149,7 +149,7 @@ Pick one. Each gives you the same `countercheck` command.
 | Direct download | [Releases](https://github.com/datacrate360/agent-countercheck/releases): one file per platform, plus `SHA256SUMS.txt` |
 
 ```sh
-countercheck --version        # countercheck 0.11.0
+countercheck --version        # countercheck 0.12.0
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win).** Countercheck calls `git`, and checks run
@@ -294,7 +294,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: datacrate360/agent-countercheck@v0.11.0
+      - uses: datacrate360/agent-countercheck@v0.12.0
 ```
 
 Any other CI: pass where the branch started.
@@ -520,7 +520,7 @@ Yes, MIT-licensed. See [Contribute](#contribute).
 
 A referee has to be right, so it's tested harder than most tools its size:
 
-- **282 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **287 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
   that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 35
   fields changes; `decide` never says VERIFIED when a check failed).
@@ -552,7 +552,7 @@ files and Python). Full reasoning: [docs/decisions/0001-stack.md](docs/decisions
 
 ## Status
 
-v0.11.0 ([CHANGELOG](CHANGELOG.md)). Sandbox on macOS and Linux; on Windows a partial one by default and a full one
+v0.12.0 ([CHANGELOG](CHANGELOG.md)). Sandbox on macOS and Linux; on Windows a partial one by default and a full one
 after `countercheck windows-setup` (experimental). A GitHub Action on the
 [Marketplace](https://github.com/marketplace/actions/agent-countercheck). Not yet: signed receipts, a per-host network
 allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, hooks for Codex and

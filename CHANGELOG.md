@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.12.0 (2026-10-23)
+
+See how each agent's "done" went: a flow map and a step-by-step replay of every run.
 
 - **New: flow map** at the top of the report and live UI: each agent's latest claim runs through Countercheck (the
   checks locked at the base commit) to *delivered*, *sent back* or *needs a person*. Point at an agent to light its
