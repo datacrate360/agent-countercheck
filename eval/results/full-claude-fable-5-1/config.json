@@ -1,0 +1,18 @@
+{
+  "tasks": "all",
+  "arms": "A,B,C,D",
+  "reps": 3,
+  "budget_usd": 60.0,
+  "out": "eval/results/full-claude-fable-5-1",
+  "profile": "countercheck-eval",
+  "provider": "anthropic",
+  "model": "claude-fable-5-1",
+  "toolsets": "terminal,file,todo",
+  "timeout": 1200,
+  "seed": 7,
+  "dry_run": false,
+  "price_in": 10.0,
+  "price_out": 50.0,
+  "workroot": null,
+  "plan_size": 348
+}
