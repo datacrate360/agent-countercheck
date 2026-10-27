@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Benchmark on Claude:** Fable 5.1 and Opus 5.5 on the 29-task benchmark, all four setups
+  ([docs/eval/results-2026-10-claude.md](docs/eval/results-2026-10-claude.md)): neither gamed the tests; Opus made no
+  false "done" claim in 348 runs; Countercheck added no time and no false alarm. Raw data in `eval/results/`.
+- **eval:** `validate.py` uses `--sandbox auto` (runs on Linux); `run.py --price-in/--price-out` for models Hermes
+  has no price for.
+
 ## v0.14.0 (2026-10-24)
 
 Every run says which agent made it, and Countercheck cleans up after itself.

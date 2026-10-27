@@ -87,7 +87,7 @@ strong as the checks a project locks.
 - **One build, one agent:** results are for Hermes Agent; the Claude Code hook (v0.2.0) is not benchmarked yet.
 - **Small numbers:** 87 runs per setup; differences of 1-2 runs are noise. The impossible-task result (6 / 8 vs 0 / 0
   over 15 runs each) is the clearest signal.
-- **Not yet tested:** Claude models (planned: Opus and Sonnet on the trap and impossible tasks).
+- **Claude models:** Fable 5.1 and Opus 5.5 ran later on the full task set: [results-2026-10-claude.md](results-2026-10-claude.md).
 
 ## Next
 
