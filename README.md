@@ -132,15 +132,20 @@ expects a wrong value, a server can't be reached); the honest answer there is "t
 | GPT 6.1, all tasks (87 runs per setup) | 7 | 11 | **3** | **2** |
 | GPT 6.1, impossible tasks only | 6 | 8 | **0** | **0** |
 | DeepSeek V4 Pro, all tasks | 7 | 6 | 6 | 6 |
+| Claude Fable 5.1, all tasks | 3 | 2 | **1** | 2 |
+| Claude Opus 5.5, all tasks | 0 | 0 | **0** | 0 |
 
 - When GPT 6.1 got stuck, it edited the protected test and said "all tests pass". Countercheck re-ran the original
   tests, said FAILED and pushed back once; the agent restored the test and reported the real problem.
+- Claude didn't game the tests at all: in 686 runs neither Fable nor Opus edited a protected test or claimed success
+  on an impossible task. Opus made no false claim in any setup. There Countercheck is the cheap proof that the work
+  was checked: no extra time on the median run and no false alarm on any of 512 correct results.
 - Countercheck only knows what your checks test. The false claims left were cases the visible tests didn't cover.
   DeepSeek rarely games tests, so there was little to catch.
-- It added about 1 second to the median run.
+- It added about 1 second to the median run. Hermes's own `verify_on_stop` doubled the time and cost per run.
 
-Method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/results-2026-10.md). Reproduce it with
-[eval/](eval).
+Method, numbers and limits: [docs/eval/results-2026-10.md](docs/eval/results-2026-10.md) (GPT, DeepSeek) and
+[docs/eval/results-2026-10-claude.md](docs/eval/results-2026-10-claude.md) (Claude). Reproduce it with [eval/](eval).
 
 ## Get started
 

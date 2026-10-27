@@ -43,7 +43,7 @@ section. Ideas and use cases are welcome as issues.
 ## In progress
 
 - **Benchmark results** published: `docs/eval/results-2026-10.md` (GPT 6.1: false "done" 7 → 3, impossible-task
-  cheats 6 → 0; DeepSeek: no difference). Next: sandbox the agent during evals, Claude models.
+  cheats 6 → 0; DeepSeek: no difference). Claude Fable 5.1 and Opus 5.5 (Oct 2026): no gaming, no false alarms, no added time. Next: sandbox the agent during evals (and keep the provider key out of its shell), adapt the harness to Hermes v0.22.1+.
 
 ## Next
 
