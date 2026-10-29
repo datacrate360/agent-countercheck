@@ -73,6 +73,9 @@ pub struct ProtectedChange {
 
 /// The action for a new file on a `frozen` path: taken out of the clean copy.
 pub const REMOVED_NEW_FILE: &str = "removed_new_file";
+/// The action for a symlink the worker added or changed that leads outside the project: taken
+/// out of the clean copy, whatever its path (the checks must never read files Countercheck didn't).
+pub const REMOVED_OUTSIDE_LINK: &str = "removed_outside_link";
 
 impl ProtectedChange {
     /// Like [`ProtectedChange::decide`], for a `frozen` path: a new file is removed too, so the
@@ -87,7 +90,9 @@ impl ProtectedChange {
 
     /// True when the clean copy no longer holds the worker's version (restored or removed).
     pub fn undone(&self) -> bool {
-        self.action == "restored_from_base" || self.action == REMOVED_NEW_FILE
+        self.action == "restored_from_base"
+            || self.action == REMOVED_NEW_FILE
+            || self.action == REMOVED_OUTSIDE_LINK
     }
 
     pub fn decide(path: &str, change: Change) -> Self {

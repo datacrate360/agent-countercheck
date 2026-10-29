@@ -217,6 +217,41 @@ pub fn restore(dest: &Path, path: &str, base_content: Option<&[u8]>) -> Result<(
     }
 }
 
+/// True when `rel` in the copy is a symlink that leads outside `dest` (the copy's root, canonical).
+/// A link that doesn't resolve yet counts when its target is absolute or climbs out with `..`:
+/// something outside could create the target while the checks run.
+pub fn link_escapes(dest: &Path, rel: &str) -> bool {
+    let Ok(rel_path) = safe_rel(rel) else {
+        return false;
+    };
+    let p = dest.join(&rel_path);
+    if !fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink()) {
+        return false;
+    }
+    if let Ok(real) = canonical(&p) {
+        return !real.starts_with(dest);
+    }
+    let Ok(target) = fs::read_link(&p) else {
+        return true;
+    };
+    if target.is_absolute() || target.has_root() {
+        return true;
+    }
+    // Lexically: the link's folder, then the target's parts.
+    let mut depth: i64 = rel_path.components().count() as i64 - 1;
+    for c in target.components() {
+        match c {
+            std::path::Component::ParentDir => depth -= 1,
+            std::path::Component::Normal(_) => depth += 1,
+            _ => {}
+        }
+        if depth < 0 {
+            return true;
+        }
+    }
+    false
+}
+
 /// After a file was taken out of the copy, remove the folders it leaves empty (up to the root),
 /// so a removed `pkg/__init__.py` doesn't leave a `pkg/` folder Python could still import.
 pub fn remove_empty_parents(dest: &Path, path: &str) {

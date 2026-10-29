@@ -170,6 +170,9 @@ run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= 
   copy (`removed_new_file` on the receipt). Freeze only where a new file changes how the checks run (`conftest.py`,
   modules named like the runner in the folder the command runs from), never your whole tests folder. Commit a new
   `conftest.py` you want yourself; then it's part of the base.
+- A symlink the agent adds or changes that leads **outside** the project (say `tests/unit` pointing at a folder with
+  a `conftest.py` elsewhere on disk) is always taken out of the clean copy (`removed_outside_link`), whatever
+  `protected` and `frozen` say.
 - A new test file still runs inside pytest and could patch it. If that worries you, refuse such lines with a
   [forbid](#only-new-lines-scope--added) on `tests/**` (`pattern = '\b_pytest\b|pytest_plugins|hookimpl|sys\.modules'`,
   `scope = "added"`), and keep the same check in CI.

@@ -579,6 +579,15 @@ pub fn decide(r: &Receipt, agent_reported_blocker: bool) -> Decision {
              that change how the tests run don't count; fix the code instead.\n",
         );
     }
+    if r.protected_changes
+        .iter()
+        .any(|p| p.action == countercheck_core::protect::REMOVED_OUTSIDE_LINK)
+    {
+        m.push_str(
+            "The checks ran without the links you added that lead outside the project (listed on the \
+             receipt); fix the code inside the project instead.\n",
+        );
+    }
     if !r.hook_settings.is_empty() {
         m.push_str(
             "Undo your change to the hook settings file(s) above: Countercheck has to check every stop.\n",

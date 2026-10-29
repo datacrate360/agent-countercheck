@@ -2705,8 +2705,25 @@ fn protected_files_are_never_restored_through_a_symlinked_folder() {
     std::os::unix::fs::symlink(outside.path(), d.path().join("tests")).unwrap();
     let (code, r) = countercheck(d.path(), &[]);
     assert_eq!(code, 2, "{r:#}");
-    assert_eq!(r["protected_changes"][0]["path"], "tests/check.sh");
-    assert_eq!(r["protected_changes"][0]["action"], "restored_from_base");
+    // The link out of the project is taken out of the copy, and the test is put back.
+    let action = |path: &str| {
+        r["protected_changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["path"] == path)
+            .map(|p| p["action"].clone())
+    };
+    assert_eq!(
+        action("tests"),
+        Some("removed_outside_link".into()),
+        "{r:#}"
+    );
+    assert_eq!(
+        action("tests/check.sh"),
+        Some("restored_from_base".into()),
+        "{r:#}"
+    );
     // the folder outside is untouched: nothing was written there
     assert_eq!(
         fs::read_to_string(outside.path().join("check.sh")).unwrap(),
@@ -4399,4 +4416,56 @@ fn the_hook_sends_back_an_agent_that_added_a_frozen_file() {
         reason.contains("without the files you added on frozen paths"),
         "{reason}"
     );
+}
+
+// ---- links that lead out of the clean copy ----
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_files_outside_the_project_is_taken_out() {
+    let d = autoload_project("");
+    // The auto-loaded folder is a link to a folder elsewhere on disk, holding the cheat.
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("pass.sh"), "exit 0\n").unwrap();
+    std::os::unix::fs::symlink(outside.path(), d.path().join("tests/setup.d")).unwrap();
+    let (code, r) = countercheck(d.path(), &["--claim", "fixed"]);
+    assert_eq!((code, r["verdict"].as_str()), (2, Some("failed")), "{r:#}");
+    assert_eq!(r["protected_changes"][0]["path"], "tests/setup.d");
+    assert_eq!(r["protected_changes"][0]["action"], "removed_outside_link");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("added 1 link(s) leading outside the project"),
+        "{r:#}"
+    );
+    // The worker's own link is untouched.
+    assert!(fs::symlink_metadata(d.path().join("tests/setup.d")).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dangling_link_out_of_the_project_counts_too() {
+    let d = autoload_project("");
+    std::os::unix::fs::symlink("../../not-there-yet", d.path().join("tests/setup.d")).unwrap();
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        r["protected_changes"][0]["action"], "removed_outside_link",
+        "{r:#}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn links_inside_the_project_stay() {
+    let d = autoload_project("");
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    // A new link that stays inside the project (here: to the source folder) is fine.
+    std::os::unix::fs::symlink("../src", d.path().join("tests/src-link")).unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        (code, r["verdict"].as_str()),
+        (0, Some("verified")),
+        "{r:#}"
+    );
+    assert!(!r.to_string().contains("removed_outside_link"), "{r:#}");
 }

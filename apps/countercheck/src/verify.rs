@@ -202,6 +202,17 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             }
         };
         changes.push((change, path.clone()));
+        // A link the worker added or changed that leads out of the copy: the checks would read
+        // files Countercheck never saw (a conftest.py elsewhere on disk). Taken out, and recorded.
+        if change != Change::Deleted && snapshot::link_escapes(&work, &path) {
+            snapshot::restore(&work, &path, None)?;
+            protected_changes.push(ProtectedChange {
+                path: path.clone(),
+                change,
+                action: countercheck_core::protect::REMOVED_OUTSIDE_LINK.to_string(),
+            });
+            continue;
+        }
         let is_frozen = frozen.matches(&path);
         if countercheck_core::protect::is_junk(&path) || !(is_frozen || protected.matches(&path)) {
             continue;

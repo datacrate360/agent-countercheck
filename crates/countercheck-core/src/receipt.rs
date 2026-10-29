@@ -200,6 +200,15 @@ pub fn decide(
             "the worker added {removed} file(s) on frozen paths; countercheck ran the checks without them"
         ));
     }
+    let links = protected
+        .iter()
+        .filter(|p| p.action == crate::protect::REMOVED_OUTSIDE_LINK)
+        .count();
+    if links > 0 {
+        reasons.push(format!(
+            "the worker added {links} link(s) leading outside the project; countercheck ran the checks without them"
+        ));
+    }
     let verdict = if results.is_empty() {
         reasons.push("no checks ran".to_string());
         Verdict::Unverified
