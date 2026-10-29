@@ -564,6 +564,15 @@ pub fn decide(r: &Receipt, agent_reported_blocker: bool) -> Decision {
              those tests does not count; fix the code instead.\n",
         );
     }
+    if r.protected_changes
+        .iter()
+        .any(|p| p.action == countercheck_core::protect::REMOVED_NEW_FILE)
+    {
+        m.push_str(
+            "The checks ran without the files you added on frozen paths (listed on the receipt): files \
+             that change how the tests run don't count; fix the code instead.\n",
+        );
+    }
     if !r.hook_settings.is_empty() {
         m.push_str(
             "Undo your change to the hook settings file(s) above: Countercheck has to check every stop.\n",

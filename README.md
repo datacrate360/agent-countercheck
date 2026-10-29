@@ -210,6 +210,8 @@ your CI:
 ```toml
 # files the agent may not change (.countercheck/** is always protected), including test config outside tests/
 protected = ["tests/**", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg"]
+# exactly as committed: a NEW file here is left out too (a conftest.py, or a pytest.py that replaces pytest)
+frozen = ["**/conftest.py", "pytest.py", "pytest/**", "_pytest/**", "sitecustomize.py"]
 link = [".venv"]                  # optional: git-ignored dependency folders the checks need (read-only)
 
 [[check]]
@@ -547,7 +549,7 @@ Yes, MIT-licensed. See [Contribute](#contribute).
 
 A referee has to be right, so it's tested harder than most tools its size:
 
-- **309 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **317 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
   that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 35
   fields changes; `decide` never says VERIFIED when a check failed).

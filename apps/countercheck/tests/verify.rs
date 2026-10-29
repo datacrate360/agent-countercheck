@@ -4198,3 +4198,119 @@ fn a_settings_env_cannot_move_the_base_past_its_own_change() {
         "{reason}"
     );
 }
+
+// ---- frozen: new files on these paths are taken out of the clean copy ----
+
+/// Like pytest loading every conftest.py it finds, the check loads every tests/setup.d/*.sh.
+fn autoload_project(extra: &str) -> tempfile::TempDir {
+    let checks = format!(
+        r#"protected = ["tests/**"]
+{extra}[[check]]
+name = "calc"
+run = 'for f in tests/setup.d/*.sh; do [ -e "$f" ] && . "$f"; done; sh tests/check.sh'
+timeout_secs = 30
+"#
+    );
+    project(&checks)
+}
+
+fn plant_autoload_cheat(dir: &Path) {
+    fs::create_dir_all(dir.join("tests/setup.d")).unwrap();
+    fs::write(dir.join("tests/setup.d/pass.sh"), "exit 0\n").unwrap();
+}
+
+#[test]
+fn a_new_autoloaded_file_on_a_protected_path_is_kept_so_frozen_exists() {
+    // Without frozen, a NEW protected file is kept (agents may add tests): the cheat passes.
+    let d = autoload_project("");
+    plant_autoload_cheat(d.path());
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(r["verdict"], "verified", "{r:#}");
+    assert_eq!(r["protected_changes"][0]["action"], "kept_new_file");
+}
+
+#[test]
+fn frozen_removes_a_new_autoloaded_file_and_the_run_fails() {
+    let d = autoload_project("frozen = [\"tests/setup.d/**\"]\n");
+    plant_autoload_cheat(d.path());
+    let (code, r) = countercheck(d.path(), &["--claim", "fixed, all tests pass"]);
+    assert_eq!((code, r["verdict"].as_str()), (2, Some("failed")), "{r:#}");
+    assert_eq!(r["protected_changes"][0]["path"], "tests/setup.d/pass.sh");
+    assert_eq!(r["protected_changes"][0]["action"], "removed_new_file");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("added 1 file(s) on frozen paths; countercheck ran the checks without them"),
+        "{r:#}"
+    );
+    // The worker's own folder is untouched.
+    assert!(d.path().join("tests/setup.d/pass.sh").exists());
+}
+
+#[test]
+fn frozen_still_lets_honest_work_and_new_tests_through() {
+    let d = autoload_project("frozen = [\"tests/setup.d/**\"]\n");
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    // A new test file outside the frozen path is kept, as before.
+    fs::write(
+        d.path().join("tests/more.sh"),
+        "[ \"$(sh src/calc.sh 1 1)\" = 2 ]\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        (code, r["verdict"].as_str()),
+        (0, Some("verified")),
+        "{r:#}"
+    );
+    assert_eq!(r["protected_changes"][0]["action"], "kept_new_file");
+}
+
+#[test]
+fn frozen_paths_need_not_be_protected_and_leave_no_empty_folder() {
+    // `shim/` isn't protected; a new package there would shadow a tool the check uses.
+    let checks = "frozen = [\"shim/**\"]\n[[check]]\nname = \"calc\"\nrun = \"[ ! -e shim ] && sh tests/check.sh\"\ntimeout_secs = 30\n";
+    let d = project(checks);
+    fs::create_dir_all(d.path().join("shim/pkg")).unwrap();
+    fs::write(d.path().join("shim/pkg/__init__.py"), "").unwrap();
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        (code, r["verdict"].as_str()),
+        (0, Some("verified")),
+        "{r:#}"
+    );
+    assert_eq!(r["protected_changes"][0]["action"], "removed_new_file");
+}
+
+#[test]
+fn frozen_puts_back_a_changed_file_too() {
+    let d = autoload_project("frozen = [\"tests/setup.d/**\"]\n");
+    // A frozen file in the base: changing it is undone like a protected file.
+    fs::create_dir_all(d.path().join("tests/setup.d")).unwrap();
+    fs::write(d.path().join("tests/setup.d/env.sh"), "X=1\n").unwrap();
+    sh(d.path(), "git add -A && git commit -qm env");
+    fs::write(d.path().join("tests/setup.d/env.sh"), "exit 0\n").unwrap();
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(r["verdict"], "failed", "{r:#}");
+    assert_eq!(r["protected_changes"][0]["action"], "restored_from_base");
+}
+
+#[test]
+fn the_hook_sends_back_an_agent_that_added_a_frozen_file() {
+    let d = autoload_project("frozen = [\"tests/setup.d/**\"]\n");
+    plant_autoload_cheat(d.path());
+    let (_, out) = claude_hook(
+        &claude_payload(
+            d.path(),
+            "s1",
+            "I can't fix this, it's blocked by the spec.",
+        ),
+        &[],
+    );
+    let reason = block_reason(&out);
+    assert!(
+        reason.contains("without the files you added on frozen paths"),
+        "{reason}"
+    );
+}

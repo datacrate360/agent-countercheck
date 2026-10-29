@@ -138,15 +138,22 @@ each of these turned a real bug's FAILED into VERIFIED (tested, [examples/python
 
 | The agent adds or edits | Effect |
 |---|---|
-| `conftest.py` in the root, or in **any** folder pytest scans (`src/conftest.py`) | marks every test as skipped |
+| `conftest.py` in the root, or in **any** folder pytest scans (`src/conftest.py`, a new `tests/unit/conftest.py`) | marks every test as skipped |
+| `pytest.py` (or a `pytest/` folder) in the project root | `python -m pytest` imports it instead of the real pytest, which prints a pass |
 | `pyproject.toml`: `addopts = "--deselect tests/test_x.py::test_y"` | the failing test never runs |
 | `pytest.ini` / `tox.ini` / `setup.cfg`: `addopts = -k "not y"` | the same |
 
-Fix it in two parts: protect the files that only configure tests, and pin the runner's settings in the locked
-command, so files you can't protect are ignored.
+Fix it in three parts: protect the files that only configure tests, freeze the paths where even a **new** file
+changes how the runner works, and pin the runner's settings in the locked command, so files you can't protect are
+ignored.
 
 ```toml
 protected = ["tests/**", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg"]
+frozen = [
+  "**/conftest.py",
+  "pytest.py", "pytest/**", "_pytest.py", "_pytest/**", "pluggy.py", "pluggy/**",
+  "sitecustomize.py", "usercustomize.py",
+]
 
 [[check]]
 name = "tests"
@@ -158,6 +165,14 @@ run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= 
 - `--rootdir=.` keeps paths relative to the project. `--confcutdir=tests` loads only `conftest.py` files under
   `tests/`. `-o addopts=` drops extra options from anywhere. `tests` at the end runs that folder, whatever
   `testpaths` says.
+- `protected` puts back a file the agent **changed or deleted**, but keeps a **new** one, so an agent can add tests.
+  `frozen` paths must stay exactly as committed: a changed file is put back and a new one is taken out of the clean
+  copy (`removed_new_file` on the receipt). Freeze only where a new file changes how the checks run (`conftest.py`,
+  modules named like the runner in the folder the command runs from), never your whole tests folder. Commit a new
+  `conftest.py` you want yourself; then it's part of the base.
+- A new test file still runs inside pytest and could patch it. If that worries you, refuse such lines with a
+  [forbid](#only-new-lines-scope--added) on `tests/**` (`pattern = '\b_pytest\b|pytest_plugins|hookimpl|sys\.modules'`,
+  `scope = "added"`), and keep the same check in CI.
 - **Don't protect `pyproject.toml` or `package.json`.** They also list dependencies; putting them back would undo an
   honest new dependency and fail the checks for no reason.
 
