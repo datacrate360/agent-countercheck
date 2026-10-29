@@ -28,6 +28,55 @@ pub struct Located {
     pub root: Option<PathBuf>,
 }
 
+/// Sessions this young aren't listed as not checked yet: the agent may still be on its first task.
+pub const NOT_CHECKED_GRACE_SECS: u64 = 30 * 60;
+
+/// Sessions that started in this project (recorded by `countercheck hook session-start` in the git
+/// folder) and have no receipt and no run in progress. Hostile input: capped, size-limited, never
+/// followed through a symlink; any problem just means fewer rows.
+pub fn not_checked(
+    root: Option<&Path>,
+    entries: &[report::Entry],
+    running: &[countercheck_core::progress::Progress],
+) -> Vec<countercheck_core::sessions::SessionStart> {
+    use countercheck_core::sessions;
+    let Some(dir) = root
+        .and_then(|r| crate::git::git_dir(r).ok())
+        .map(|g| g.join("countercheck").join("sessions"))
+    else {
+        return Vec::new();
+    };
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let starts: Vec<sessions::SessionStart> = rd
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+        // symlink_metadata via DirEntry: a symlink is not a file here.
+        .filter(|e| {
+            e.metadata()
+                .is_ok_and(|m| m.is_file() && m.len() <= sessions::MAX_BYTES)
+                && e.file_type().is_ok_and(|t| t.is_file())
+        })
+        .take(sessions::MAX_RECORDS)
+        .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+        .filter_map(|t| sessions::parse(&t))
+        .collect();
+    let checked = entries
+        .iter()
+        .filter_map(|e| e.receipt.worker.session.clone())
+        .collect();
+    let in_progress = running
+        .iter()
+        .filter_map(|p| p.worker.session.clone())
+        .collect();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    sessions::unchecked(&starts, &checked, &in_progress, now, NOT_CHECKED_GRACE_SECS)
+}
+
 /// Agent hook settings in the project that switch hooks off right now (shown as a warning: a
 /// switched-off hook never writes a receipt, so the runs list alone would look clean).
 pub fn hooks_off(root: Option<&Path>) -> Vec<countercheck_core::hook_settings::HookSettingsChange> {
@@ -129,6 +178,7 @@ pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
             generated_at: &now,
             running: &running,
             hooks_off: &hooks_off(root.as_deref()),
+            not_checked: &not_checked(root.as_deref(), &entries, &running),
         },
     );
     let out = opts.out.clone().unwrap_or_else(|| dir.join("report.html"));
