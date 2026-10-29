@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## v0.16.0 (2026-10-29)
+
+Closes two ways a new file could fake a pass, and shows sessions that were never checked.
+
+**Upgrade:** recommended for everyone. Then add `frozen` to your `checks.toml` (see the README starter or
+`docs/checks.md`, "Lock the test runner's settings"). Older versions refuse a `checks.toml` that has `frozen`, so
+upgrade every machine and CI job that runs the checks first.
 
 - **Security: new `frozen = [...]` paths.** `protected` puts back files the agent changed or deleted, but keeps
   new ones so agents can add tests; a new `tests/unit/conftest.py` (pytest loads it) or a `pytest.py` in the
@@ -9,6 +15,10 @@
   out of the clean copy (`removed_new_file` on the receipt, a reason, and the hook sends the agent back). The README
   starter, `docs/checks.md` and `examples/python-pytest` now freeze `**/conftest.py` and modules named like pytest;
   the example runs both tricks. Older versions refuse a check file with `frozen` (exit 1): upgrade first.
+- **Security: links out of the project.** A symlink the agent added or changed that leads outside the project
+  (a `tests/unit` folder pointing at a `conftest.py` elsewhere on disk) let the checks read files Countercheck never
+  saw, whatever `protected` or `frozen` said. It is now taken out of the clean copy (`removed_outside_link` on the
+  receipt, a reason, and the hook sends the agent back). Links that stay inside the project are unchanged.
 - **Docs:** `docs/architecture.md` said new protected files are removed; they are kept (now stated, with `frozen`).
 - **New (CC-02): "Not checked" sessions.** `countercheck report` and `ui` list every agent session that started in
   the project (recorded by the `SessionStart` hook) more than 30 minutes ago and has no receipt and no run in
