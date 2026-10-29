@@ -153,6 +153,10 @@ pub struct Receipt {
     /// receipts, so their seals still verify.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watched: Option<crate::watched::Watched>,
+    /// Changes to the agent's own hook settings that can switch Countercheck off. Absent when
+    /// there are none (and on older receipts, so their seals still verify).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hook_settings: Vec<crate::hook_settings::HookSettingsChange>,
     pub verdict: Verdict,
     pub reasons: Vec<String>,
 }
@@ -301,6 +305,9 @@ impl Receipt {
                 p.change, p.path, p.action
             ));
         }
+        for h in &self.hook_settings {
+            s.push_str(&format!("  hooks:    {} {}\n", h.path, h.what));
+        }
         for r in &self.checks {
             let mark = if r.passed { "pass" } else { "FAIL" };
             let net = if r.network { ", internet allowed" } else { "" };
@@ -422,6 +429,7 @@ mod tests {
             protected_changes: vec![],
             uncovered: None,
             watched: None,
+            hook_settings: Vec::new(),
             checks: vec![],
             verdict: Verdict::Unverified,
             reasons: vec![],
@@ -562,6 +570,7 @@ mod tests {
             protected_changes: vec![],
             uncovered: None,
             watched: None,
+            hook_settings: Vec::new(),
             checks: vec![result(false)],
             verdict: Verdict::Failed,
             reasons: vec![],
@@ -611,6 +620,7 @@ mod tests {
                 protected_changes: vec![],
                 uncovered: None,
                 watched: None,
+                hook_settings: Vec::new(),
                 checks: vec![],
                 verdict: Verdict::Unverified,
                 reasons: vec![],

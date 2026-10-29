@@ -60,6 +60,9 @@ pub struct Page<'a> {
     pub generated_at: &'a str,
     /// Runs in progress (display only; see [`crate::progress`]).
     pub running: &'a [crate::progress::Progress],
+    /// Agent hook settings in the project that switch hooks off now: no receipt gets written, so
+    /// the page says so above everything else.
+    pub hooks_off: &'a [crate::hook_settings::HookSettingsChange],
 }
 
 /// Render the static report. `entries` may be in any order; the newest `MAX_RUNS` are shown.
@@ -355,6 +358,21 @@ fn render(entries: &[Entry], page: &Page, live: Option<&str>) -> String {
         escape(page.path),
         escape(&pretty_time(generated_at)),
     );
+    if !page.hooks_off.is_empty() {
+        h.push_str(
+            "<section class=\"hooks-off\" role=\"alert\"><p class=\"hooks-off-h\">Hooks are switched off in this project</p>\
+             <p>Agents here stop without being checked, so no receipt is written and this page can look clean. Undo it, or use the GitHub Action as the backstop:</p><ul>",
+        );
+        for f in page.hooks_off {
+            let _ = write!(
+                h,
+                "<li><code>{}</code> {}</li>",
+                escape(&f.path),
+                escape(&f.what)
+            );
+        }
+        h.push_str("</ul></section>");
+    }
 
     let _ = write!(
         h,
@@ -859,6 +877,7 @@ mod tests {
             protected_changes: vec![],
             uncovered: None,
             watched: None,
+            hook_settings: Vec::new(),
             checks,
             verdict,
             reasons: vec!["check \"t\" failed".to_string()],
@@ -871,6 +890,7 @@ mod tests {
             path: "~/r",
             generated_at: "now",
             running: &[],
+            hooks_off: &[],
         }
     }
 
@@ -921,6 +941,7 @@ mod tests {
                 path: "~/code/<i>repo",
                 generated_at: "now",
                 running: &[],
+                hooks_off: &[],
             },
         );
         assert!(!html.to_lowercase().contains("<script"), "{html}");
@@ -1139,6 +1160,7 @@ mod tests {
                 path: "~/code/<shop>",
                 generated_at: "now",
                 running: &[],
+                hooks_off: &[],
             },
         );
         assert!(html.contains(
@@ -1345,6 +1367,7 @@ mod tests {
                     path: "~/r",
                     generated_at: "now",
                     running,
+                    hooks_off: &[],
                 },
             )
         };

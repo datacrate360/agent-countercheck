@@ -32,6 +32,7 @@ pub mod coverage;
 pub mod forbid;
 pub mod gitobj;
 pub mod golden;
+pub mod hook_settings;
 pub mod matrix;
 pub mod progress;
 pub mod protect;

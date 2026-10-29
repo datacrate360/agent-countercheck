@@ -24,6 +24,25 @@ pub struct Located {
     pub title: String,
     /// The repository's folder (else the receipt folder), with the home folder shortened to `~`.
     pub path: String,
+    /// The repository's folder, when the receipts belong to one.
+    pub root: Option<PathBuf>,
+}
+
+/// Agent hook settings in the project that switch hooks off right now (shown as a warning: a
+/// switched-off hook never writes a receipt, so the runs list alone would look clean).
+pub fn hooks_off(root: Option<&Path>) -> Vec<countercheck_core::hook_settings::HookSettingsChange> {
+    let Some(root) = root else {
+        return Vec::new();
+    };
+    countercheck_core::hook_settings::FILES
+        .iter()
+        .filter_map(|p| {
+            countercheck_core::hook_settings::switched_off(
+                p,
+                &crate::verify::read_settings(root, p),
+            )
+        })
+        .collect()
 }
 
 /// `path` with the home folder written as `~`, so a shared report doesn't show the user name.
@@ -77,12 +96,22 @@ pub fn locate(repo: &Path, receipts: Option<&Path>) -> Result<Located, String> {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "receipts".to_string());
     let path = display_path(root.as_deref().unwrap_or(&dir));
-    Ok(Located { dir, title, path })
+    Ok(Located {
+        dir,
+        title,
+        path,
+        root,
+    })
 }
 
 /// Write the report; returns its path and how many receipts it shows.
 pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
-    let Located { dir, title, path } = locate(&opts.repo, opts.receipts.as_deref())?;
+    let Located {
+        dir,
+        title,
+        path,
+        root,
+    } = locate(&opts.repo, opts.receipts.as_deref())?;
     let entries = read_receipts(&dir)?;
     if entries.is_empty() {
         return Err(format!(
@@ -99,6 +128,7 @@ pub fn run(opts: &Options) -> Result<(PathBuf, usize), String> {
             path: &path,
             generated_at: &now,
             running: &running,
+            hooks_off: &hooks_off(root.as_deref()),
         },
     );
     let out = opts.out.clone().unwrap_or_else(|| dir.join("report.html"));
