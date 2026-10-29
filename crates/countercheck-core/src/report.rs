@@ -63,6 +63,8 @@ pub struct Page<'a> {
     /// Agent hook settings in the project that switch hooks off now: no receipt gets written, so
     /// the page says so above everything else.
     pub hooks_off: &'a [crate::hook_settings::HookSettingsChange],
+    /// Sessions that started here and never got a receipt (display only; see [`crate::sessions`]).
+    pub not_checked: &'a [crate::sessions::SessionStart],
 }
 
 /// Render the static report. `entries` may be in any order; the newest `MAX_RUNS` are shown.
@@ -369,6 +371,38 @@ fn render(entries: &[Entry], page: &Page, live: Option<&str>) -> String {
                 "<li><code>{}</code> {}</li>",
                 escape(&f.path),
                 escape(&f.what)
+            );
+        }
+        h.push_str("</ul></section>");
+    }
+    if !page.not_checked.is_empty() {
+        let n = page.not_checked.len();
+        let _ = write!(
+            h,
+            "<section class=\"not-checked\"><p class=\"nc-h\">Not checked: {n} session{}{}</p>\
+             <p>Started in this project but no receipt: the Countercheck hook was switched off or removed, it timed out, \
+             or the agent was never given a task. Nothing here was verified.</p><ul>",
+            if n == 1 { "" } else { "s" },
+            if n == crate::sessions::MAX_SHOWN {
+                " (newest shown)"
+            } else {
+                ""
+            },
+        );
+        for s in page.not_checked {
+            let short: String = s.id.chars().take(12).collect();
+            let more = if s.id.chars().count() > 12 { "…" } else { "" };
+            let _ = write!(
+                h,
+                "<li><b>{}</b>{} · session <code title=\"{}\">{}{more}</code> · started {}</li>",
+                escape(s.agent.as_deref().unwrap_or(UNNAMED)),
+                s.model
+                    .as_deref()
+                    .map(|m| format!(" <span class=\"muted\">{}</span>", escape(m)))
+                    .unwrap_or_default(),
+                escape(&s.id),
+                escape(&short),
+                escape(&pretty_time(&crate::sessions::rfc3339(s.started_unix))),
             );
         }
         h.push_str("</ul></section>");
@@ -891,6 +925,7 @@ mod tests {
             generated_at: "now",
             running: &[],
             hooks_off: &[],
+            not_checked: &[],
         }
     }
 
@@ -942,6 +977,7 @@ mod tests {
                 generated_at: "now",
                 running: &[],
                 hooks_off: &[],
+                not_checked: &[],
             },
         );
         assert!(!html.to_lowercase().contains("<script"), "{html}");
@@ -1161,6 +1197,7 @@ mod tests {
                 generated_at: "now",
                 running: &[],
                 hooks_off: &[],
+                not_checked: &[],
             },
         );
         assert!(html.contains(
@@ -1368,6 +1405,7 @@ mod tests {
                     generated_at: "now",
                     running,
                     hooks_off: &[],
+                    not_checked: &[],
                 },
             )
         };

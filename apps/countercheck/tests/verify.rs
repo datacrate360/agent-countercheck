@@ -4198,3 +4198,89 @@ fn a_settings_env_cannot_move_the_base_past_its_own_change() {
         "{reason}"
     );
 }
+
+// ---- CC-02: sessions that never got a receipt ----
+
+/// Make a recorded session start look `secs` old (past the report's grace period).
+fn age_session(dir: &Path, session: &str, secs: u64) {
+    let f = dir.join(format!(".git/countercheck/sessions/{session}.json"));
+    let mut v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&f).unwrap()).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    v["recorded_at_unix"] = serde_json::json!(now - secs);
+    fs::write(&f, v.to_string()).unwrap();
+}
+
+fn report_html(dir: &Path) -> String {
+    let out = Command::new(BIN)
+        .args(["report", "--repo"])
+        .arg(dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    fs::read_to_string(dir.join(".countercheck/receipts/report.html")).unwrap()
+}
+
+#[test]
+fn sessions_without_a_receipt_are_shown_as_not_checked() {
+    let d = hooked_project();
+    // s1: started an hour ago, its Stop hook never ran (switched off, removed, timed out).
+    session_start(d.path(), "s1-silenced");
+    age_session(d.path(), "s1-silenced", 3600);
+    // s2: started an hour ago and checked.
+    session_start(d.path(), "s2-checked");
+    age_session(d.path(), "s2-checked", 3600);
+    claude_hook(&claude_payload(d.path(), "s2-checked", "Done."), &[]);
+    // s3: started a minute ago, may still be on its first task.
+    session_start(d.path(), "s3-fresh");
+    let html = report_html(d.path());
+    assert!(
+        html.contains("Not checked: 1 session<"),
+        "no not-checked section"
+    );
+    assert!(html.contains("<b>claude-code</b>"), "agent not named");
+    assert!(html.contains(">s1-silenced<"), "silenced session missing");
+    assert!(!html.contains(">s2-checked<") && !html.contains(">s3-fresh<"));
+    // The record says which agent started.
+    let rec =
+        fs::read_to_string(d.path().join(".git/countercheck/sessions/s1-silenced.json")).unwrap();
+    assert!(rec.contains(r#""agent":"claude-code""#), "{rec}");
+}
+
+#[test]
+fn not_checked_never_changes_a_verdict_and_ignores_junk_records() {
+    let d = hooked_project();
+    session_start(d.path(), "s1");
+    age_session(d.path(), "s1", 3600);
+    let dir = d.path().join(".git/countercheck/sessions");
+    fs::write(dir.join("junk.json"), "{ not json").unwrap();
+    fs::write(dir.join("big.json"), "x".repeat(10_000)).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(dir.join("s1.json"), dir.join("link.json")).unwrap();
+    let (code, r) = countercheck(d.path(), &["--claim", "fixed"]);
+    assert_eq!(
+        (code, r["verdict"].as_str()),
+        (0, Some("verified")),
+        "{r:#}"
+    );
+    let html = report_html(d.path());
+    // The verify run above has no session (run by hand), so s1 is still not checked, once.
+    assert!(
+        html.contains("Not checked: 1 session<"),
+        "junk or the symlink counted"
+    );
+    assert_eq!(html.matches(">s1<").count(), 1);
+}
+
+#[test]
+fn no_session_records_means_no_not_checked_section() {
+    let d = hooked_project();
+    countercheck(d.path(), &[]);
+    assert!(!report_html(d.path()).contains("Not checked"));
+}

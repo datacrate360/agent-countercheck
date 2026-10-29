@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **New (CC-02): "Not checked" sessions.** `countercheck report` and `ui` list every agent session that started in
+  the project (recorded by the `SessionStart` hook) more than 30 minutes ago and has no receipt and no run in
+  progress: its hook was switched off or removed, it timed out, or it was never given a task. Display only, never a
+  verdict; session records now also say which agent started (`agent`).
+
 ## v0.15.0 (2026-10-29)
 
 An agent can no longer switch its own referee off without the receipt saying so.
