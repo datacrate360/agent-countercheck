@@ -260,12 +260,14 @@ fn serve(
             let now = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
             let running = crate::progress::read_running(dir);
             let hooks_off = report::hooks_off(root);
+            let not_checked = report::not_checked(root, &entries, &running);
             let page = countercheck_core::report::Page {
                 title,
                 path,
                 generated_at: &now,
                 running: &running,
                 hooks_off: &hooks_off,
+                not_checked: &not_checked,
             };
             let html = render_live(&entries, &page, &nonce);
             respond(

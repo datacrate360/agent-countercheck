@@ -97,7 +97,9 @@ The code behind each rule, one run step by step, and where new work plugs in: [d
 
 Several agents can work in one folder, each with its own task. Give each a role (`--role "Docs"` or
 `COUNTERCHECK_ROLE`) and `countercheck ui` shows them side by side, live: who is checking now, what was delivered,
-what was sent back, and, for any run, a step-by-step replay ending in its sealed receipt.
+what was sent back, and, for any run, a step-by-step replay ending in its sealed receipt. A session that started but
+never got a receipt (its hook switched off, removed or timed out) is listed as **Not checked**, so a quiet page
+means checked work, not missing checks.
 
 <img src="docs/assets/demos/ui.gif" alt="The live countercheck ui page with three agents in one folder. Discount fix (claude-code) is checking now as a moving line, then is sent back FAILED. Docs (codex) and Refactor (hermes) check at the same time and are both delivered. Pointing at Discount fix lights its path and the checks it broke. Its run opens as a replay: agent said done, checks locked at the base commit, clean copy, 1 protected file put back, 1 of 3 checks passed, receipt sealed FAILED. Discount fix runs again after fixing the code and all three agents are delivered." width="880">
 
@@ -549,7 +551,7 @@ Yes, MIT-licensed. See [Contribute](#contribute).
 
 A referee has to be right, so it's tested harder than most tools its size:
 
-- **317 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **324 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
   that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 35
   fields changes; `decide` never says VERIFIED when a check failed).

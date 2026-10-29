@@ -10,6 +10,10 @@
   starter, `docs/checks.md` and `examples/python-pytest` now freeze `**/conftest.py` and modules named like pytest;
   the example runs both tricks. Older versions refuse a check file with `frozen` (exit 1): upgrade first.
 - **Docs:** `docs/architecture.md` said new protected files are removed; they are kept (now stated, with `frozen`).
+- **New (CC-02): "Not checked" sessions.** `countercheck report` and `ui` list every agent session that started in
+  the project (recorded by the `SessionStart` hook) more than 30 minutes ago and has no receipt and no run in
+  progress: its hook was switched off or removed, it timed out, or it was never given a task. Display only, never a
+  verdict; session records now also say which agent started (`agent`).
 
 ## v0.15.0 (2026-10-29)
 

@@ -38,6 +38,7 @@ pub mod progress;
 pub mod protect;
 pub mod receipt;
 pub mod report;
+pub mod sessions;
 pub mod uncovered;
 pub mod watched;
 pub mod writes;

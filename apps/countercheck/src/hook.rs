@@ -361,6 +361,12 @@ pub fn session_start() -> Result<(), String> {
             "session_id": session,
             "base": head,
             "recorded_at_unix": now,
+            // Shown on the project page if this session never gets a receipt.
+            "agent": match payload.get("transcript_path").and_then(|v| v.as_str()) {
+                Some(t) => Some(agent_from_transcript(t)),
+                None if text("hook_event_name") == "SessionStart" => Some("claude-code"),
+                None => None,
+            },
             // Claude Code gives the model only here; the stop hook falls back to it.
             "model": payload
                 .get("model")

@@ -110,6 +110,11 @@ A hook that is switched off writes no receipt, so the run that catches it is the
 your own `countercheck verify`, or CI. Until then, `countercheck report` and `countercheck ui` show a warning at the
 top while hooks are switched off in the project's settings files.
 
+They also list every session that is **Not checked**: the `SessionStart` hook recorded it starting (in
+`.git/countercheck/sessions/`) more than 30 minutes ago, and it has no receipt and no run in progress. Its Stop hook
+was switched off or removed, it timed out, or the agent was never given a task. The list is display only: it never
+changes a verdict. It needs the `SessionStart` hook from the setup above.
+
 ## What a local hook can and can't stop
 
 The hooks stop the common shortcuts: editing or skipping a protected test, editing `checks.toml`, committing either,
