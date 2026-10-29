@@ -57,9 +57,13 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
         runner::auto_sandbox()
     };
     let base = session_base(&input.cwd, &input.session);
+    // Hook settings are compared with the session's start, never with `COUNTERCHECK_BASE`: a
+    // settings file can set that variable for the hook, and point it past its own change.
+    let settings_base = recorded_base(&input.cwd, &input.session);
     let opts = verify::Options {
         repo: input.cwd,
         base,
+        settings_base,
         claim: input.claim,
         worker: Worker {
             agent: Some(input.agent.to_string()),

@@ -27,6 +27,10 @@ pub struct Options {
     pub checks_from: Option<String>,
     /// `--checks-sha256`: the pin for a `--checks-from` file.
     pub checks_sha256: Option<String>,
+    /// The revision the agent's hook settings are compared with, when it isn't `base`: the hooks
+    /// pass the commit their session started from, which nothing in the project can move, while
+    /// `base` may come from `COUNTERCHECK_BASE`, which a settings file's `env` block can set.
+    pub settings_base: Option<String>,
 }
 
 /// Where the checks and the files they name (matrix files, coverage lists, golden references)
@@ -348,15 +352,31 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         Some(w) => watched::apply(verdict, reasons, w),
         None => (verdict, reasons),
     };
-    // The agent's own hook settings, from the real working tree (git-ignored local files too).
+    // The agent's own hook settings, from the real working tree (git-ignored local files too),
+    // against the session's start when the hook knows it (see `Options::settings_base`).
+    let mut settings_rev = match &opts.settings_base {
+        Some(rev) => {
+            let c = git::resolve_commit(&root, rev)?;
+            if c == base_commit {
+                None
+            } else {
+                Some(git::Revision::load(&root, &c)?)
+            }
+        }
+        None => None,
+    };
+    let settings_from = match settings_rev.as_mut() {
+        Some(r) => r,
+        None => &mut base,
+    };
     let mut hook_settings = Vec::new();
     for path in hook_settings::FILES {
-        let was = match base.files().get(path) {
+        let was = match settings_from.files().get(path) {
             None => hook_settings::File::Absent,
             Some(f) if f.symlink => {
-                hook_settings::File::Symlink(base.read(path)?.unwrap_or_default())
+                hook_settings::File::Symlink(settings_from.read(path)?.unwrap_or_default())
             }
-            Some(_) => hook_settings::File::Regular(base.read(path)?.unwrap_or_default()),
+            Some(_) => hook_settings::File::Regular(settings_from.read(path)?.unwrap_or_default()),
         };
         hook_settings.extend(hook_settings::compare(
             path,

@@ -101,6 +101,11 @@ receipt lists the change under `hook_settings` when the agent:
 
 Adding other hooks or settings is fine. If you made the change yourself, commit it: the base then has it.
 
+The hooks compare these files with the commit the session started from (recorded by the `SessionStart` hook), not
+with `COUNTERCHECK_BASE`: a settings file's `env` block can set that variable for the hook, so an agent could
+otherwise commit its change and point the base past it. Without the `SessionStart` hook the hooks compare with the
+same base as the checks.
+
 A hook that is switched off writes no receipt, so the run that catches it is the next `verify`: another agent's hook,
 your own `countercheck verify`, or CI. Until then, `countercheck report` and `countercheck ui` show a warning at the
 top while hooks are switched off in the project's settings files.

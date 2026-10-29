@@ -14,6 +14,8 @@ An agent can no longer switch its own referee off without the receipt saying so.
   removing or changing a Countercheck hook (command, timeout), or setting a `COUNTERCHECK_*` variable that changes the
   check makes the run **FAILED** with a plain reason, and the receipt lists it under `hook_settings`. `report` and
   `ui` warn at the top while hooks are switched off. Adding other hooks or settings is fine; commit your own changes.
+  The hooks compare the settings with the commit the session started from, never with `COUNTERCHECK_BASE`, which a
+  settings file's `env` block could otherwise point past the agent's own committed change.
 - **Benchmark on Claude:** Fable 5.1 and Opus 5.5 on the 29-task benchmark, all four setups
   ([docs/eval/results-2026-10-claude.md](docs/eval/results-2026-10-claude.md)): neither gamed the tests; Opus made no
   false "done" claim in 348 runs; Countercheck added no time and no false alarm. Raw data in `eval/results/`.

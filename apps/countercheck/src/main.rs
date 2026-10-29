@@ -370,6 +370,8 @@ fn run(cli: Cli) -> Result<u8, String> {
                 out,
                 checks_from,
                 checks_sha256,
+                // `--base` is given by whoever runs verify, not read from the project.
+                settings_base: None,
             };
             let (receipt, path) = verify::verify(&opts)?;
             if json {

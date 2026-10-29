@@ -4177,3 +4177,24 @@ fn report_warns_when_hooks_are_switched_off_now() {
     );
     assert!(html.contains("<code>.claude/settings.local.json</code> turns every hook off"));
 }
+
+#[test]
+fn a_settings_env_cannot_move_the_base_past_its_own_change() {
+    let d = hooked_project();
+    session_start(d.path(), "s1");
+    // The agent weakens the test, sets COUNTERCHECK_BASE in the settings' env block (which Claude
+    // Code passes to the hook) and commits both, so HEAD holds the change.
+    fs::write(d.path().join("tests/check.sh"), "true\n").unwrap();
+    let env = CLAUDE_SETTINGS.replacen('{', r#"{"env":{"COUNTERCHECK_BASE":"HEAD"},"#, 1);
+    fs::write(d.path().join(".claude/settings.json"), env).unwrap();
+    sh(d.path(), "git add -A && git commit -qm 'all good'");
+    let (_, out) = claude_hook(
+        &claude_payload(d.path(), "s1", "Done."),
+        &[("COUNTERCHECK_BASE", "HEAD")],
+    );
+    let reason = block_reason(&out);
+    assert!(
+        reason.contains(".claude/settings.json sets COUNTERCHECK_BASE"),
+        "{reason}"
+    );
+}
