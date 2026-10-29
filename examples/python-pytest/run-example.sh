@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copy this example into a fresh git repository, verify it (FAILED), try the pytest config tricks an agent can use
-# outside tests/ (each still FAILED), apply the fix (VERIFIED). Exits 1 if any verdict is not the expected one.
+# (each still FAILED), apply the fix (VERIFIED). Exits 1 if any verdict is not the expected one.
 # Needs pytest for python3 (python3 -m pytest).
 # Usage: sh examples/python-pytest/run-example.sh [path/to/countercheck]
 set -e
@@ -54,6 +54,17 @@ rm conftest.py
 mkdir -p src && printf '%s' "$SKIP_ALL" > src/conftest.py
 expect FAILED 2 "after adding src/conftest.py that skips every test"
 rm -r src
+
+# A NEW conftest.py inside tests/ is loaded even with --confcutdir=tests; protected keeps new files (agents may add
+# tests), so only `frozen` takes it out.
+mkdir -p tests/unit && printf '%s' "$SKIP_ALL" > tests/unit/conftest.py
+expect FAILED 2 "after adding tests/unit/conftest.py that skips every test"
+rm -r tests/unit
+
+# `python3 -m pytest` imports from the project folder first: a pytest.py there replaces the real one.
+printf 'import os\nprint("1 passed")\nos._exit(0)\n' > pytest.py
+expect FAILED 2 "after adding a pytest.py that only prints a pass"
+rm pytest.py
 
 printf '[tool.pytest.ini_options]\naddopts = "--deselect tests/test_pricing.py::test_never_below_zero"\n' > pyproject.toml
 expect FAILED 2 "after deselecting the test in pyproject.toml"

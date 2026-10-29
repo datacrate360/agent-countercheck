@@ -66,11 +66,30 @@ pub enum Change {
 pub struct ProtectedChange {
     pub path: String,
     pub change: Change,
-    /// `restored_from_base` for modified/deleted files; `kept_new_file` for added ones.
+    /// `restored_from_base` for modified/deleted files; `kept_new_file` for added ones, or
+    /// `removed_new_file` when the path is `frozen`.
     pub action: String,
 }
 
+/// The action for a new file on a `frozen` path: taken out of the clean copy.
+pub const REMOVED_NEW_FILE: &str = "removed_new_file";
+
 impl ProtectedChange {
+    /// Like [`ProtectedChange::decide`], for a `frozen` path: a new file is removed too, so the
+    /// checks run on exactly the base's files there.
+    pub fn decide_frozen(path: &str, change: Change) -> Self {
+        let mut pc = Self::decide(path, change);
+        if change == Change::Added {
+            pc.action = REMOVED_NEW_FILE.to_string();
+        }
+        pc
+    }
+
+    /// True when the clean copy no longer holds the worker's version (restored or removed).
+    pub fn undone(&self) -> bool {
+        self.action == "restored_from_base" || self.action == REMOVED_NEW_FILE
+    }
+
     pub fn decide(path: &str, change: Change) -> Self {
         let action = match change {
             Change::Added => "kept_new_file",
@@ -116,6 +135,16 @@ mod tests {
         assert!(is_junk("tests/__pycache__/a.cpython-311.pyc"));
         assert!(is_junk("a/.DS_Store"));
         assert!(!is_junk("tests/test_a.py"));
+    }
+
+    #[test]
+    fn frozen_paths_remove_new_files_and_restore_the_rest() {
+        let f = |c| ProtectedChange::decide_frozen("t", c);
+        assert_eq!(f(Change::Added).action, "removed_new_file");
+        assert_eq!(f(Change::Modified).action, "restored_from_base");
+        assert_eq!(f(Change::Deleted).action, "restored_from_base");
+        assert!(f(Change::Added).undone() && f(Change::Modified).undone());
+        assert!(!ProtectedChange::decide("t", Change::Added).undone());
     }
 
     #[test]

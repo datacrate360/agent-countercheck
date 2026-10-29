@@ -139,6 +139,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let planned = config::plan(&checks, &locked_texts)?;
     let sandbox = windows_sh_check(opts, &planned)?;
     let protected = Protected::new(&checks.protected_patterns())?;
+    let frozen = Protected::labeled(&checks.frozen, "frozen pattern")?;
 
     // 2. A clean copy of the worker's files.
     progress.stage(Stage::Copy);
@@ -194,19 +195,27 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             Diff::LineEndings => {
                 // The same file with CRLF line endings (e.g. `core.autocrlf`): not a change, but
                 // a protected file still runs with its exact base bytes.
-                if protected.matches(&path) {
+                if protected.matches(&path) || frozen.matches(&path) {
                     snapshot::restore(&work, &path, base.read_real(&path)?.as_deref())?;
                 }
                 continue;
             }
         };
         changes.push((change, path.clone()));
-        if countercheck_core::protect::is_junk(&path) || !protected.matches(&path) {
+        let is_frozen = frozen.matches(&path);
+        if countercheck_core::protect::is_junk(&path) || !(is_frozen || protected.matches(&path)) {
             continue;
         }
-        let pc = ProtectedChange::decide(&path, change);
+        let pc = if is_frozen {
+            ProtectedChange::decide_frozen(&path, change)
+        } else {
+            ProtectedChange::decide(&path, change)
+        };
         if pc.action == "restored_from_base" {
             snapshot::restore(&work, &path, base.read_real(&path)?.as_deref())?;
+        } else if pc.action == countercheck_core::protect::REMOVED_NEW_FILE {
+            snapshot::restore(&work, &path, None)?;
+            snapshot::remove_empty_parents(&work, &path);
         }
         protected_changes.push(pc);
     }

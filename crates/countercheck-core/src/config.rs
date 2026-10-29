@@ -44,6 +44,10 @@ pub const MAX_CHECKS_BYTES: usize = 64 * 1024;
 pub struct ChecksFile {
     #[serde(default)]
     pub protected: Vec<String>,
+    /// Paths that must stay exactly as at the base: like `protected`, and a NEW file there is also
+    /// taken out of the clean copy (a new `conftest.py` or a file that shadows the test runner).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frozen: Vec<String>,
     #[serde(default, rename = "check")]
     pub checks: Vec<CheckSpec>,
     /// Patterns that must not appear in the worker's files.
@@ -268,6 +272,7 @@ pub fn parse(text: &str) -> Result<ChecksFile, String> {
         }
     }
     crate::protect::Protected::new(&file.protected_patterns())?;
+    crate::protect::Protected::labeled(&file.frozen, "frozen pattern")?;
     for c in &file.checks {
         crate::writes::validate(&c.name, &c.writes)?;
     }
@@ -575,6 +580,10 @@ mod tests {
         );
         assert!(parse("[[check]]\nname=\"a\"\nrun=\"x\"\nextra=1\n").is_err());
         assert!(parse("protected=[\"[\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n").is_err());
+        let e = parse("frozen=[\"[\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n").unwrap_err();
+        assert!(e.contains("frozen pattern"), "{e}");
+        let f = parse("frozen=[\"**/conftest.py\"]\n[[check]]\nname=\"a\"\nrun=\"x\"\n").unwrap();
+        assert_eq!(f.frozen, ["**/conftest.py"]);
         for bad in [
             "../x",
             "/abs",

@@ -2,6 +2,14 @@
 # folder it scans, pytest.ini, tox.ini, setup.cfg, pyproject.toml), and an agent can skip or deselect a test there.
 # So: protect the test-only config files, and pin pytest's settings in the locked command.
 protected = ["tests/**", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg"]
+# Protected files the agent changes are put back, but NEW ones are kept (so it can add tests). These must stay
+# exactly as committed: a new conftest.py anywhere, or a file in the project root that `python3 -m pytest` would
+# import instead of the real pytest, is taken out of the clean copy.
+frozen = [
+  "**/conftest.py",
+  "pytest.py", "pytest/**", "_pytest.py", "_pytest/**", "pluggy.py", "pluggy/**",
+  "sitecustomize.py", "usercustomize.py",
+]
 
 # -c tests/pytest.ini     settings come from the protected file; pyproject.toml / a new pytest.ini are ignored
 # --rootdir=.             paths stay relative to the project, not to tests/

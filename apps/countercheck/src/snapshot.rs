@@ -217,6 +217,24 @@ pub fn restore(dest: &Path, path: &str, base_content: Option<&[u8]>) -> Result<(
     }
 }
 
+/// After a file was taken out of the copy, remove the folders it leaves empty (up to the root),
+/// so a removed `pkg/__init__.py` doesn't leave a `pkg/` folder Python could still import.
+pub fn remove_empty_parents(dest: &Path, path: &str) {
+    let Ok(rel) = safe_rel(path) else {
+        return;
+    };
+    let mut dir = rel.parent();
+    while let Some(d) = dir.filter(|d| !d.as_os_str().is_empty()) {
+        let full = dest.join(d);
+        // Only real, empty folders: `remove_dir` refuses non-empty ones; never follow a link.
+        if fs::symlink_metadata(&full).is_ok_and(|m| m.is_dir()) && fs::remove_dir(&full).is_ok() {
+            dir = d.parent();
+        } else {
+            break;
+        }
+    }
+}
+
 /// SHA-256 over the sorted (path, content hash) list of everything in the snapshot.
 pub fn tree_hash(dest: &Path) -> Result<String, String> {
     let mut entries = Vec::new();

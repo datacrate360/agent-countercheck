@@ -191,6 +191,15 @@ pub fn decide(
             "the worker changed {restored} protected file(s); countercheck ran the checks with the base version"
         ));
     }
+    let removed = protected
+        .iter()
+        .filter(|p| p.action == crate::protect::REMOVED_NEW_FILE)
+        .count();
+    if removed > 0 {
+        reasons.push(format!(
+            "the worker added {removed} file(s) on frozen paths; countercheck ran the checks without them"
+        ));
+    }
     let verdict = if results.is_empty() {
         reasons.push("no checks ran".to_string());
         Verdict::Unverified
@@ -456,6 +465,21 @@ mod tests {
             assert_eq!(v, Verdict::Verified);
             assert_eq!(reasons, vec!["all 1 check(s) passed in a clean copy"]);
         }
+    }
+
+    #[test]
+    fn removed_frozen_files_get_a_reason_and_never_improve_the_verdict() {
+        let p = vec![ProtectedChange::decide_frozen(
+            "tests/conftest.py",
+            Change::Added,
+        )];
+        let (v, reasons) = decide(true, &[result(true)], &p);
+        assert_eq!(v, Verdict::Verified);
+        assert_eq!(
+            reasons[0],
+            "the worker added 1 file(s) on frozen paths; countercheck ran the checks without them"
+        );
+        assert_eq!(decide(true, &[result(false)], &p).0, Verdict::Failed);
     }
 
     #[test]
