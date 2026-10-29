@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Install what your checks need first (Python, Node, a database...), as in your normal CI.
-      - uses: datacrate360/agent-countercheck@v0.14.0
+      - uses: datacrate360/agent-countercheck@v0.15.0
         with:
           agent: claude-code   # optional: recorded on the receipt
 ```

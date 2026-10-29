@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## v0.15.0 (2026-10-29)
+
+An agent can no longer switch its own referee off without the receipt saying so.
+
+**Upgrade:** recommended for everyone using the Claude Code or Cortex Code hook. If you changed your own
+`.claude/settings.json` hooks and haven't committed that yet, commit it, or the next run says FAILED.
 
 - **Security (CC-01): an agent can't quietly switch the referee off.** Claude Code reads its hooks from
   `.claude/settings.json` (and the usually git-ignored `.claude/settings.local.json`), which the agent can edit
