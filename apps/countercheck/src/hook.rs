@@ -536,12 +536,17 @@ pub fn decide(r: &Receipt, agent_reported_blocker: bool) -> Decision {
     if r.verdict != Verdict::Failed {
         return Decision::Silent;
     }
-    let tampered = !r.protected_changes.is_empty();
+    // Switching off its own hook is never an honest stop: the next stop wouldn't be checked.
+    let tampered = !r.protected_changes.is_empty() || !r.hook_settings.is_empty();
     if agent_reported_blocker && !tampered {
         return Decision::HonestBlocker;
     }
     let mut m = String::from(
-        "Countercheck re-ran this project's checks in a clean copy and they FAILED, so the task is not done yet.\n",
+        if r.checks.iter().all(|c| c.passed) && !r.hook_settings.is_empty() {
+            "Countercheck re-ran this project's checks in a clean copy; they passed, but the run FAILED because you changed your own hook settings, so the task is not done yet.\n"
+        } else {
+            "Countercheck re-ran this project's checks in a clean copy and they FAILED, so the task is not done yet.\n"
+        },
     );
     for reason in &r.reasons {
         m.push_str(&format!("- {reason}\n"));
@@ -553,6 +558,11 @@ pub fn decide(r: &Receipt, agent_reported_blocker: bool) -> Decision {
         m.push_str(
             "The checks ran with the original versions of the protected test files. Changing or skipping \
              those tests does not count; fix the code instead.\n",
+        );
+    }
+    if !r.hook_settings.is_empty() {
+        m.push_str(
+            "Undo your change to the hook settings file(s) above: Countercheck has to check every stop.\n",
         );
     }
     for c in r.checks.iter().filter(|c| !c.passed) {

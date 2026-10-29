@@ -228,6 +228,7 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 checks,
                 uncovered,
                 watched,
+                hook_settings: Vec::new(),
                 verdict,
                 reasons,
             },
@@ -1190,7 +1191,7 @@ proptest! {
             c.output_tail = out;
             c.passed = false;
         }
-        let page = Page { title: "t", path: &path, generated_at: "now", running: &running };
+        let page = Page { title: "t", path: &path, generated_at: "now", running: &running, hooks_off: &[] };
         let html = render_html(&[Entry { file, receipt: r, seal_ok }], &page);
         let tag = regex::Regex::new(
             r"^</?(!doctype|html|head|meta|title|style|body|main|header|h1|h2|p|section|div|b|span|code|details|summary|ul|ol|li|blockquote|table|tr|th|td|pre|dl|dt|dd|footer|nav|q|em|i|small|label|input|svg|defs|radialGradient|linearGradient|stop|rect|path|circle|ellipse|polyline)[ >]",

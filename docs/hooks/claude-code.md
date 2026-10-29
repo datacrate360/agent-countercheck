@@ -84,11 +84,34 @@ hooks can block.
 If anything goes wrong (bad input, no git repo, no check file), the hook prints the error on stderr, exits 0 and
 lets the agent stop. A broken referee must never trap an agent.
 
+## The agent can't quietly switch the hook off
+
+The hook lives in a file the agent can edit, and Claude Code picks up edits mid-session: one line in
+`.claude/settings.json` or `.claude/settings.local.json` (`"disableAllHooks": true`) stops every hook, and a project
+setting overrides yours. So every `verify` (and every hook run) compares the agent's hook settings files
+(`.claude/settings.json`, `.claude/settings.local.json`, `.cortex/settings.json`, `.cortex/settings.local.json`) in
+the working tree, git-ignored ones included, with the base. The run is **FAILED**, whatever the checks say, and the
+receipt lists the change under `hook_settings` when the agent:
+
+- turned on `disableAllHooks`;
+- removed or changed a Countercheck hook (its command, `timeout` or type);
+- set a `COUNTERCHECK_*` variable in the file's `env` block that changes what the hook checks (any except
+  `COUNTERCHECK_ROLE` and `COUNTERCHECK_HOOK_LOG`);
+- replaced the file with a symlink or something that isn't a JSON object.
+
+Adding other hooks or settings is fine. If you made the change yourself, commit it: the base then has it.
+
+A hook that is switched off writes no receipt, so the run that catches it is the next `verify`: another agent's hook,
+your own `countercheck verify`, or CI. Until then, `countercheck report` and `countercheck ui` show a warning at the
+top while hooks are switched off in the project's settings files.
+
 ## What a local hook can and can't stop
 
 The hooks stop the common shortcuts: editing or skipping a protected test, editing `checks.toml`, committing either,
-planting a fake output. An agent with a shell could still go further on purpose (rewrite files under `.git/`, run
-with `COUNTERCHECK_HOOK_DISABLED=1`). The hard guarantee is the same check in CI, against a base the agent can't touch:
+planting a fake output, switching the hook off in the project's settings. An agent with a shell could still go further
+on purpose (rewrite files under `.git/`, edit your user settings in `~/.claude/`, run with
+`COUNTERCHECK_HOOK_DISABLED=1` in its own shell). Hooks in Claude Code's managed settings can't be turned off from
+the project at all. The hard guarantee is the same check in CI, against a base the agent can't touch:
 `countercheck verify --base origin/main`.
 
 ## Cortex Code

@@ -7,7 +7,7 @@ use countercheck_core::gitobj::{self, Diff, Files};
 use countercheck_core::progress::Stage;
 use countercheck_core::protect::{Change, Protected, ProtectedChange};
 use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
-use countercheck_core::{uncovered, watched};
+use countercheck_core::{hook_settings, uncovered, watched};
 use std::path::PathBuf;
 
 /// Matrix files and coverage item lists may be larger than the check file (up to 10,000 items).
@@ -348,6 +348,23 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         Some(w) => watched::apply(verdict, reasons, w),
         None => (verdict, reasons),
     };
+    // The agent's own hook settings, from the real working tree (git-ignored local files too).
+    let mut hook_settings = Vec::new();
+    for path in hook_settings::FILES {
+        let was = match base.files().get(path) {
+            None => hook_settings::File::Absent,
+            Some(f) if f.symlink => {
+                hook_settings::File::Symlink(base.read(path)?.unwrap_or_default())
+            }
+            Some(_) => hook_settings::File::Regular(base.read(path)?.unwrap_or_default()),
+        };
+        hook_settings.extend(hook_settings::compare(
+            path,
+            &was,
+            &read_settings(&root, path),
+        ));
+    }
+    let (verdict, reasons) = hook_settings::apply(verdict, reasons, &hook_settings);
     let claim_status = receipt::claim_status(opts.claim.as_deref(), verdict);
     let receipt = Receipt {
         schema: receipt::SCHEMA.to_string(),
@@ -374,6 +391,7 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         checks: results,
         uncovered,
         watched,
+        hook_settings,
         verdict,
         reasons,
     }
@@ -385,6 +403,31 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let text = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((receipt, path))
+}
+
+/// One agent hook settings file as it is in the working tree: never followed through a symlink,
+/// and a file too large to parse is passed on as its first bytes (it then counts as changed).
+pub fn read_settings(root: &std::path::Path, rel: &str) -> hook_settings::File {
+    let path = root.join(rel);
+    match std::fs::symlink_metadata(&path) {
+        Err(_) => hook_settings::File::Absent,
+        Ok(m) if m.file_type().is_symlink() => hook_settings::File::Symlink(
+            std::fs::read_link(&path)
+                .map(|t| t.to_string_lossy().into_owned().into_bytes())
+                .unwrap_or_default(),
+        ),
+        Ok(m) if !m.is_file() => hook_settings::File::Symlink(Vec::new()),
+        Ok(_) => {
+            use std::io::Read;
+            let mut bytes = Vec::new();
+            let cap = hook_settings::MAX_BYTES as u64 + 1;
+            match std::fs::File::open(&path).and_then(|f| f.take(cap).read_to_end(&mut bytes)) {
+                Ok(_) => hook_settings::File::Regular(bytes),
+                // Unreadable: treat like a file Countercheck won't read.
+                Err(_) => hook_settings::File::Symlink(Vec::new()),
+            }
+        }
+    }
 }
 
 /// Which agent's shell `verify` runs in, when `--agent` isn't given: each agent marks the commands

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Security (CC-01): an agent can't quietly switch the referee off.** Claude Code reads its hooks from
+  `.claude/settings.json` (and the usually git-ignored `.claude/settings.local.json`), which the agent can edit
+  mid-session; one line (`"disableAllHooks": true`) stopped the Stop hook, and nothing recorded it. Every `verify`
+  and hook run now compares those files (and Cortex Code's `.cortex/` ones) with the base: turning hooks off,
+  removing or changing a Countercheck hook (command, timeout), or setting a `COUNTERCHECK_*` variable that changes the
+  check makes the run **FAILED** with a plain reason, and the receipt lists it under `hook_settings`. `report` and
+  `ui` warn at the top while hooks are switched off. Adding other hooks or settings is fine; commit your own changes.
 - **Benchmark on Claude:** Fable 5.1 and Opus 5.5 on the 29-task benchmark, all four setups
   ([docs/eval/results-2026-10-claude.md](docs/eval/results-2026-10-claude.md)): neither gamed the tests; Opus made no
   false "done" claim in 348 runs; Countercheck added no time and no false alarm. Raw data in `eval/results/`.

@@ -4030,3 +4030,150 @@ fn windows_runner_stops_what_a_check_left_running() {
     }
     panic!("the runner account's ping survived its check ({})", left());
 }
+
+// ---- CC-01: the worker switches its own referee off ----
+
+const CLAUDE_SETTINGS: &str = r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"countercheck hook claude-stop","timeout":600}]}]}}"#;
+
+/// The project with the Countercheck Stop hook in `.claude/settings.json` at base, and an honest fix.
+fn hooked_project() -> tempfile::TempDir {
+    let d = project(CHECKS);
+    fs::create_dir_all(d.path().join(".claude")).unwrap();
+    fs::write(d.path().join(".claude/settings.json"), CLAUDE_SETTINGS).unwrap();
+    sh(d.path(), "git add -A && git commit -qm hook");
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    d
+}
+
+#[test]
+fn turning_the_hooks_off_fails_the_run_even_when_checks_pass() {
+    let d = hooked_project();
+    let off = CLAUDE_SETTINGS.replacen('{', r#"{"disableAllHooks":true,"#, 1);
+    fs::write(d.path().join(".claude/settings.json"), off).unwrap();
+    let (code, r) = countercheck(d.path(), &["--claim", "fixed"]);
+    assert_ne!(code, 0, "{r:#}");
+    assert_eq!(r["verdict"], "failed", "{r:#}");
+    assert_eq!(
+        check(&r, "calc")["passed"],
+        true,
+        "the checks still pass: {r:#}"
+    );
+    assert_eq!(
+        r["hook_settings"][0]["path"], ".claude/settings.json",
+        "{r:#}"
+    );
+    let reasons = r["reasons"].to_string();
+    assert!(
+        reasons
+            .contains("changed its own hook settings: .claude/settings.json turns every hook off"),
+        "{reasons}"
+    );
+}
+
+#[test]
+fn an_untracked_local_settings_file_cannot_turn_the_hooks_off() {
+    let d = hooked_project();
+    // settings.local.json is usually git-ignored; it still overrides the project's hooks.
+    fs::write(d.path().join(".gitignore"), ".claude/settings.local.json\n").unwrap();
+    fs::write(
+        d.path().join(".claude/settings.local.json"),
+        r#"{"disableAllHooks": true}"#,
+    )
+    .unwrap();
+    let (_, r) = countercheck(d.path(), &[]);
+    assert_eq!(r["verdict"], "failed", "{r:#}");
+    assert_eq!(
+        r["hook_settings"][0]["path"], ".claude/settings.local.json",
+        "{r:#}"
+    );
+}
+
+#[test]
+fn removing_weakening_or_redirecting_the_countercheck_hook_fails_the_run() {
+    let cases = [
+        r#"{"hooks":{}}"#.to_string(),
+        CLAUDE_SETTINGS.replace("\"timeout\":600", "\"timeout\":1"),
+        CLAUDE_SETTINGS.replace("claude-stop\"", "claude-stop || true\""),
+        CLAUDE_SETTINGS.replacen('{', r#"{"env":{"COUNTERCHECK_HOOK_DISABLED":"1"},"#, 1),
+        "{ not json".to_string(),
+    ];
+    for (i, now) in cases.iter().enumerate() {
+        let d = hooked_project();
+        fs::write(d.path().join(".claude/settings.json"), now).unwrap();
+        let (_, r) = countercheck(d.path(), &["--claim", &format!("case {i}")]);
+        assert_eq!(r["verdict"], "failed", "case {i}: {now}\n{r:#}");
+    }
+}
+
+#[test]
+fn honest_settings_edits_stay_verified() {
+    let d = hooked_project();
+    let more = r#"{"permissions":{"allow":["Bash(ls)"]},"env":{"COUNTERCHECK_ROLE":"Docs"},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"countercheck hook claude-stop","timeout":600}]},{"hooks":[{"type":"command","command":"./lint.sh"}]}]}}"#;
+    fs::write(d.path().join(".claude/settings.json"), more).unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        (code, r["verdict"].as_str()),
+        (0, Some("verified")),
+        "{r:#}"
+    );
+    assert!(r.get("hook_settings").is_none(), "{r:#}");
+}
+
+#[test]
+fn the_claude_hook_tells_the_agent_to_undo_a_hook_change() {
+    let d = hooked_project();
+    // Hooks still on, but the agent shortened ours: the next stop is blocked and told why.
+    let short = CLAUDE_SETTINGS.replace("\"timeout\":600", "\"timeout\":1");
+    fs::write(d.path().join(".claude/settings.json"), short).unwrap();
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s1", "Done."), &[]);
+    let reason = block_reason(&out);
+    assert!(
+        reason.contains("they passed, but the run FAILED"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("Undo your change to the hook settings"),
+        "{reason}"
+    );
+    // Saying "I'm stuck" doesn't buy a stop after switching the referee off.
+    let (_, out) = claude_hook(
+        &claude_payload(
+            d.path(),
+            "s2",
+            "I can't finish this: blocked, it contradicts the spec.",
+        ),
+        &[],
+    );
+    assert!(block_reason(&out).contains("hook settings"), "{out}");
+}
+
+#[test]
+fn report_warns_when_hooks_are_switched_off_now() {
+    let d = hooked_project();
+    let (_, _) = countercheck(d.path(), &[]);
+    let html_of = |d: &Path| {
+        let out = Command::new(BIN)
+            .args(["report", "--repo"])
+            .arg(d)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        fs::read_to_string(d.join(".countercheck/receipts/report.html")).unwrap()
+    };
+    assert!(!html_of(d.path()).contains("Hooks are switched off"));
+    fs::write(
+        d.path().join(".claude/settings.local.json"),
+        r#"{"disableAllHooks": true}"#,
+    )
+    .unwrap();
+    let html = html_of(d.path());
+    assert!(
+        html.contains("Hooks are switched off in this project"),
+        "no banner"
+    );
+    assert!(html.contains("<code>.claude/settings.local.json</code> turns every hook off"));
+}
