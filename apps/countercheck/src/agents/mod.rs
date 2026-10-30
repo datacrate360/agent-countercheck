@@ -55,6 +55,40 @@ pub struct Target {
     pub after: &'static str,
     /// The docs page, relative to the repository.
     pub docs: &'static str,
+    /// For an agent whose hook is a program file (a TypeScript plugin), not JSON settings: the
+    /// whole file, given the command that runs Countercheck. Countercheck owns that file:
+    /// `entries` and `top` are unused, install writes it, uninstall removes it only if unchanged,
+    /// and the tamper check compares it byte for byte (`hook_settings::PLUGIN_FILES`).
+    pub plugin: Option<fn(bin: &str) -> String>,
+}
+
+/// What `hook install` would do to a plugin file, given what's there now.
+#[derive(Debug, PartialEq, Eq)]
+enum PluginPlan {
+    /// Missing, or an older or edited Countercheck plugin: write ours.
+    Write,
+    /// Already exactly ours.
+    Same,
+    /// A file there that isn't Countercheck's: never overwritten.
+    NotOurs,
+}
+
+fn plugin_plan(old: Option<&str>, new: &str) -> PluginPlan {
+    match old {
+        None => PluginPlan::Write,
+        Some(o) if o == new => PluginPlan::Same,
+        Some(o) if o.contains("countercheck hook") => PluginPlan::Write,
+        Some(_) => PluginPlan::NotOurs,
+    }
+}
+
+/// A plugin template with the command that runs Countercheck filled in: every
+/// `"__COUNTERCHECK_BIN__"` (quotes included) becomes `bin` as a string literal, valid in
+/// JavaScript and TypeScript as in JSON.
+// Its first callers are the plugin agents (Amp, OpenClaw), added one file each.
+#[allow(dead_code)]
+pub fn plugin_with_bin(template: &str, bin: &str) -> String {
+    template.replace("\"__COUNTERCHECK_BIN__\"", &quoted(bin))
 }
 
 /// Every agent `hook install` knows. Keep the order: it is the order `hook status` prints.
@@ -394,7 +428,6 @@ pub fn install(o: &Options) -> Result<(), String> {
     let t = find(&o.agent)?;
     let (path, root) = file_for(&t, o.scope, &o.repo)?;
     let old = read_settings(&path)?;
-    let mut node = parse_settings(&path, old.as_deref())?;
     // Managed hooks run for every user of the machine: name countercheck by its full path.
     let bin = match o.scope {
         Scope::Managed => which(&o.bin)
@@ -402,16 +435,37 @@ pub fn install(o: &Options) -> Result<(), String> {
             .unwrap_or_else(|| o.bin.clone()),
         _ => o.bin.clone(),
     };
-    let added = add(&t, &mut node, &bin)?;
-    let new = json::pretty(&node);
-    if added == 0 {
-        println!(
-            "{}: the Countercheck hooks are already in {}",
-            t.label,
-            path.display()
-        );
-        return Ok(());
-    }
+    let new = if let Some(plugin) = t.plugin {
+        let new = plugin(&bin);
+        match plugin_plan(old.as_deref(), &new) {
+            PluginPlan::Same => {
+                println!(
+                    "{}: the Countercheck plugin is already in {}",
+                    t.label,
+                    path.display()
+                );
+                return Ok(());
+            }
+            PluginPlan::NotOurs => {
+                return Err(format!(
+                    "{} already exists and isn't Countercheck's plugin; move it away, then run this again",
+                    path.display()
+                ));
+            }
+            PluginPlan::Write => new,
+        }
+    } else {
+        let mut node = parse_settings(&path, old.as_deref())?;
+        if add(&t, &mut node, &bin)? == 0 {
+            println!(
+                "{}: the Countercheck hooks are already in {}",
+                t.label,
+                path.display()
+            );
+            return Ok(());
+        }
+        json::pretty(&node)
+    };
     print!("{}", diff(&path, old.as_deref().unwrap_or(""), &new));
     if !runs(&bin) {
         eprintln!(
@@ -453,7 +507,7 @@ pub fn install(o: &Options) -> Result<(), String> {
             .display()
             .to_string();
         let rel = rel.replace('\\', "/");
-        if countercheck_core::hook_settings::FILES.contains(&rel.as_str()) {
+        if countercheck_core::hook_settings::is_guarded(&rel) {
             println!(
                 "commit it, so Countercheck can tell if an agent removes the hook: git add {rel} && git commit -m \"Countercheck hooks\""
             );
@@ -509,28 +563,55 @@ pub fn uninstall(o: &Options) -> Result<(), String> {
         );
         return Ok(());
     };
-    let mut node = parse_settings(&path, Some(&old))?;
-    if remove(&t, &mut node, &o.bin) == 0 {
-        println!("{}: no Countercheck hooks in {}", t.label, path.display());
-        return Ok(());
+    if let Some(plugin) = t.plugin {
+        if !old.contains("countercheck hook") {
+            println!(
+                "{}: {} isn't Countercheck's plugin; left as it is",
+                t.label,
+                path.display()
+            );
+            return Ok(());
+        }
+        if old != plugin(&o.bin) {
+            return Err(format!(
+                "{} differs from the plugin Countercheck writes (edited, or installed with another --bin: pass the same --bin); remove it by hand if you're sure",
+                path.display()
+            ));
+        }
+        print!("{}", diff(&path, &old, ""));
+        if o.dry_run {
+            println!("(dry run: nothing removed)");
+            return Ok(());
+        }
+        if !consent(o.yes)? {
+            println!("nothing removed");
+            return Ok(());
+        }
+        std::fs::remove_file(&path)
+            .map_err(|e| admin_hint(o, format!("{}: {e}", path.display())))?;
+        println!("removed {}", path.display());
+    } else {
+        let mut node = parse_settings(&path, Some(&old))?;
+        if remove(&t, &mut node, &o.bin) == 0 {
+            println!("{}: no Countercheck hooks in {}", t.label, path.display());
+            return Ok(());
+        }
+        let new = json::pretty(&node);
+        print!("{}", diff(&path, &old, &new));
+        if o.dry_run {
+            println!("(dry run: nothing written)");
+            return Ok(());
+        }
+        if !consent(o.yes)? {
+            println!("nothing written");
+            return Ok(());
+        }
+        write_settings(&path, Some(&old), &new).map_err(|e| admin_hint(o, e))?;
+        println!("wrote {}", path.display());
     }
-    let new = json::pretty(&node);
-    print!("{}", diff(&path, &old, &new));
-    if o.dry_run {
-        println!("(dry run: nothing written)");
-        return Ok(());
-    }
-    if !consent(o.yes)? {
-        println!("nothing written");
-        return Ok(());
-    }
-    write_settings(&path, Some(&old), &new).map_err(|e| admin_hint(o, e))?;
-    println!("wrote {}", path.display());
     if let Some(root) = &root {
         let rel = path.strip_prefix(root).unwrap_or(&path);
-        if countercheck_core::hook_settings::FILES
-            .contains(&rel.to_string_lossy().replace('\\', "/").as_str())
-        {
+        if countercheck_core::hook_settings::is_guarded(&rel.to_string_lossy().replace('\\', "/")) {
             println!(
                 "commit it too: until then Countercheck reports the removed hook (an agent could have done it)"
             );
@@ -551,7 +632,25 @@ pub fn status(repo: &Path, bin: &str) -> Result<(), String> {
             };
             let state = match read_settings(&path) {
                 Err(e) => format!("can't read: {e}"),
+                Ok(None) if t.plugin.is_some() => "not installed".to_string(),
                 Ok(None) => "no hooks file".to_string(),
+                Ok(Some(text)) if t.plugin.is_some() => {
+                    let mut s = match t.plugin.map(|p| p(bin)) {
+                        Some(ours) if ours == text => "installed".to_string(),
+                        _ if text.contains("countercheck hook") => {
+                            "installed (edited, or another version: run install again)".to_string()
+                        }
+                        _ => "not installed (another plugin has that name)".to_string(),
+                    };
+                    if text.contains("countercheck hook")
+                        && scope == Scope::Project
+                        && let Some(root) = &root
+                        && !committed(root, &path)
+                    {
+                        s.push_str(", not committed (commit it)");
+                    }
+                    s
+                }
                 Ok(Some(text)) => match parse_settings(&path, Some(&text)) {
                     Err(e) => e,
                     Ok(node) => {
@@ -616,6 +715,38 @@ mod tests {
         assert!(added.contains("say done") && added.contains("countercheck hook claude-stop"));
         assert_eq!(remove(&t, &mut n, "countercheck"), 2);
         assert_eq!(json::pretty(&n), text);
+    }
+
+    #[test]
+    fn a_plugin_file_is_written_only_over_nothing_or_our_own() {
+        let ours = plugin_with_bin(
+            "run(\"__COUNTERCHECK_BIN__\", ['hook', 'x-stop'])",
+            "C:/Program Files/cc.exe",
+        );
+        assert_eq!(ours, "run(\"C:/Program Files/cc.exe\", ['hook', 'x-stop'])");
+        let ours = "on('end', () => run('countercheck hook x-stop'))";
+        assert_eq!(plugin_plan(None, ours), PluginPlan::Write);
+        assert_eq!(plugin_plan(Some(ours), ours), PluginPlan::Same);
+        // An older Countercheck plugin is replaced; someone else's file never is.
+        assert_eq!(
+            plugin_plan(Some("old: countercheck hook x-stop"), ours),
+            PluginPlan::Write
+        );
+        assert_eq!(
+            plugin_plan(Some("their own plugin"), ours),
+            PluginPlan::NotOurs
+        );
+        // No agent's plugin file escapes the tamper check.
+        for t in all() {
+            if t.plugin.is_some() {
+                assert!(
+                    countercheck_core::hook_settings::PLUGIN_FILES.contains(&t.project_file),
+                    "{}: add {} to hook_settings::PLUGIN_FILES",
+                    t.agent,
+                    t.project_file
+                );
+            }
+        }
     }
 
     #[test]

@@ -48,6 +48,7 @@ pub fn target() -> Target {
                 review\" pick \"Review hooks\", check that both commands run countercheck, and trust them. Or \
                 type /hooks in a session and press t to trust. Editing the hooks later asks again.",
         docs: "docs/hooks/codex.md",
+        plugin: None,
     }
 }
 

@@ -45,6 +45,16 @@ pub const FILES: [&str; 12] = [
 /// Files whose whole object is the event map, not a `"hooks"` key (Devin CLI's `hooks.v1.json`).
 const WHOLE_FILE_HOOKS: [&str; 1] = [".devin/hooks.v1.json"];
 
+/// Agents whose hook is a whole program file Countercheck writes (a TypeScript plugin), not JSON
+/// settings: compared byte for byte with the base by [`compare_plugin`]. Each plugin agent in
+/// `apps/countercheck/src/agents/` adds its project file here.
+pub const PLUGIN_FILES: &[&str] = &[];
+
+/// Whether the tamper check compares this project file (a settings file or a plugin file).
+pub fn is_guarded(rel: &str) -> bool {
+    FILES.contains(&rel) || PLUGIN_FILES.contains(&rel)
+}
+
 /// Larger files are not parsed (and count as changed when they differ from the base).
 pub const MAX_BYTES: usize = 1024 * 1024;
 
@@ -251,6 +261,30 @@ pub fn compare(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
         }
     }
     out
+}
+
+/// What the worker did to a Countercheck plugin file (see [`PLUGIN_FILES`]). It is code, not
+/// settings, so it is compared byte for byte: when the base holds a Countercheck plugin, removing
+/// it, replacing it with a symlink or changing it in any way is a finding. A plugin that wasn't in
+/// the base (or isn't Countercheck's) is not: adding hooks is allowed.
+pub fn compare_plugin(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
+    let File::Regular(was) = base else {
+        return Vec::new();
+    };
+    if base == now || !String::from_utf8_lossy(was).contains("countercheck") {
+        return Vec::new();
+    }
+    let what = match now {
+        File::Absent => "removes the Countercheck plugin",
+        File::Symlink(_) => {
+            "is now a symlink; Countercheck doesn't follow it, so it can't tell whether the plugin still runs"
+        }
+        File::Regular(_) => "changes the Countercheck plugin (any edit to its code counts)",
+    };
+    vec![HookSettingsChange {
+        path: path.to_string(),
+        what: what.to_string(),
+    }]
 }
 
 /// Hooks switched off in the files as they are now, with no base to compare against (for the
@@ -508,6 +542,29 @@ mod tests {
             r#",{"name":"lint","trigger":"Stop","action":{"type":"command","command":"npm run lint"}}]}"#,
         );
         assert!(compare(".kiro/hooks/countercheck.json", &reg(kiro), &reg(&more)).is_empty());
+    }
+
+    #[test]
+    fn a_countercheck_plugin_is_compared_byte_for_byte() {
+        let ours = reg("amp.on('agent.end', () => run('countercheck hook amp-stop'))\n");
+        let p = ".amp/plugins/countercheck.ts";
+        assert!(compare_plugin(p, &ours, &ours).is_empty());
+        assert_eq!(
+            compare_plugin(p, &ours, &File::Absent)[0].what,
+            "removes the Countercheck plugin"
+        );
+        let edited = reg("amp.on('agent.end', () => {})\n");
+        assert_eq!(compare_plugin(p, &ours, &edited).len(), 1);
+        // One changed byte (a space) still counts: it is code.
+        let spaced = reg("amp.on('agent.end', () => run('countercheck hook amp-stop')) \n");
+        assert_eq!(compare_plugin(p, &ours, &spaced).len(), 1);
+        assert_eq!(
+            compare_plugin(p, &ours, &File::Symlink(b"/tmp/x.ts".to_vec())).len(),
+            1
+        );
+        // A plugin added by the worker, or one that was never Countercheck's: not a finding.
+        assert!(compare_plugin(p, &File::Absent, &ours).is_empty());
+        assert!(compare_plugin(p, &reg("other plugin"), &File::Absent).is_empty());
     }
 
     #[test]

@@ -60,6 +60,7 @@ pub fn target() -> Target {
                 asks \"Do you trust the authors of this directory?\", say yes. Then type /hooks and check that both Countercheck hooks are listed \
                 from .devin/hooks.v1.json.",
         docs: "docs/hooks/devin.md",
+        plugin: None,
     }
 }
 

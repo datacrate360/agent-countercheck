@@ -6,6 +6,10 @@
   `.devin/hooks.v1.json`; the new `hook devin-stop` sends Devin back while the checks fail. The file is in the tamper
   check (its hooks are the whole file, not a `"hooks"` key), and install warns when `.claude/settings*.json`, which
   Devin CLI also runs, has Countercheck hooks too.
+- **Internal:** `hook install` can install agents whose hook is a whole plugin file (TypeScript, for Amp and
+  OpenClaw next): written only over nothing or an older Countercheck plugin, removed only if unchanged, and compared
+  byte for byte by the tamper check (`hook_settings::PLUGIN_FILES`). No agent uses it yet; nothing changes for the
+  existing seven.
 - **Fixed:** the session record written at session start named Codex, Copilot, Goose and Kiro sessions `claude-code`
   (or nothing), so a session that never got a receipt showed under the wrong agent on the project page's "Not
   checked" list. It now reads each agent's own input shape. Display only; receipts were always right.
