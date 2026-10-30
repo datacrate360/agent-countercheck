@@ -13,6 +13,7 @@ mod claude;
 pub mod kiro;
 pub mod codex;
 pub mod goose;
+pub mod cursor;
 
 use json::Node;
 use std::io::IsTerminal;
@@ -62,6 +63,7 @@ pub fn all() -> Vec<Target> {
         kiro::target(),
         codex::target(),
         goose::target(),
+        cursor::target(),
     ]
 }
 

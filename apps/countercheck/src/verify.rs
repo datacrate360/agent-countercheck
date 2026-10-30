@@ -526,7 +526,7 @@ pub fn agent_from_env() -> Option<&'static str> {
     let set = |k: &str| std::env::var_os(k).is_some_and(|v| !v.is_empty());
     if set("CLAUDE_CODE_CHILD_SESSION") || set("CLAUDECODE") {
         Some("claude-code")
-    } else if set("CURSOR_AGENT") {
+    } else if set("CURSOR_AGENT") || set("CURSOR_VERSION") {
         Some("cursor")
     } else if set("CODEX_THREAD_ID")
         || set("CODEX_SANDBOX")
