@@ -44,8 +44,10 @@ file lives, its input JSON in, its answer format out. The decision itself is sha
    finish; a broken referee must never trap an agent. `install`/`uninstall`/`status` errors are real errors (exit 1).
 4. Agent name on receipts: add the agent's env marker to `verify::agent_from_env` if it has one.
 5. Docs: `docs/hooks/<agent>.md` (the install command, what lands in the file, the trust step, what the agent sees,
-   the env vars `COUNTERCHECK_MAX_NUDGES`, `COUNTERCHECK_HOOK_LOG`, `COUNTERCHECK_BIN`), a row in the README "Where
-   it fits" table and the `where-it-fits.svg` left column, a line under `## Unreleased` in CHANGELOG.
+   the env vars `COUNTERCHECK_MAX_NUDGES` and `COUNTERCHECK_HOOK_LOG`; `--bin` for a countercheck not on PATH), a row
+   in the README "Where it fits" table and the `where-it-fits.svg` left column, a row in `docs/hooks/README.md`, the
+   project file in `hook_settings::FILES` (the tamper check; a test that removing it fails the run), a line under
+   `## Unreleased` in CHANGELOG.
 
 ## Tests: `apps/countercheck/tests/hook_<agent>.rs` (its own file, so parallel work doesn't collide)
 

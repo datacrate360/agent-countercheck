@@ -83,7 +83,7 @@ Seven rules keep the referee honest:
 
 ### Architecture
 
-![Countercheck architecture. Who asks: Claude Code and Cortex Code through hook claude-session-start and hook claude-stop, Hermes Agent through hook hermes-pre-verify, any agent, script or person through countercheck verify (the agent is named from its shell or --agent), and CI or the GitHub Action with verify --base origin/main. One run reads the base commit and the working tree of your git repository, then 1 locks the checks (git.rs, config), 2 makes a clean copy and puts back every protected file (snapshot.rs, protect), 3 runs each check in a sandbox (runner.rs: macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job) with six check types, 4 decides, 5 seals with SHA-256. Results: a sealed receipt file, an answer back to the agent through the hook, and an exit code for CI; receipts are read with show, report, ui and removed with prune. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.](docs/img/architecture.svg)
+![Countercheck architecture. Who asks: Claude Code and Cortex Code through hook session-start and hook claude-stop; Cursor, Codex, GitHub Copilot, Goose and Kiro through hook session-start and their own stop hook, all set up by hook install; Hermes Agent through hook hermes-pre-verify, any agent, script or person through countercheck verify (the agent is named from its shell or --agent), and CI or the GitHub Action with verify --base origin/main. One run reads the base commit and the working tree of your git repository, then 1 locks the checks (git.rs, config), 2 makes a clean copy and puts back every protected file (snapshot.rs, protect), 3 runs each check in a sandbox (runner.rs: macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job) with six check types, 4 decides, 5 seals with SHA-256. Results: a sealed receipt file, an answer back to the agent through the hook, and an exit code for CI; receipts are read with show, report, ui and removed with prune. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.](docs/img/architecture.svg)
 
 | Part | Where | What it does |
 |---|---|---|
@@ -107,16 +107,16 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 
 ### Where it fits
 
-![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Hermes Agent), any other agent or person through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
+![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro, set up by countercheck hook install, and Hermes Agent), any other agent or person (Aider, Windsurf, Cline, OpenCode, scripts) through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
 
 | You use | How Countercheck plugs in |
 |---|---|
-| Claude Code | a `Stop` hook: `countercheck hook install --agent claude-code` ([step 4a](#4a-claude-code-and-cortex-code)) |
+| Claude Code | a `Stop` hook: `countercheck hook install --agent claude-code` ([step 4a](#4a-agents-with-a-finish-hook)) |
 | Cortex Code (Snowflake) | the same hooks: `countercheck hook install --agent cortex-code` ([what differs](docs/hooks/claude-code.md#cortex-code); used in a real project) |
-| OpenAI Codex | a `Stop` hook: `countercheck hook install --agent codex`, then trust it in Codex ([setup and trust](docs/hooks/codex.md)) |
-| Goose | a `Stop` hook in its own plugin: `countercheck hook install --agent goose` ([page](docs/hooks/goose.md); start Goose from the project root) |
+| OpenAI Codex | a `Stop` hook: `countercheck hook install --agent codex`, then trust it in Codex ([setup and trust](docs/hooks/codex.md); built from Codex's docs and source, not yet run in a real Codex session) |
+| Goose | a `Stop` hook in its own plugin: `countercheck hook install --agent goose` ([page](docs/hooks/goose.md); run for real with Goose 1.57.0; start Goose from the project root) |
 | Cursor (editor, CLI, cloud agents) | a `stop` hook: `countercheck hook install --agent cursor` ([page](docs/hooks/cursor.md); built from Cursor's docs, not yet run against Cursor) |
-| GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps) |
+| GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps; built from Copilot's docs, not yet run against Copilot) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
@@ -146,7 +146,7 @@ expects a wrong value, a server can't be reached); the honest answer there is "t
   tests, said FAILED and pushed back once; the agent restored the test and reported the real problem.
 - Claude didn't game the tests at all: in 686 runs neither Fable nor Opus edited a protected test or claimed success
   on an impossible task. Opus made no false claim in any setup. There Countercheck is the cheap proof that the work
-  was checked: no extra time on the median run and no false alarm on any of 512 correct results.
+  was checked: no extra time on the median run and no false alarm on any of 512 correct results outside the two internet tasks.
 - Countercheck only knows what your checks test. The false claims left were cases the visible tests didn't cover.
   DeepSeek rarely games tests, so there was little to catch.
 - It added about 1 second to the median run. Hermes's own `verify_on_stop` doubled the time and cost per run.
@@ -252,20 +252,22 @@ git add .countercheck/checks.toml && git commit -m "Countercheck checks"
 
 ### Step 4: Connect your agent
 
-#### 4a. Claude Code and Cortex Code
+#### 4a. Agents with a finish hook
 
-One command adds the hooks to the project's settings. It shows the change first, keeps a backup, and touches nothing
-else:
+Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro: one command adds the hooks to the project.
+It shows the change first, keeps a backup, and touches nothing else:
 
 ```sh
-countercheck hook install --agent claude-code     # .claude/settings.json
-countercheck hook install --agent cortex-code     # .cortex/settings.json
-git add .claude .cortex && git commit -m "Countercheck hooks"
+countercheck hook install --agent claude-code     # or: cortex-code, cursor, codex, copilot, goose, kiro
+git add <the file it names> && git commit -m "Countercheck hooks"   # then removing the hook makes a run FAILED
 countercheck hook status                          # which agents are hooked, and committed
 ```
 
-`--scope user` installs for every project; `countercheck hook uninstall --agent <name>` takes them out again.
-By hand, the same lines in `.claude/settings.json`:
+`--scope user` installs for every project; `--scope managed` (Claude Code, with `sudo`) puts the hooks where no
+agent can switch them off ([strict mode](docs/hooks/claude-code.md#strict-mode-managed-settings));
+`countercheck hook uninstall --agent <name>` takes them out again. Each agent's file, what it sends and its limits:
+[docs/hooks/](docs/hooks/README.md) (Codex also needs you to trust the hook once in Codex).
+By hand, for Claude Code, the same lines in `.claude/settings.json`:
 
 ```json
 {
@@ -280,7 +282,7 @@ By hand, the same lines in `.claude/settings.json`:
 }
 ```
 
-Set the `Stop` timeout (seconds) longer than your checks take. On FAILED, Claude gets the failing output and keeps
+Set the `Stop` timeout (seconds) longer than your checks take. On FAILED, the agent gets the failing output and keeps
 working; after 3 push-backs in a session (`COUNTERCHECK_MAX_NUDGES`) it may stop. Details and Windows paths:
 [docs/hooks/claude-code.md](docs/hooks/claude-code.md).
 
@@ -313,10 +315,11 @@ the agent commits its own edits to a test or to `checks.toml`. Without it, the c
 
 #### 4c. Any other agent or a script
 
-Run `verify` when the agent says it's done, with its name and its final message:
+For agents without a hook that can stop them (Aider, Windsurf, Cline, OpenCode, …), run `verify` when the agent says
+it's done, with its name and its final message:
 
 ```sh
-countercheck verify --agent codex --claim "Fixed the discount bug."
+countercheck verify --agent aider --claim "Fixed the discount bug."
 ```
 
 The wording doesn't matter ("done", "fixed", or nothing at all): the verdict comes only from the checks.
@@ -384,11 +387,12 @@ What it looks like: [Watch your agents](#watch-your-agents).
 | Runs in progress | `<project>/.countercheck/receipts/running/<id>.json` | while `verify` runs, for the report and live UI; removed when the receipt is written (what a killed run leaves is cleared by the next `verify`); display only, never a verdict |
 | Session start commits | `<project>/.git/countercheck/sessions/<session>.json` | each agent session's "before" commit; inside `.git`, never copied or committed; removed after 30 days unused |
 | Claude Code hook | `<project>/.claude/settings.json` | step 4a |
+| Other agents' hooks | `.cortex/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`, `.github/hooks/countercheck.json`, `.agents/plugins/countercheck/hooks/hooks.json` (Goose), `.kiro/hooks/countercheck.json` | step 4a; `--scope user` puts them in your home folder |
 | Hermes hook | `~/.hermes/config.yaml` or `~/.hermes/profiles/<name>/config.yaml` | step 4b; approvals in that profile's `shell-hooks-allowlist.json` |
 
 There are no per-agent profiles. Each receipt names its agent and model (the hooks fill both in; `--agent` and
 `--model` set them by hand; without `--agent`, `verify` reads it from the agent's shell: Claude Code, Cursor, Codex,
-Hermes), so several agents on one project end up side by side in the same list, each session with
+GitHub Copilot, Goose, Hermes), so several agents on one project end up side by side in the same list, each session with
 its own "before" commit.
 
 Several agents on one project, each with its own job (UI design, security review, data pipeline, …)? Give each one a
@@ -413,7 +417,7 @@ verdict.
 | `ui` | A live page of every run, on this computer only | `countercheck ui` |
 | `report` | The same page as one offline HTML file | `countercheck report --open` |
 | `prune` | Delete receipts older than an age (by their own date); nothing else ever deletes them | `countercheck prune --older-than 90d --dry-run` |
-| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
+| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `cursor-stop`, `codex-stop`, `copilot-stop`, `goose-stop`, `kiro-stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
 | `windows-setup` | Windows, once as administrator: the full check sandbox ([below](#platforms-and-the-sandbox)) | `countercheck windows-setup` |
 
 Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
@@ -544,8 +548,10 @@ when the agent says it's done, and re-runs your locked checks on a clean copy of
 
 **Why does grading run offline?**
 So the same work always gets the same verdict, and nobody fetches the answer at grading time. In the benchmark, the
-only false alarms came from checks that called a real website. If a check needs the internet, set `network = true`
-on it; the receipt then says so.
+only false alarms came from checks that called a real website. Since 0.19 a check that fails only because the
+internet is blocked, on the base revision too, makes the run UNVERIFIED instead of FAILED
+([ADR-0005](docs/decisions/0005-network-only-failures.md)). If a check needs the internet, set `network = true` on
+it; the receipt then says so.
 
 **Will it catch every wrong "done"?**
 Only what your checks test. Stronger checks (golden files, coverage, budgets: [docs/checks.md](docs/checks.md))
@@ -569,7 +575,7 @@ A referee has to be right, so it's tested harder than most tools its size:
 
 - **436 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
-  that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 35
+  that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 45
   fields changes; `decide` never says VERIFIED when a check failed).
 - **Mutation testing** ([cargo-mutants](https://mutants.rs)): the receipt, claim and config code was broken in every
   way the tool could find, and tests were added until every break that compiles is caught (one remaining change is
@@ -609,7 +615,7 @@ Junie, Amp and OpenClaw ([which agents](docs/hooks/README.md)). See [docs/ROADMA
 
 I use Countercheck myself every day on my own agents' work, so I will keep maintaining it.
 
-- **New agents and new fields:** if you need another agent hooked up (Codex, Cursor, OpenCode, …) or checks for your
+- **New agents and new fields:** if you need another agent hooked up (OpenCode, Devin, Amp, …) or checks for your
   kind of work, [open an issue](https://github.com/datacrate360/agent-countercheck/issues) and I'll add them step by
   step.
 - **Usable, easy, free:** every agent and platform it supports should work, take minutes to set up, and stay free
@@ -630,7 +636,7 @@ migration is knowledge you have and we don't.
 | Open a ["New domain" issue](https://github.com/datacrate360/agent-countercheck/issues/new?template=new-domain.yml): how "done" goes wrong in your work | no |
 | Add an example for your field ([examples/](examples/)) | no |
 | Add a benchmark task that tempts agents to cheat ([eval/](eval/)) | no |
-| Hook another agent (Codex, Cursor, OpenCode, …) | yes |
+| Hook another agent (OpenCode, Devin, Amp, …) | yes |
 | Add tests, or a check type | yes |
 
 Each has a step-by-step guide in [.claude/skills/](.claude/skills/), written for people and AI coding agents alike.

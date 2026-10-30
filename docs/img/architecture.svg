@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="760" viewBox="0 0 960 760" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Countercheck architecture</title>
-  <desc>Who asks for a check: Claude Code and Cortex Code through their hooks, Hermes Agent through its pre-verify hook, any agent, script or person through countercheck verify, and CI or the GitHub Action. One run reads the base commit and the working tree of your git repository, then: 1 locks the checks from the base commit, 2 makes a clean copy with every protected file put back, 3 runs each check in a sandbox (macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job object) with six check types, 4 decides the verdict, 5 seals the receipt with SHA-256. The results go to a sealed receipt file, back to the agent through the hook, and to CI as an exit code. Receipts are read with show, report, ui and pruned with prune. If the work failed, the agent fixes the code and says done again. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.</desc>
+  <desc>Who asks for a check: Claude Code and Cortex Code, and Cursor, Codex, GitHub Copilot, Goose and Kiro, through the hooks countercheck hook install sets up, Hermes Agent through its pre-verify hook, any agent, script or person through countercheck verify, and CI or the GitHub Action. One run reads the base commit and the working tree of your git repository, then: 1 locks the checks from the base commit, 2 makes a clean copy with every protected file put back, 3 runs each check in a sandbox (macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job object) with six check types, 4 decides the verdict, 5 seals the receipt with SHA-256. The results go to a sealed receipt file, back to the agent through the hook, and to CI as an exit code. Receipts are read with show, report, ui and pruned with prune. If the work failed, the agent fixes the code and says done again. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#55554F"/></marker>
     <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/></marker>
@@ -11,21 +11,27 @@
   <text x="820.0" y="36" font-size="12" font-weight="700" fill="#6B6B66" text-anchor="middle" letter-spacing="1">WHERE IT GOES</text>
   <rect x="24" y="56" width="206" height="90" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
   <text x="38" y="78" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Claude Code · Cortex Code</text>
-  <text x="38" y="98" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook claude-session-start</text>
+  <text x="38" y="98" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook session-start</text>
   <text x="38" y="115" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook claude-stop</text>
-  <text x="38" y="134" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">saves the start; checks “done”</text>
-  <rect x="24" y="160" width="206" height="73" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
-  <text x="38" y="182" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Hermes Agent</text>
-  <text x="38" y="202" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook hermes-pre-verify</text>
-  <text x="38" y="221" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">runs before the agent may finish</text>
-  <rect x="24" y="247" width="206" height="73" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
-  <text x="38" y="269" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Any agent, a script, you</text>
-  <text x="38" y="289" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">countercheck verify</text>
-  <text x="38" y="308" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">agent named from its shell or --agent</text>
-  <rect x="24" y="334" width="206" height="73" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
-  <text x="38" y="356" font-size="13" font-weight="650" fill="#141414" text-anchor="start">CI · GitHub Action</text>
-  <text x="38" y="376" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">verify --base origin/main</text>
-  <text x="38" y="395" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">on every pull request</text>
+  <text x="38" y="134" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">set up by hook install</text>
+  <rect x="24" y="160" width="206" height="107" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
+  <text x="38" y="182" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Cursor · Codex · Copilot</text>
+  <text x="38" y="199" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Goose · Kiro</text>
+  <text x="38" y="219" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook session-start</text>
+  <text x="38" y="236" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook &lt;agent&gt;-stop</text>
+  <text x="38" y="255" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">set up by hook install</text>
+  <rect x="24" y="281" width="206" height="73" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
+  <text x="38" y="303" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Hermes Agent</text>
+  <text x="38" y="323" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">hook hermes-pre-verify</text>
+  <text x="38" y="342" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">runs before the agent may finish</text>
+  <rect x="24" y="368" width="206" height="73" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
+  <text x="38" y="390" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Any agent, a script, you</text>
+  <text x="38" y="410" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">countercheck verify</text>
+  <text x="38" y="429" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">agent named from its shell or --agent</text>
+  <rect x="24" y="455" width="206" height="73" rx="10" fill="#FFFFFF" stroke="#E7E5E0" stroke-width="1.2"/>
+  <text x="38" y="477" font-size="13" font-weight="650" fill="#141414" text-anchor="start">CI · GitHub Action</text>
+  <text x="38" y="497" font-size="11" font-weight="500" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">verify --base origin/main</text>
+  <text x="38" y="516" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">on every pull request</text>
   <rect x="262" y="56" width="404" height="74" rx="10" fill="#F4F3F0" stroke="#E7E5E0" stroke-width="1.2"/>
   <text x="278" y="78" font-size="13" font-weight="650" fill="#141414" text-anchor="start">Your git repository</text>
   <text x="278" y="98" font-size="11" font-weight="500" fill="#6B6B66" text-anchor="start">base commit (before the agent):</text>
@@ -78,9 +84,10 @@
   <text x="310" y="574" font-size="11" font-weight="400" fill="#3A3A36" text-anchor="start">SHA-256 over the whole receipt; any later edit shows</text>
   <path d="M464.0 130 V154" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
   <path d="M230 101.0 C252 101.0, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
-  <path d="M230 196.5 C252 196.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
-  <path d="M230 283.5 C252 283.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
-  <path d="M230 370.5 C252 370.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M230 213.5 C252 213.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M230 317.5 C252 317.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M230 404.5 C252 404.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M230 491.5 C252 491.5, 240 196, 260 196" fill="none" stroke="#55554F" stroke-width="1.5" marker-end="url(#a)"/>
   <text x="464.0" y="630" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="middle">while it runs, receipts/running/&lt;id&gt;.json says which step (for the page, never a verdict)</text>
   <rect x="704" y="156" width="232" height="86" rx="10" fill="#FFFFFF" stroke="#0F4C4C" stroke-width="1.4"/>
   <text x="718" y="178" font-size="13" font-weight="650" fill="#0F4C4C" text-anchor="start">Sealed receipt</text>
@@ -109,7 +116,7 @@
   <text x="770" y="536" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">live page on 127.0.0.1</text>
   <text x="718" y="554" font-size="11" font-weight="600" fill="#0F4C4C" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">prune</text>
   <text x="770" y="554" font-size="10.5" font-weight="400" fill="#6B6B66" text-anchor="start">delete old ones, on request</text>
-  <path d="M702 323.0 H685 V652 H127.0 V413" fill="none" stroke="#C2410C" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ac)"/>
+  <path d="M702 323.0 H685 V652 H127.0 V534" fill="none" stroke="#C2410C" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ac)"/>
   <text x="464.0" y="645" font-size="11" font-weight="600" fill="#C2410C" text-anchor="middle">the agent fixes the code (not the tests) and says “done” again</text>
   <line x1="24" y1="670" x2="936" y2="670" stroke="#E7E5E0"/>
   <text x="24" y="686" font-size="11" font-weight="700" fill="#6B6B66" text-anchor="start" letter-spacing="1">IN THE CODE</text>
