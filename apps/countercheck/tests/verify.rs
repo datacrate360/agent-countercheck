@@ -4584,10 +4584,21 @@ fn pointing_project() -> tempfile::TempDir {
     fs::create_dir_all(p.join("deps")).unwrap();
     fs::write(
         p.join("deps/env.sh"),
-        format!("T='{}/tests'\n", p.display()),
+        format!("T='{}/tests'\n", toplevel(p)),
     )
     .unwrap();
     d
+}
+
+/// The project's path as git gives it: the long form an installer writes (Windows CI's temp
+/// folders are otherwise 8.3 short names such as `RUNNER~1`).
+fn toplevel(p: &Path) -> String {
+    let out = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(p)
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
 }
 
 #[test]
@@ -4629,7 +4640,7 @@ fn a_linked_folder_naming_only_itself_stays_verified() {
     // A venv names its own folder everywhere (shebangs, activate scripts): not a way back.
     fs::write(
         p.join("deps/env.sh"),
-        format!("D='{}/deps'\nT=tests\n", p.display()),
+        format!("D='{}/deps'\nT=tests\n", toplevel(p)),
     )
     .unwrap();
     fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();

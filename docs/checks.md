@@ -185,7 +185,8 @@ run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= 
     protected or frozen file. The fix: keep only dependencies in the check's venv and load your code from the
     clean copy: `uv sync --no-install-project` (or `pip install -r requirements.txt`) and
     `run = "PYTHONPATH=src .venv/bin/python -m pytest ..."` (a flat layout needs no `PYTHONPATH`). The same goes for
-    JavaScript workspaces: a `node_modules/<pkg>` symlink to `../packages/<pkg>` points back.
+    JavaScript workspaces: a `node_modules/<pkg>` symlink to `../packages/<pkg>` points back. On Windows a path
+    written in its 8.3 short form (`C:\Users\RUNNER~1\...`) is not recognised; installers write the long form.
   - **A linked folder that changes during a session** (hooks only): `SessionStart` records a fingerprint of each
     linked folder (names, sizes, times; Python's `__pycache__` left out), and the stop hook compares. A package
     installed or edited since makes the run **UNVERIFIED** (`linked_changed`). Start a new session after you change
