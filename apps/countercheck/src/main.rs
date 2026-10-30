@@ -221,6 +221,8 @@ enum HookCmd {
     /// `countercheck hook stop`.
     #[command(alias = "stop")]
     ClaudeStop,
+    /// Codex `Stop` hook: block the stop while the checks fail.
+    CodexStop,
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
     SessionStart,
@@ -241,7 +243,7 @@ enum HookCmd {
 
 #[derive(clap::Args)]
 struct InstallArgs {
-    /// The agent: claude-code, cortex-code (see `countercheck hook status`).
+    /// The agent: claude-code, cortex-code, codex (see `countercheck hook status`).
     #[arg(long)]
     agent: String,
     /// `project` (this repository, committed with it), `user` (every project, for this user), or
@@ -485,6 +487,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             let result = match which {
                 HookCmd::HermesPreVerify => hook::hermes_pre_verify(),
                 HookCmd::ClaudeStop => hook::claude_stop(),
+                HookCmd::CodexStop => agents::codex::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
             };

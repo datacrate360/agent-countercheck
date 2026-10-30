@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **New: OpenAI Codex hook.** `countercheck hook install --agent codex` adds `SessionStart` and `Stop` hooks to
+  `.codex/hooks.json` (`--scope user`: `~/.codex/hooks.json`); the new `hook codex-stop` sends Codex back while the
+  checks fail and labels receipts `codex`. Codex runs it only after you trust it (`/hooks`): see
+  [docs/hooks/codex.md](docs/hooks/codex.md). `verify` from a Codex shell is now named from `CODEX_THREAD_ID` too.
 - **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
   Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
   `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project
