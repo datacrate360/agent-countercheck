@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **New: JetBrains Junie CLI hook.** `countercheck hook install --agent junie` adds `SessionStart` and `Stop` hooks to
+  `~/.junie/config.json` (`$JUNIE_HOME/config.json`); `--scope project` is refused, since Junie runs no hooks from a
+  project's `.junie/config.json`. The new `hook junie-stop` sends Junie back while the checks fail
+  ([docs/hooks/junie.md](docs/hooks/junie.md)).
 - **Fixed:** the session record written at session start named Codex, Copilot, Goose and Kiro sessions `claude-code`
   (or nothing), so a session that never got a receipt showed under the wrong agent on the project page's "Not
   checked" list. It now reads each agent's own input shape. Display only; receipts were always right.

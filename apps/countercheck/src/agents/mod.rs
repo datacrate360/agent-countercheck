@@ -14,6 +14,7 @@ pub mod codex;
 pub mod copilot;
 pub mod cursor;
 pub mod goose;
+pub mod junie;
 pub mod kiro;
 
 use json::Node;
@@ -66,6 +67,7 @@ pub fn all() -> Vec<Target> {
         goose::target(),
         cursor::target(),
         copilot::target(),
+        junie::target(),
     ]
 }
 
@@ -74,6 +76,22 @@ pub const MANUAL: &[(&str, &str)] = &[(
     "hermes",
     "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
 )];
+
+/// Agents that run no hooks from any project file: `--scope project` is refused with the reason,
+/// and `hook install` without `--scope` uses the user file.
+const NO_PROJECT_HOOKS: &[(&str, &str)] = &[("junie", junie::NO_PROJECT_HOOKS)];
+
+/// Variables that move an agent's user folder (the first part of its `user_file`).
+const HOME_VARS: &[(&str, &str)] = &[("junie", "JUNIE_HOME")];
+
+/// The scope asked for, else project, or user for an agent that ignores project hooks.
+fn scope_for(t: &Target, asked: Option<Scope>) -> Scope {
+    asked.unwrap_or(if NO_PROJECT_HOOKS.iter().any(|(a, _)| *a == t.agent) {
+        Scope::User
+    } else {
+        Scope::Project
+    })
+}
 
 /// The command a hook runs: `<bin> hook <sub>`, with `bin` in double quotes when it has spaces
 /// (`C:/Program Files/...`), as a JSON string.
@@ -140,7 +158,8 @@ fn which(name: &str) -> Option<PathBuf> {
 
 pub struct Options {
     pub agent: String,
-    pub scope: Scope,
+    /// `None`: the agent's default ([`scope_for`]).
+    pub scope: Option<Scope>,
     pub repo: PathBuf,
     /// Write without asking.
     pub yes: bool,
@@ -160,6 +179,9 @@ fn home() -> Option<PathBuf> {
 fn file_for(t: &Target, scope: Scope, repo: &Path) -> Result<(PathBuf, Option<PathBuf>), String> {
     match scope {
         Scope::Project => {
+            if let Some((_, why)) = NO_PROJECT_HOOKS.iter().find(|(a, _)| *a == t.agent) {
+                return Err(format!("{}: {why}", t.label));
+            }
             let root = crate::git::toplevel(repo)
                 .map_err(|_| format!("{} is not inside a git repository", repo.display()))?;
             Ok((root.join(t.project_file), Some(root)))
@@ -168,6 +190,15 @@ fn file_for(t: &Target, scope: Scope, repo: &Path) -> Result<(PathBuf, Option<Pa
             let rel = t
                 .user_file
                 .ok_or_else(|| format!("{} has no user-wide hooks file", t.label))?;
+            let moved = HOME_VARS
+                .iter()
+                .find(|(a, _)| *a == t.agent)
+                .and_then(|(_, var)| std::env::var_os(var))
+                .filter(|dir| !dir.is_empty());
+            if let Some(dir) = moved {
+                let rest: PathBuf = Path::new(rel).components().skip(1).collect();
+                return Ok((PathBuf::from(dir).join(rest), None));
+            }
             let home = home().ok_or("no home folder (HOME is not set)")?;
             Ok((home.join(rel), None))
         }
@@ -390,11 +421,12 @@ fn committed(root: &Path, path: &Path) -> bool {
 
 pub fn install(o: &Options) -> Result<(), String> {
     let t = find(&o.agent)?;
-    let (path, root) = file_for(&t, o.scope, &o.repo)?;
+    let scope = scope_for(&t, o.scope);
+    let (path, root) = file_for(&t, scope, &o.repo)?;
     let old = read_settings(&path)?;
     let mut node = parse_settings(&path, old.as_deref())?;
     // Managed hooks run for every user of the machine: name countercheck by its full path.
-    let bin = match o.scope {
+    let bin = match scope {
         Scope::Managed => which(&o.bin)
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| o.bin.clone()),
@@ -462,7 +494,7 @@ pub fn install(o: &Options) -> Result<(), String> {
             );
         }
     }
-    if o.scope == Scope::Managed {
+    if scope == Scope::Managed {
         println!(
             "Managed hooks can't be switched off from user, project or local settings. If your organization already \
              delivers managed settings by MDM or the claude.ai console, Claude Code may use that source instead of \
@@ -479,7 +511,7 @@ pub fn install(o: &Options) -> Result<(), String> {
 
 /// A write refused in the managed folder needs administrator rights: say how.
 fn admin_hint(o: &Options, e: String) -> String {
-    if o.scope != Scope::Managed {
+    if o.scope != Some(Scope::Managed) {
         return e;
     }
     let how = if cfg!(windows) {
@@ -498,7 +530,7 @@ fn admin_hint(o: &Options, e: String) -> String {
 
 pub fn uninstall(o: &Options) -> Result<(), String> {
     let t = find(&o.agent)?;
-    let (path, root) = file_for(&t, o.scope, &o.repo)?;
+    let (path, root) = file_for(&t, scope_for(&t, o.scope), &o.repo)?;
     let Some(old) = read_settings(&path)? else {
         println!(
             "{}: {} doesn't exist; nothing to remove",
