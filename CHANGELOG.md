@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
+  Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
+  `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project
+  or local settings, which closes the `~/.claude/settings.json` gap. A refused write says how to get admin rights.
 - **New (CC-05): `countercheck hook install / uninstall / status`.** `hook install --agent claude-code` (or
   `cortex-code`; `--scope user` for every project) adds the `SessionStart` and `Stop` hooks to the agent's settings:
   it shows the change and asks first (`--yes`, `--dry-run`), keeps the previous file as `*.countercheck-backup`,

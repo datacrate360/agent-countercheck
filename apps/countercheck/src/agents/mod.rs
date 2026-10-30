@@ -92,6 +92,37 @@ fn find(agent: &str) -> Result<Target, String> {
 pub enum Scope {
     Project,
     User,
+    /// Claude Code's managed settings (an admin-owned system folder): hooks there can't be switched
+    /// off from user, project or local settings, so an agent can't undo them.
+    Managed,
+}
+
+/// Claude Code's managed-settings drop-in folder for this OS (`COUNTERCHECK_MANAGED_DIR` replaces
+/// the system folder, for tests and unusual installs). Countercheck writes its own file there, so it
+/// never edits an organization's `managed-settings.json`.
+fn managed_file() -> PathBuf {
+    let dir = match std::env::var_os("COUNTERCHECK_MANAGED_DIR") {
+        Some(d) => PathBuf::from(d),
+        None if cfg!(windows) => PathBuf::from(r"C:\Program Files\ClaudeCode"),
+        None if cfg!(target_os = "macos") => {
+            PathBuf::from("/Library/Application Support/ClaudeCode")
+        }
+        None => PathBuf::from("/etc/claude-code"),
+    };
+    dir.join("managed-settings.d").join("50-countercheck.json")
+}
+
+/// The full path of a program on PATH (a stable link like /opt/homebrew/bin/countercheck), for
+/// managed hooks, which run for every user whatever their PATH.
+fn which(name: &str) -> Option<PathBuf> {
+    if Path::new(name).components().count() > 1 {
+        return None;
+    }
+    let exts: &[&str] = if cfg!(windows) { &["", ".exe"] } else { &[""] };
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths)
+        .flat_map(|d| exts.iter().map(move |e| d.join(format!("{name}{e}"))))
+        .find(|p| p.is_file())
 }
 
 pub struct Options {
@@ -127,6 +158,11 @@ fn file_for(t: &Target, scope: Scope, repo: &Path) -> Result<(PathBuf, Option<Pa
             let home = home().ok_or("no home folder (HOME is not set)")?;
             Ok((home.join(rel), None))
         }
+        Scope::Managed if t.agent == "claude-code" => Ok((managed_file(), None)),
+        Scope::Managed => Err(format!(
+            "--scope managed is Claude Code's managed settings; for {} use --scope user or project",
+            t.label
+        )),
     }
 }
 
@@ -344,7 +380,14 @@ pub fn install(o: &Options) -> Result<(), String> {
     let (path, root) = file_for(&t, o.scope, &o.repo)?;
     let old = read_settings(&path)?;
     let mut node = parse_settings(&path, old.as_deref())?;
-    let added = add(&t, &mut node, &o.bin)?;
+    // Managed hooks run for every user of the machine: name countercheck by its full path.
+    let bin = match o.scope {
+        Scope::Managed => which(&o.bin)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| o.bin.clone()),
+        _ => o.bin.clone(),
+    };
+    let added = add(&t, &mut node, &bin)?;
     let new = json::pretty(&node);
     if added == 0 {
         println!(
@@ -355,10 +398,9 @@ pub fn install(o: &Options) -> Result<(), String> {
         return Ok(());
     }
     print!("{}", diff(&path, old.as_deref().unwrap_or(""), &new));
-    if !runs(&o.bin) {
+    if !runs(&bin) {
         eprintln!(
-            "warning: `{}` is not on PATH here, so the hook would not run: pass --bin <full path to countercheck>",
-            o.bin
+            "warning: `{bin}` is not on PATH here, so the hook would not run: pass --bin <full path to countercheck>"
         );
     }
     if let Some(root) = &root {
@@ -381,7 +423,7 @@ pub fn install(o: &Options) -> Result<(), String> {
         println!("nothing written");
         return Ok(());
     }
-    let backup = write_settings(&path, old.as_deref(), &new)?;
+    let backup = write_settings(&path, old.as_deref(), &new).map_err(|e| admin_hint(o, e))?;
     println!("wrote {}", path.display());
     if let Some(b) = backup {
         println!("the previous version is in {}", b.display());
@@ -399,12 +441,38 @@ pub fn install(o: &Options) -> Result<(), String> {
             "commit it, so Countercheck can tell if an agent removes the hook: git add {rel} && git commit -m \"Countercheck hooks\""
         );
     }
+    if o.scope == Scope::Managed {
+        println!(
+            "Managed hooks can't be switched off from user, project or local settings. If your organization already \
+             delivers managed settings by MDM or the claude.ai console, Claude Code may use that source instead of \
+             this file: ask your administrator to add the hook there. Cloud sessions don't read this file."
+        );
+    }
     println!("{}", t.after);
     println!(
         "more: https://github.com/datacrate360/agent-countercheck/blob/PROD/{}",
         t.docs
     );
     Ok(())
+}
+
+/// A write refused in the managed folder needs administrator rights: say how.
+fn admin_hint(o: &Options, e: String) -> String {
+    if o.scope != Scope::Managed {
+        return e;
+    }
+    let how = if cfg!(windows) {
+        "run it again from a terminal opened as administrator".to_string()
+    } else {
+        format!(
+            "run it again with sudo: sudo {} hook install --agent {} --scope managed",
+            std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "countercheck".to_string()),
+            o.agent
+        )
+    };
+    format!("{e}\nThe managed settings folder needs administrator rights: {how}")
 }
 
 pub fn uninstall(o: &Options) -> Result<(), String> {
@@ -433,7 +501,7 @@ pub fn uninstall(o: &Options) -> Result<(), String> {
         println!("nothing written");
         return Ok(());
     }
-    write_settings(&path, Some(&old), &new)?;
+    write_settings(&path, Some(&old), &new).map_err(|e| admin_hint(o, e))?;
     println!("wrote {}", path.display());
     if root.is_some() {
         println!(
@@ -447,7 +515,7 @@ pub fn uninstall(o: &Options) -> Result<(), String> {
 pub fn status(repo: &Path, bin: &str) -> Result<(), String> {
     let root = crate::git::toplevel(repo).ok();
     for t in all() {
-        for scope in [Scope::Project, Scope::User] {
+        for scope in [Scope::Project, Scope::User, Scope::Managed] {
             let Ok((path, _)) = file_for(&t, scope, repo) else {
                 continue;
             };
@@ -478,6 +546,7 @@ pub fn status(repo: &Path, bin: &str) -> Result<(), String> {
             let where_ = match scope {
                 Scope::Project => "project",
                 Scope::User => "user",
+                Scope::Managed => "managed",
             };
             println!(
                 "{:<12} {:<8} {}  {}",

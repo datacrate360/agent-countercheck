@@ -242,3 +242,90 @@ fn a_countercheck_path_with_spaces_is_quoted() {
         "{s}"
     );
 }
+
+#[test]
+fn managed_scope_writes_its_own_drop_in_file_with_a_full_path() {
+    let d = project();
+    let managed = tempfile::tempdir().unwrap();
+    let envs = [("COUNTERCHECK_MANAGED_DIR", managed.path())];
+    let bin = std::env::current_exe().unwrap();
+    let bin = bin.to_string_lossy().to_string();
+    let o = hook(
+        d.path(),
+        &[
+            "install",
+            "--agent",
+            "claude-code",
+            "--scope",
+            "managed",
+            "-y",
+            "--bin",
+            &bin,
+        ],
+        &envs,
+    );
+    assert!(o.status.success(), "{}", text(&o));
+    let f = managed
+        .path()
+        .join("managed-settings.d/50-countercheck.json");
+    let s = fs::read_to_string(&f).unwrap();
+    assert!(
+        s.contains("hook claude-stop") && s.contains("hook session-start"),
+        "{s}"
+    );
+    assert!(text(&o).contains("can't be switched off"), "{}", text(&o));
+    let st = text(&hook(d.path(), &["status"], &envs));
+    assert!(
+        st.lines().any(|l| l.starts_with("claude-code")
+            && l.contains("managed")
+            && l.contains("installed")),
+        "{st}"
+    );
+    // Only Claude Code has managed settings.
+    let o = hook(
+        d.path(),
+        &[
+            "install",
+            "--agent",
+            "cortex-code",
+            "--scope",
+            "managed",
+            "-y",
+        ],
+        &envs,
+    );
+    assert!(!o.status.success());
+    assert!(
+        text(&o).contains("Claude Code's managed settings"),
+        "{}",
+        text(&o)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_managed_folder_without_write_access_says_how_to_get_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = project();
+    let managed = tempfile::tempdir().unwrap();
+    fs::set_permissions(managed.path(), fs::Permissions::from_mode(0o555)).unwrap();
+    // Root can write anyway: nothing to test then.
+    if fs::write(managed.path().join("probe"), "x").is_ok() {
+        return;
+    }
+    let o = hook(
+        d.path(),
+        &[
+            "install",
+            "--agent",
+            "claude-code",
+            "--scope",
+            "managed",
+            "-y",
+        ],
+        &[("COUNTERCHECK_MANAGED_DIR", managed.path())],
+    );
+    fs::set_permissions(managed.path(), fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(!o.status.success());
+    assert!(text(&o).contains("sudo"), "{}", text(&o));
+}
