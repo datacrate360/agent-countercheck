@@ -107,7 +107,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 
 ### Where it fits
 
-![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose, Kiro and Devin CLI, set up by countercheck hook install, and Hermes Agent), any other agent or person (Aider, Windsurf, Cline, OpenCode, scripts) through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
+![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose, Kiro, Devin CLI, JetBrains Junie CLI and Amp, set up by countercheck hook install, and Hermes Agent and OpenClaw, set up by hand), any other agent or person (Aider, Windsurf, Cline, OpenCode, scripts) through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
 
 | You use | How Countercheck plugs in |
 |---|---|
@@ -182,7 +182,7 @@ Pick one. Each gives you the same `countercheck` command.
 | Direct download | [Releases](https://github.com/datacrate360/agent-countercheck/releases): one file per platform, plus `SHA256SUMS.txt` |
 
 ```sh
-countercheck --version        # countercheck 0.19.0
+countercheck --version        # countercheck 0.20.0
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win).** Countercheck calls `git`, and checks run
@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: datacrate360/agent-countercheck@v0.19.0
+      - uses: datacrate360/agent-countercheck@v0.20.0
 ```
 
 Any other CI: pass where the branch started.
@@ -577,7 +577,7 @@ Yes, MIT-licensed. See [Contribute](#contribute).
 
 A referee has to be right, so it's tested harder than most tools its size:
 
-- **436 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **499 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
   that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 45
   fields changes; `decide` never says VERIFIED when a check failed).
@@ -612,14 +612,14 @@ files and Python). Full reasoning: [docs/decisions/0001-stack.md](docs/decisions
 v0.19.0 ([CHANGELOG](CHANGELOG.md)). Sandbox on macOS and Linux; on Windows a partial one by default and a full one
 after `countercheck windows-setup` (experimental). A GitHub Action on the
 [Marketplace](https://github.com/marketplace/actions/agent-countercheck). Not yet: signed receipts, a per-host network
-allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, hooks for Devin,
-Junie and Amp ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
+allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, live runs of the hooks built from docs
+([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## ⭐ Why star it?
 
 I use Countercheck myself every day on my own agents' work, so I will keep maintaining it.
 
-- **New agents and new fields:** if you need another agent hooked up (OpenCode, Devin, Amp, …) or checks for your
+- **New agents and new fields:** if you need another agent hooked up (OpenCode, Windsurf, Cline, …) or checks for your
   kind of work, [open an issue](https://github.com/datacrate360/agent-countercheck/issues) and I'll add them step by
   step.
 - **Usable, easy, free:** every agent and platform it supports should work, take minutes to set up, and stay free
@@ -640,7 +640,7 @@ migration is knowledge you have and we don't.
 | Open a ["New domain" issue](https://github.com/datacrate360/agent-countercheck/issues/new?template=new-domain.yml): how "done" goes wrong in your work | no |
 | Add an example for your field ([examples/](examples/)) | no |
 | Add a benchmark task that tempts agents to cheat ([eval/](eval/)) | no |
-| Hook another agent (OpenCode, Devin, Amp, …) | yes |
+| Hook another agent (OpenCode, Windsurf, Cline, …) | yes |
 | Add tests, or a check type | yes |
 
 Each has a step-by-step guide in [.claude/skills/](.claude/skills/), written for people and AI coding agents alike.

@@ -1,15 +1,18 @@
 # Changelog
 
-## Unreleased
+## v0.20.0 (2026-10-30)
 
-- **Clearer:** the reason for a protected file put back from base names the files (up to 3, then "and N more") and
-  says what to do when the change was the person's, not the agent's: commit it on its own, so checks use it once the
-  base includes that commit. Reported from a real project, where a `checks.toml` and a CI workflow change each gave
-  FAILED with a reason that named neither.
+Four more agents: `countercheck hook install` now covers ten (Devin CLI, JetBrains Junie CLI and Amp are new), and
+OpenClaw joins Hermes as a hand-set-up hook. A protected-file reason now names the files and says what to do.
+
 - **New: Devin CLI hook.** `countercheck hook install --agent devin` adds `SessionStart` and `Stop` hooks to
   `.devin/hooks.v1.json`; the new `hook devin-stop` sends Devin back while the checks fail. The file is in the tamper
   check (its hooks are the whole file, not a `"hooks"` key), and install warns when `.claude/settings*.json`, which
   Devin CLI also runs, has Countercheck hooks too.
+- **New: JetBrains Junie CLI hook.** `countercheck hook install --agent junie` adds `SessionStart` and `Stop` hooks to
+  `~/.junie/config.json` (`$JUNIE_HOME/config.json`); `--scope project` is refused, since Junie runs no hooks from a
+  project's `.junie/config.json`. The new `hook junie-stop` sends Junie back while the checks fail
+  ([docs/hooks/junie.md](docs/hooks/junie.md)).
 - **New:** Amp: `countercheck hook install --agent amp` writes a small plugin, `.amp/plugins/countercheck.ts`, that runs
   `countercheck hook amp-stop` when the agent ends a turn and sends it back while the checks fail. The tamper check
   compares the committed plugin byte for byte ([docs/hooks/amp.md](docs/hooks/amp.md)).
@@ -17,17 +20,15 @@
   `before_agent_finalize`, sends the agent back (`revise`) while the checks fail. Set up by hand
   ([docs/hooks/openclaw.md](docs/hooks/openclaw.md)): OpenClaw plugins live outside the repository and need a
   conversation-access grant, so `hook install --agent openclaw` points to the page.
-- **Internal:** `hook install` can install agents whose hook is a whole plugin file (TypeScript, for Amp and
-  OpenClaw next): written only over nothing or an older Countercheck plugin, removed only if unchanged, and compared
-  byte for byte by the tamper check (`hook_settings::PLUGIN_FILES`). No agent uses it yet; nothing changes for the
-  existing seven.
-- **New: JetBrains Junie CLI hook.** `countercheck hook install --agent junie` adds `SessionStart` and `Stop` hooks to
-  `~/.junie/config.json` (`$JUNIE_HOME/config.json`); `--scope project` is refused, since Junie runs no hooks from a
-  project's `.junie/config.json`. The new `hook junie-stop` sends Junie back while the checks fail
-  ([docs/hooks/junie.md](docs/hooks/junie.md)).
+- **Clearer:** the reason for a protected file put back from base names the files (up to 3, then "and N more") and
+  says what to do when the change was the person's, not the agent's: commit it on its own, so checks use it once the
+  base includes that commit. Reported from a real project, where a `checks.toml` and a CI workflow change each gave
+  FAILED with a reason that named neither.
 - **Fixed:** the session record written at session start named Codex, Copilot, Goose and Kiro sessions `claude-code`
   (or nothing), so a session that never got a receipt showed under the wrong agent on the project page's "Not
   checked" list. It now reads each agent's own input shape. Display only; receipts were always right.
+- **Internal:** `hook install` can install agents whose hook is a whole plugin file (TypeScript, used by Amp): written only over nothing or an older Countercheck plugin, removed only if unchanged,
+  and compared byte for byte by the tamper check (`hook_settings::PLUGIN_FILES`).
 - **Docs:** `docs/architecture.md` matches 0.19 (the ADR-0005 exception, every agent's hook file in the tamper check,
   new agents go in `agents/`); `--agent` and `hook install --agent` help list every agent.
 
