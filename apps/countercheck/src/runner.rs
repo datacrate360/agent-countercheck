@@ -764,7 +764,10 @@ pub fn run_check(
     }
     cmd.current_dir(workdir)
         .env("COUNTERCHECK", "1")
-        .env("TMPDIR", tmp);
+        .env("TMPDIR", tmp)
+        // Python reads and writes bytecode caches here, never in `__pycache__` folders: a cache
+        // planted in a linked venv (or anywhere a check reads) can't stand in for the source.
+        .env("PYTHONPYCACHEPREFIX", tmp.join("pycache"));
     if cfg!(windows) {
         // Windows programs use TEMP/TMP, not TMPDIR: keep their temp files in the check folder too.
         cmd.env("TEMP", tmp).env("TMP", tmp);

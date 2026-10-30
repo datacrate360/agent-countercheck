@@ -60,10 +60,14 @@ fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
     // Hook settings are compared with the session's start, never with `COUNTERCHECK_BASE`: a
     // settings file can set that variable for the hook, and point it past its own change.
     let settings_base = recorded_base(&input.cwd, &input.session);
+    let linked_at_start = recorded_linked(&input.cwd, &input.session);
     let opts = verify::Options {
         repo: input.cwd,
         base,
         settings_base,
+        linked_at_start,
+        // A project asks for committed work in its checks.toml (`require_clean`).
+        require_clean: false,
         claim: input.claim,
         worker: Worker {
             agent: Some(input.agent.to_string()),
@@ -296,10 +300,13 @@ pub fn stop_message(r: &Receipt, d: &Decision, gave_up: bool) -> String {
             "✓ Countercheck: VERIFIED, {checks} check(s) passed in a clean copy{uncommitted} (receipt {})",
             r.id
         ),
+        // The reason that kept it from VERIFIED, not the "all checks passed" summary before it.
         (Verdict::Unverified, _) => format!(
             "Countercheck: UNVERIFIED: {} (receipt {})",
             r.reasons
-                .first()
+                .iter()
+                .find(|x| !(x.starts_with("all ") && x.contains("passed in a clean copy")))
+                .or(r.reasons.first())
                 .map(String::as_str)
                 .unwrap_or("not proven"),
             r.id
@@ -373,6 +380,43 @@ fn recorded_model(cwd: &Path, session: &str) -> Option<String> {
     v.get("model")?.as_str().map(str::to_string)
 }
 
+/// The fingerprints of the linked folders SessionStart recorded (`None` for records written by
+/// older versions, or when the project links nothing).
+fn recorded_linked(
+    cwd: &Path,
+    session: &str,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let map = v.get("linked")?.as_object()?;
+    Some(
+        map.iter()
+            .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+            .collect(),
+    )
+}
+
+/// Fingerprints of the folders the checks at `commit` link (`link = [...]`), to tell at the stop
+/// whether one changed during the session. Empty when there is no check file or it doesn't parse.
+fn linked_fingerprints(root: &Path, commit: &str) -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    let Ok(mut rev) = git::Revision::load(root, commit) else {
+        return out;
+    };
+    let Ok(Some(bytes)) = rev.read(countercheck_core::config::CHECKS_PATH) else {
+        return out;
+    };
+    let Ok(checks) = countercheck_core::config::parse(&String::from_utf8_lossy(&bytes)) else {
+        return out;
+    };
+    for name in &checks.link {
+        if let Some(fp) = crate::linkscan::fingerprint(root, name) {
+            out.insert(name.clone(), serde_json::Value::String(fp));
+        }
+    }
+    out
+}
+
 /// The recorded start commit, if there is one and it still exists.
 fn recorded_base(cwd: &Path, session: &str) -> Option<String> {
     let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
@@ -420,6 +464,8 @@ pub fn session_start() -> Result<(), String> {
             "session_id": session,
             "base": head,
             "recorded_at_unix": now,
+            // The linked folders (a venv) as they were at the start: the stop hook compares.
+            "linked": linked_fingerprints(&root, &head),
             // Shown on the project page if this session never gets a receipt.
             "agent": match payload.get("transcript_path").and_then(|v| v.as_str()) {
                 Some(t) => Some(agent_from_transcript(t)),

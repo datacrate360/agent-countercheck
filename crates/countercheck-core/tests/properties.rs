@@ -229,6 +229,8 @@ fn receipt() -> impl Strategy<Value = Receipt> {
                 uncovered,
                 watched,
                 hook_settings: Vec::new(),
+                linked_pointers: Vec::new(),
+                linked_changed: Vec::new(),
                 verdict,
                 reasons,
             },
@@ -294,7 +296,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 41;
+const EDITS: usize = 44;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -361,6 +363,17 @@ fn edit(r: &mut Receipt, which: usize) {
         31 => first_check(r).network ^= true,
         39 => r.worker.role = other_opt(&r.worker.role),
         40 => r.worker.session = other_opt(&r.worker.session),
+        41 => r
+            .hook_settings
+            .push(countercheck_core::hook_settings::HookSettingsChange {
+                path: ".claude/settings.json".into(),
+                what: "turns all hooks off".into(),
+            }),
+        42 => r.linked_pointers.push(countercheck_core::linked::Pointer {
+            file: ".venv/x.pth".into(),
+            target: "src".into(),
+        }),
+        43 => r.linked_changed.push(".venv".into()),
         36 => first_check(r).writes.push("/var/tmp/x".into()),
         37 => match &mut r.checks_external {
             Some(e) => e.pinned ^= true,

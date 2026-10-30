@@ -53,10 +53,16 @@ Commit `.countercheck/checks.toml` first (`countercheck init`), then add this to
 
 Set `timeout` (seconds) longer than your checks take. If the hook times out, the agent stops.
 
+`countercheck hook stop` is the same hook under a shorter name (0.18+); Cortex Code users can use it so the
+settings don't say "claude". Changing an existing hook to it is a settings change like any other: commit it, or the
+next run reports the hook as changed.
+
 **Why `SessionStart`:** it records the commit the session started from (in `.git/countercheck/sessions/`, outside
 your files). The Stop hook then locks the checks to that commit. Without it the checks are locked to `HEAD`, so an
 agent that **commits** an edit to a test or to `checks.toml` would move the "locked" rules with it. A resumed session
-keeps its first start.
+keeps its first start. It also records a fingerprint of each folder in `link` (a `.venv`): if one changes during the
+session (a package installed or edited), the stop says UNVERIFIED, since the checks may have run with tools the agent
+changed. Start a new session after you change the venv yourself.
 
 ## Windows
 

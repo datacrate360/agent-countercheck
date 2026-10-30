@@ -13,6 +13,7 @@ mod external;
 mod git;
 mod golden;
 mod hook;
+mod linkscan;
 #[cfg(target_os = "linux")]
 mod linux_sandbox;
 mod progress;
@@ -100,6 +101,10 @@ enum Cmd {
         /// The SHA-256 the --checks-from file must have (pins it).
         #[arg(long, value_name = "HEX", requires = "checks_from")]
         checks_sha256: Option<String>,
+        /// VERIFIED only for committed work: uncommitted changes make the run UNVERIFIED (also
+        /// `require_clean = true` in checks.toml).
+        #[arg(long)]
+        require_clean: bool,
     },
     /// (internal) Run one check inside the Linux or Windows sandbox; started by `verify`.
     #[command(hide = true)]
@@ -211,7 +216,9 @@ enum Cmd {
 enum HookCmd {
     /// Hermes `pre_verify` hook: keep Hermes working while the checks fail.
     HermesPreVerify,
-    /// Claude Code (and Cortex Code) `Stop` hook: block the stop while the checks fail.
+    /// Claude Code and Cortex Code `Stop` hook: block the stop while the checks fail. Also
+    /// `countercheck hook stop`.
+    #[command(alias = "stop")]
     ClaudeStop,
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
@@ -273,6 +280,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             out,
             checks_from,
             checks_sha256,
+            require_clean,
         } => {
             let sandbox_arg = sandbox;
             let sandbox = match sandbox {
@@ -372,6 +380,8 @@ fn run(cli: Cli) -> Result<u8, String> {
                 checks_sha256,
                 // `--base` is given by whoever runs verify, not read from the project.
                 settings_base: None,
+                linked_at_start: None,
+                require_clean,
             };
             let (receipt, path) = verify::verify(&opts)?;
             if json {

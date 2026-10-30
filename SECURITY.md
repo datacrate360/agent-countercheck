@@ -39,4 +39,7 @@ We aim to reply within a few days and to credit reporters who want credit.
 - `crates/countercheck-winsandbox` is the only crate allowed to use `unsafe` (Win32 calls with no safe crate); every
   block carries a `SAFETY:` note, and a bug there is in scope.
 - Folders listed under `link` come from the worker's tree and are not part of the checked snapshot; receipts say so.
+  Countercheck refuses to vouch for a run when one points back into the project (an editable install) and, in a
+  hooked session, when one changed since the session started; a change made before the session, or between runs of
+  a hand-run `verify`, is not detected. Run the checks in CI with a fresh environment for a guarantee.
 - Receipts are sealed with a hash, not yet signed.
