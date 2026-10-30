@@ -18,6 +18,7 @@ pub mod devin;
 pub mod goose;
 pub mod junie;
 pub mod kiro;
+pub mod openclaw;
 
 use json::Node;
 use std::io::IsTerminal;
@@ -108,10 +109,16 @@ pub fn all() -> Vec<Target> {
 }
 
 /// Agents with hooks Countercheck can't write for you (no project file, or not JSON).
-pub const MANUAL: &[(&str, &str)] = &[(
-    "hermes",
-    "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
-)];
+pub const MANUAL: &[(&str, &str)] = &[
+    (
+        "hermes",
+        "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
+    ),
+    (
+        "openclaw",
+        "a plugin folder plus a grant in ~/.openclaw/openclaw.json: see docs/hooks/openclaw.md",
+    ),
+];
 
 /// Agents that run no hooks from any project file: `--scope project` is refused with the reason,
 /// and `hook install` without `--scope` uses the user file.

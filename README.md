@@ -120,6 +120,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | JetBrains Junie CLI | a `Stop` hook in your user config: `countercheck hook install --agent junie` (Junie runs no hooks from a project file; [page](docs/hooks/junie.md); built from Junie's docs and code, not yet run in a real Junie session) |
 | Amp | a plugin on `agent.end`: `countercheck hook install --agent amp` ([page](docs/hooks/amp.md); built from Amp's Plugin API docs, not yet run in a live Amp thread) |
+| OpenClaw | a `before_agent_finalize` plugin, installed with `openclaw plugins install` and granted conversation access ([page](docs/hooks/openclaw.md); set up by hand; run with OpenClaw 2026.10.9 against a stand-in model) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Devin CLI | a `Stop` hook: `countercheck hook install --agent devin` ([page](docs/hooks/devin.md); built from Devin's docs and CLI binary, not yet run in a real Devin session) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
@@ -612,7 +613,7 @@ v0.19.0 ([CHANGELOG](CHANGELOG.md)). Sandbox on macOS and Linux; on Windows a pa
 after `countercheck windows-setup` (experimental). A GitHub Action on the
 [Marketplace](https://github.com/marketplace/actions/agent-countercheck). Not yet: signed receipts, a per-host network
 allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, hooks for Devin,
-Junie, Amp and OpenClaw ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
+Junie and Amp ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## ⭐ Why star it?
 

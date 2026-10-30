@@ -239,6 +239,9 @@ enum HookCmd {
     CopilotStop,
     /// Amp `agent.end`, from Countercheck's Amp plugin: send the agent back while the checks fail.
     AmpStop,
+    /// OpenClaw `before_agent_finalize` (relayed by Countercheck's OpenClaw plugin): ask for
+    /// another pass while the checks fail.
+    OpenclawStop,
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
     SessionStart,
@@ -515,6 +518,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                 HookCmd::DevinStop => agents::devin::stop(),
                 HookCmd::CopilotStop => agents::copilot::stop(),
                 HookCmd::AmpStop => agents::amp::stop(),
+                HookCmd::OpenclawStop => agents::openclaw::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
             };

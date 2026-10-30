@@ -26,6 +26,8 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | Amp | `agent.end` in a plugin (continue + user message) | **Gated**: `hook install --agent amp` writes the plugin ([page](amp.md)) | Tested end to end in CI with the plugin's payloads, and the plugin run under Bun with a stand-in for Amp's API; not yet run in a live Amp thread |
 | Devin CLI, JetBrains Junie CLI, OpenClaw | a blocking finish hook | Report only | Planned |
+| OpenClaw (embedded runner, Gateway) | `before_agent_finalize` plugin hook (revise + reason); not dispatched under the Copilot harness | **Gated**: a plugin set up by hand with `openclaw plugins install`, plus the `allowConversationAccess` grant ([page](openclaw.md)) | Tested end to end in CI (the plugin under Node too); run with OpenClaw 2026.10.9 against a stand-in model (sent back 3 times, then OpenClaw's cap) |
+| Devin CLI, JetBrains Junie CLI, Amp | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
 
