@@ -149,9 +149,29 @@ changes a verdict. It needs the `SessionStart` hook from the setup above.
 The hooks stop the common shortcuts: editing or skipping a protected test, editing `checks.toml`, committing either,
 planting a fake output, switching the hook off in the project's settings. An agent with a shell could still go further
 on purpose (rewrite files under `.git/`, edit your user settings in `~/.claude/`, run with
-`COUNTERCHECK_HOOK_DISABLED=1` in its own shell). Hooks in Claude Code's managed settings can't be turned off from
-the project at all. The hard guarantee is the same check in CI, against a base the agent can't touch:
-`countercheck verify --base origin/main`.
+`COUNTERCHECK_HOOK_DISABLED=1` in its own shell). The hard guarantee is the same check in CI, against a base the
+agent can't touch: `countercheck verify --base origin/main`.
+
+### Strict mode: managed settings
+
+```sh
+sudo countercheck hook install --agent claude-code --scope managed    # Windows: an administrator terminal
+```
+
+This writes Countercheck's own file into Claude Code's managed settings folder
+(`managed-settings.d/50-countercheck.json` in `/Library/Application Support/ClaudeCode/` on macOS,
+`/etc/claude-code/` on Linux and WSL, `C:\Program Files\ClaudeCode\` on Windows), next to any policy already
+there, never inside it. The command names `countercheck` by its full path, since the hook runs for every user of the
+machine. Per Claude Code's docs ([hooks](https://code.claude.com/docs/en/hooks.md),
+[managed settings](https://code.claude.com/docs/en/managed-settings.md)): hooks from managed settings merge with
+everyone's own hooks, and `disableAllHooks` in user, project or local settings can't switch them off, so the agent
+(which can't write a system folder without an administrator password) can't either. Not tried on a real machine yet:
+it would hook every session on it.
+
+Limits: if your organization already delivers managed settings by MDM or from the claude.ai console, Claude Code may
+use that source instead of the files, so ask your administrator to add the hook there; cloud sessions don't read this
+folder. `countercheck hook status` shows the managed line; `sudo countercheck hook uninstall --agent claude-code
+--scope managed` removes it.
 
 ## Cortex Code
 

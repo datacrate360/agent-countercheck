@@ -244,7 +244,8 @@ struct InstallArgs {
     /// The agent: claude-code, cortex-code (see `countercheck hook status`).
     #[arg(long)]
     agent: String,
-    /// `project` (this repository, committed with it) or `user` (every project, for this user).
+    /// `project` (this repository, committed with it), `user` (every project, for this user), or
+    /// `managed` (Claude Code only: every user of this machine, can't be switched off; needs admin).
     #[arg(long, value_enum, default_value = "project")]
     scope: ScopeArg,
     /// Project (any folder inside it).
@@ -265,6 +266,7 @@ struct InstallArgs {
 enum ScopeArg {
     Project,
     User,
+    Managed,
 }
 
 impl InstallArgs {
@@ -274,6 +276,7 @@ impl InstallArgs {
             scope: match self.scope {
                 ScopeArg::Project => agents::Scope::Project,
                 ScopeArg::User => agents::Scope::User,
+                ScopeArg::Managed => agents::Scope::Managed,
             },
             repo: self.repo,
             yes: self.yes,
