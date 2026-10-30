@@ -103,11 +103,16 @@ fn stop(input: &str, cwd: &Path, envs: &[(&str, &str)]) -> Run {
     run("goose-stop", input, cwd, envs)
 }
 
-/// The turn may end: exactly Goose's clean allow, and the user's line on stderr.
+/// The turn may end: exactly Goose's clean allow, and the user's line on stderr (other notes, such
+/// as Windows' unsandboxed `sh` checks, may come before it).
 fn allows(r: &Run) -> &str {
     assert_eq!(r.code, 0, "{}", r.stderr);
     assert_eq!(r.stdout.trim(), r#"{"decision":"allow"}"#, "{}", r.stderr);
-    r.stderr.trim()
+    r.stderr
+        .lines()
+        .find(|l| l.contains("Countercheck:"))
+        .unwrap_or_else(|| panic!("no Countercheck line on stderr: {}", r.stderr))
+        .trim()
 }
 
 /// The reason in a Goose block, or panic.
