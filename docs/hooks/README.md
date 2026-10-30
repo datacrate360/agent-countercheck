@@ -23,6 +23,8 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
 | Devin CLI | `Stop` (block + reason), in `.devin/hooks.v1.json` | **Gated**: `hook install --agent devin` ([page](devin.md)) | Tested end to end in CI with payloads from Devin's docs and CLI binary (3000.11.234); not yet run in a real Devin session |
 | JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
+| JetBrains Junie CLI (EAP; CLI interactive and `-p`, not the IDE/ACP) | `Stop` (block + reason); no hooks from project files | **Gated**: `hook install --agent junie`, user scope only ([page](junie.md)) | Tested end to end in CI with payloads from Junie's docs and its 26.11.3 code; not yet run in a real Junie session |
+| Devin CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
 
@@ -32,8 +34,9 @@ just runs after the agent instead of stopping it. The usual ways: ask the agent 
 yourself, or let CI run it on every pull request.
 
 Hook details come from each agent's own documentation (checked in October 2026); "How sure" says which rows were
-also run against the real agent. Since 0.19 every hook file `hook install` writes is guarded: if the agent removes or
-weakens Countercheck's hook in a committed file, the next run is FAILED, naming the file.
+also run against the real agent. Since 0.19 every project hook file `hook install` writes is guarded: if the agent removes
+or weakens Countercheck's hook in a committed file, the next run is FAILED, naming the file. User files (`--scope
+user`, and Junie's `~/.junie/config.json`) are outside the repository and aren't compared.
 
 ## Adding an agent
 
