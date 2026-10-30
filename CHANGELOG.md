@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+Linked folders (a `.venv`, `node_modules`) can no longer carry the agent's own files into the checks.
+
+**Upgrade:** recommended for everyone with `link` in `checks.toml`, required for Python projects installed into a
+linked venv in editable mode (`pip install -e .`, `uv sync` with a `src/` layout): their runs said VERIFIED for a
+protected file the agent changed. Such a venv now makes runs UNVERIFIED until it holds only dependencies; see
+`docs/checks.md` ("Lock the test runner's settings").
+
+- **Security: a linked folder that points back into the project.** An editable install writes the project's own path
+  into the venv, so a check imported the agent's real files instead of the clean copy: a protected file Countercheck
+  put back was not what ran, and the receipt said it was. Countercheck now reads each linked folder 4 levels deep
+  for files and symlinks that name a project path outside the linked folders (an editable `.pth` or finder, a
+  workspace `node_modules/<pkg>` symlink) and lists them as `linked_pointers`. The run is UNVERIFIED, or FAILED when
+  the agent also changed a protected or frozen file (the hook sends it back).
+- **New (CC-22): a linked folder that changes during a session.** `SessionStart` records a fingerprint of each
+  linked folder; the stop hook compares, and a package installed or edited since makes the run UNVERIFIED
+  (`linked_changed`). Checks run with `PYTHONPYCACHEPREFIX` in their temp folder, so a planted bytecode cache can't
+  stand in for a source file.
+- **New (CC-23): `require_clean = true`** in `checks.toml` (or `verify --require-clean`): a run that includes
+  uncommitted changes is UNVERIFIED, so VERIFIED also means the commit passes. Older versions refuse the key.
+- **New (CC-24): `countercheck hook stop`**, the same Stop hook as `claude-stop` under a name that fits Cortex Code.
+- The UNVERIFIED line the hook shows now gives the reason that kept the run from VERIFIED, not the "all checks
+  passed" summary.
+
 ## v0.17.0 (2026-10-29)
 
 Fixes from the first real Cortex Code setup, found by a user and his agent.

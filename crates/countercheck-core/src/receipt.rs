@@ -157,6 +157,13 @@ pub struct Receipt {
     /// there are none (and on older receipts, so their seals still verify).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hook_settings: Vec<crate::hook_settings::HookSettingsChange>,
+    /// Files in linked folders that point back into the project (an editable install), at most
+    /// `linked::MAX_LISTED`. Left out when there are none, so older receipts keep their seal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_pointers: Vec<crate::linked::Pointer>,
+    /// Linked folders that changed since the session started (hooks only).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_changed: Vec<String>,
     pub verdict: Verdict,
     pub reasons: Vec<String>,
 }
@@ -326,6 +333,15 @@ impl Receipt {
         for h in &self.hook_settings {
             s.push_str(&format!("  hooks:    {} {}\n", h.path, h.what));
         }
+        for p in &self.linked_pointers {
+            s.push_str(&format!(
+                "  linked:   {} points back into the project: {}\n",
+                p.file, p.target
+            ));
+        }
+        for name in &self.linked_changed {
+            s.push_str(&format!("  linked:   {name} changed during this session\n"));
+        }
         for r in &self.checks {
             let mark = if r.passed { "pass" } else { "FAIL" };
             let net = if r.network { ", internet allowed" } else { "" };
@@ -448,6 +464,8 @@ mod tests {
             uncovered: None,
             watched: None,
             hook_settings: Vec::new(),
+            linked_pointers: Vec::new(),
+            linked_changed: Vec::new(),
             checks: vec![],
             verdict: Verdict::Unverified,
             reasons: vec![],
@@ -604,6 +622,8 @@ mod tests {
             uncovered: None,
             watched: None,
             hook_settings: Vec::new(),
+            linked_pointers: Vec::new(),
+            linked_changed: Vec::new(),
             checks: vec![result(false)],
             verdict: Verdict::Failed,
             reasons: vec![],
@@ -654,6 +674,8 @@ mod tests {
                 uncovered: None,
                 watched: None,
                 hook_settings: Vec::new(),
+                linked_pointers: Vec::new(),
+                linked_changed: Vec::new(),
                 checks: vec![],
                 verdict: Verdict::Unverified,
                 reasons: vec![],

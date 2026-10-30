@@ -4557,3 +4557,187 @@ fn a_linked_folder_that_is_a_symlink_is_still_linked() {
     assert_eq!(r["linked"][0], "deps", "{r:#}");
     assert!(!r.to_string().contains("removed_outside_link"), "{r:#}");
 }
+
+// ---- v0.18.0: linked folders that point back, change during a session; require_clean ----
+
+/// A project whose locked check reads its test through a linked `deps` folder, the way an editable
+/// install's `.pth` file sends Python to the project's real `src`: `deps/env.sh` (git-ignored, from
+/// the worker's tree) names the real project's `tests` folder by its absolute path.
+fn pointing_project() -> tempfile::TempDir {
+    let checks = "protected = [\"tests/**\"]\nlink = [\"deps\"]\n[[check]]\nname = \"calc\"\nrun = \"sh tests/check.sh\"\ntimeout_secs = 30\n";
+    let d = project(checks);
+    let p = d.path();
+    fs::write(
+        p.join("tests/check.sh"),
+        ". deps/env.sh\nsh \"$T/real.sh\"\n",
+    )
+    .unwrap();
+    fs::write(
+        p.join("tests/real.sh"),
+        "[ \"$(sh src/calc.sh 2 3)\" = 5 ]\n",
+    )
+    .unwrap();
+    sh(
+        p,
+        "echo deps/ > .gitignore && git add -A && git commit -qm 'test via deps'",
+    );
+    fs::create_dir_all(p.join("deps")).unwrap();
+    fs::write(
+        p.join("deps/env.sh"),
+        format!("T='{}/tests'\n", toplevel(p)),
+    )
+    .unwrap();
+    d
+}
+
+/// The project's path as git gives it: the long form an installer writes (Windows CI's temp
+/// folders are otherwise 8.3 short names such as `RUNNER~1`).
+fn toplevel(p: &Path) -> String {
+    let out = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(p)
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+#[test]
+fn a_linked_folder_pointing_back_cannot_bring_back_a_changed_protected_file() {
+    let d = pointing_project();
+    // The agent weakens the protected test. Countercheck puts it back in the clean copy, but the
+    // check reads the real folder through deps/env.sh: v0.17.0 said VERIFIED.
+    fs::write(d.path().join("tests/real.sh"), "exit 0\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["verdict"], "failed");
+    assert_eq!(r["linked_pointers"][0]["file"], "deps/env.sh", "{r:#}");
+    assert_eq!(r["linked_pointers"][0]["target"], "tests", "{r:#}");
+    assert!(
+        r["reasons"]
+            .to_string()
+            .contains("points back into the project"),
+        "{r:#}"
+    );
+}
+
+#[test]
+fn an_honest_fix_through_a_pointer_back_is_unverified_not_verified() {
+    let d = pointing_project();
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 3, "{r:#}");
+    assert_eq!(r["verdict"], "unverified");
+    assert!(
+        r["reasons"].to_string().contains("non-editable install"),
+        "{r:#}"
+    );
+}
+
+#[test]
+fn a_linked_folder_naming_only_itself_stays_verified() {
+    let d = pointing_project();
+    let p = d.path();
+    // A venv names its own folder everywhere (shebangs, activate scripts): not a way back.
+    fs::write(
+        p.join("deps/env.sh"),
+        format!("D='{}/deps'\nT=tests\n", toplevel(p)),
+    )
+    .unwrap();
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 0, "{r:#}");
+    assert!(r.get("linked_pointers").is_none(), "{r:#}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_in_a_linked_folder_back_into_the_project_is_found() {
+    let d = pointing_project();
+    let p = d.path();
+    // A workspace package: node_modules/<name> -> ../packages/<name>. Relative, so it resolves
+    // inside the worker's real folder, not the clean copy.
+    fs::write(p.join("deps/env.sh"), "T=deps/t\n").unwrap();
+    std::os::unix::fs::symlink("../tests", p.join("deps/t")).unwrap();
+    fs::write(p.join("tests/real.sh"), "exit 0\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["linked_pointers"][0]["file"], "deps/t", "{r:#}");
+    assert_eq!(r["linked_pointers"][0]["target"], "tests", "{r:#}");
+}
+
+/// A hooked project with a linked tool folder the check runs.
+fn hooked_linked_project() -> tempfile::TempDir {
+    let checks = "protected = [\"tests/**\"]\nlink = [\"deps\"]\n[[check]]\nname = \"calc\"\nrun = \"sh deps/tool.sh\"\ntimeout_secs = 30\n";
+    let d = project(checks);
+    let p = d.path();
+    fs::create_dir_all(p.join(".claude")).unwrap();
+    fs::write(p.join(".claude/settings.json"), CLAUDE_SETTINGS).unwrap();
+    sh(
+        p,
+        "echo deps/ > .gitignore && git add -A && git commit -qm hook",
+    );
+    fs::create_dir_all(p.join("deps")).unwrap();
+    fs::write(p.join("deps/tool.sh"), "sh tests/check.sh\n").unwrap();
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    d
+}
+
+#[test]
+fn a_linked_folder_changed_during_the_session_is_unverified() {
+    let d = hooked_linked_project();
+    session_start(d.path(), "s1");
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s1", "Done."), &[]);
+    assert!(lets_stop(&out).contains("VERIFIED"), "{out}");
+    // The agent patches the linked tool so it passes whatever the code does.
+    fs::write(d.path().join("deps/tool.sh"), "exit 0\n").unwrap();
+    fs::write(d.path().join("src/calc.sh"), "echo 0\n").unwrap();
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s1", "Done."), &[]);
+    let msg = lets_stop(&out);
+    assert!(msg.contains("UNVERIFIED"), "{msg}");
+    assert!(msg.contains("deps changed during this session"), "{msg}");
+    // A new session starts from the folder as it is now.
+    session_start(d.path(), "s2");
+    let (_, out) = claude_hook(&claude_payload(d.path(), "s2", "Done."), &[]);
+    assert!(lets_stop(&out).contains("VERIFIED"), "{out}");
+}
+
+#[test]
+fn require_clean_verifies_only_committed_work() {
+    let d = project(&format!("require_clean = true\n{CHECKS}"));
+    let p = d.path();
+    fs::write(p.join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 3, "{r:#}");
+    assert!(
+        r["reasons"].to_string().contains("uncommitted changes"),
+        "{r:#}"
+    );
+    sh(p, "git commit -qam fix");
+    let (code, r) = countercheck(p, &["--base", "HEAD~1"]);
+    assert_eq!(code, 0, "{r:#}");
+
+    // The same from the command line, for a project that doesn't ask for it.
+    let d = project(CHECKS);
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    assert_eq!(countercheck(d.path(), &[]).0, 0);
+    assert_eq!(countercheck(d.path(), &["--require-clean"]).0, 3);
+}
+
+#[test]
+fn hook_stop_is_the_same_hook_as_claude_stop() {
+    let d = project(CHECKS);
+    let (_, out) = run_hook(
+        "stop",
+        &claude_payload(d.path(), "s1", "Fixed it, all tests pass."),
+        &[],
+    );
+    assert!(block_reason(&out).contains("FAILED"), "{out}");
+}
+
+#[test]
+fn checks_keep_python_bytecode_caches_out_of_the_folders_they_read() {
+    let checks = "[[check]]\nname = \"prefix\"\nrun = \"[ -n \\\"$PYTHONPYCACHEPREFIX\\\" ]\"\n";
+    let d = project(checks);
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 0, "{r:#}");
+}

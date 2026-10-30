@@ -923,6 +923,8 @@ mod tests {
             uncovered: None,
             watched: None,
             hook_settings: Vec::new(),
+            linked_pointers: Vec::new(),
+            linked_changed: Vec::new(),
             checks,
             verdict,
             reasons: vec!["check \"t\" failed".to_string()],

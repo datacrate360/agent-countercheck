@@ -6,7 +6,7 @@ use countercheck_core::config::{self, CHECKS_PATH};
 use countercheck_core::gitobj::{self, Diff, Files};
 use countercheck_core::progress::Stage;
 use countercheck_core::protect::{Change, Protected, ProtectedChange};
-use countercheck_core::receipt::{self, Receipt, RepoInfo, Worker};
+use countercheck_core::receipt::{self, Receipt, RepoInfo, Verdict, Worker};
 use countercheck_core::{hook_settings, uncovered, watched};
 use std::path::PathBuf;
 
@@ -31,6 +31,11 @@ pub struct Options {
     /// pass the commit their session started from, which nothing in the project can move, while
     /// `base` may come from `COUNTERCHECK_BASE`, which a settings file's `env` block can set.
     pub settings_base: Option<String>,
+    /// Fingerprints of the linked folders when the hook's session started (`linkscan`); a folder
+    /// that changed since makes a VERIFIED UNVERIFIED.
+    pub linked_at_start: Option<std::collections::BTreeMap<String, String>>,
+    /// `--require-clean`: uncommitted work can't be VERIFIED (as `require_clean` in the checks).
+    pub require_clean: bool,
 }
 
 /// Where the checks and the files they name (matrix files, coverage lists, golden references)
@@ -268,6 +273,20 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             linked.push(name.clone());
         }
     }
+    // What the linked folders could undo: pointers back into the project, and changes made
+    // since the session started. Read before any check runs.
+    let (linked_pointers, pointers_total) = crate::linkscan::pointers(&root, &linked);
+    let mut linked_changed = Vec::new();
+    if let Some(start) = &opts.linked_at_start {
+        for name in &linked {
+            if let Some(was) = start.get(name) {
+                let now = crate::linkscan::fingerprint(&root, name);
+                if now.as_deref() != Some(was.as_str()) || was == "too-large" {
+                    linked_changed.push(name.clone());
+                }
+            }
+        }
+    }
 
     // 4. Scan the worker's files before any command can change them, then run every check.
     let mut scan_results = Vec::new();
@@ -412,6 +431,23 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         ));
     }
     let (verdict, reasons) = hook_settings::apply(verdict, reasons, &hook_settings);
+    let (verdict, mut reasons) = countercheck_core::linked::apply(
+        verdict,
+        reasons,
+        &linked_pointers,
+        pointers_total,
+        &protected_changes,
+        &linked_changed,
+    );
+    let mut verdict = verdict;
+    if (checks.require_clean || opts.require_clean) && dirty && verdict == Verdict::Verified {
+        reasons.push(
+            "the work includes uncommitted changes, and this project asks for committed work (require_clean): \
+             commit it and run again"
+                .to_string(),
+        );
+        verdict = Verdict::Unverified;
+    }
     let claim_status = receipt::claim_status(opts.claim.as_deref(), verdict);
     let receipt = Receipt {
         schema: receipt::SCHEMA.to_string(),
@@ -439,6 +475,8 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         uncovered,
         watched,
         hook_settings,
+        linked_pointers,
+        linked_changed,
         verdict,
         reasons,
     }

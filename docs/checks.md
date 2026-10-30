@@ -174,12 +174,34 @@ run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= 
   a `conftest.py` elsewhere on disk) is always taken out of the clean copy (`removed_outside_link`), whatever
   `protected` and `frozen` say. A folder named in `link` may itself be a symlink (a shared venv): it is linked in.
 - **`link` folders come from the agent's own folder.** A linked `.venv` is read-only while the checks run, but the
-  agent can change it before (a `.pth` file or a patched package in `site-packages`), and nothing in the checks sees
-  that. For a guarantee, run the same check in CI with a fresh environment built from your protected lock file
-  (`pip install -r requirements.lock`), where the agent's venv doesn't exist.
+  agent can change it before (a `.pth` file or a patched package in `site-packages`). Countercheck now guards it
+  three ways (0.18+):
+  - **A linked folder must not point back into the project.** An editable install (`pip install -e .`, and `uv sync`
+    for a project with a `src/` layout) writes the project's own path into the venv, so the check imports the
+    agent's real files instead of the clean copy: a protected file Countercheck put back would not be what runs.
+    Countercheck reads the files and symlinks near the top of each linked folder (4 levels: where `.pth` files,
+    editable finders and workspace links live) and lists any that name a project path outside the linked folders
+    (`linked_pointers` on the receipt). Then a run is **UNVERIFIED**, or **FAILED** if the agent also changed a
+    protected or frozen file. The fix: keep only dependencies in the check's venv and load your code from the
+    clean copy: `uv sync --no-install-project` (or `pip install -r requirements.txt`) and
+    `run = "PYTHONPATH=src .venv/bin/python -m pytest ..."` (a flat layout needs no `PYTHONPATH`). The same goes for
+    JavaScript workspaces: a `node_modules/<pkg>` symlink to `../packages/<pkg>` points back. On Windows a path
+    written in its 8.3 short form (`C:\Users\RUNNER~1\...`) is not recognised; installers write the long form.
+  - **A linked folder that changes during a session** (hooks only): `SessionStart` records a fingerprint of each
+    linked folder (names, sizes, times; Python's `__pycache__` left out), and the stop hook compares. A package
+    installed or edited since makes the run **UNVERIFIED** (`linked_changed`). Start a new session after you change
+    the venv yourself.
+  - Checks run with `PYTHONPYCACHEPREFIX` set to their temp folder, so Python never reads a bytecode cache
+    (`__pycache__`) planted next to a source file.
+
+  `countercheck verify` run by hand can't know how the folder looked earlier. For a full guarantee, run the same
+  check in CI with a fresh environment built from your protected lock file, where the agent's venv doesn't exist.
 - A new test file still runs inside pytest and could patch it. If that worries you, refuse such lines with a
   [forbid](#only-new-lines-scope--added) on `tests/**` (`pattern = '\b_pytest\b|pytest_plugins|hookimpl|sys\.modules'`,
   `scope = "added"`), and keep the same check in CI.
+- **Committed work only:** `require_clean = true` (or `countercheck verify --require-clean`) makes a run that
+  includes uncommitted changes UNVERIFIED. Use it when VERIFIED should also mean "the commit passes", not only "the
+  files on disk pass". Versions before 0.18 refuse the key, so upgrade every machine first.
 - **Don't protect `pyproject.toml` or `package.json`.** They also list dependencies; putting them back would undo an
   honest new dependency and fail the checks for no reason.
 

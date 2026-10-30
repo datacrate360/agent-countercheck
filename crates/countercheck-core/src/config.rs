@@ -70,6 +70,9 @@ pub struct ChecksFile {
     /// `"unverified"`.
     #[serde(default, skip_serializing_if = "crate::watched::Mode::is_default")]
     pub watched_mode: crate::watched::Mode,
+    /// VERIFIED only for committed work: a run that includes uncommitted changes is UNVERIFIED.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub require_clean: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
