@@ -2,22 +2,23 @@
 //!
 //! A coding agent reads its hooks from settings files inside the project (Claude Code
 //! `.claude/settings.json` and `.claude/settings.local.json`, Cortex Code `.cortex/...`, and the
-//! files `countercheck hook install` writes for Cursor, Codex, Copilot, Goose, Kiro and Devin CLI),
+//! files `countercheck hook install` writes for Cursor, Codex, Copilot, Goose, Kiro and Devin CLI,
+//! and Codex's `config.toml`),
 //! and the worker can edit those files mid-session. One line (`"disableAllHooks": true`) turns every
 //! hook off, a project setting overrides the user's, and the agent picks the edit up at once. Then
 //! the Stop hook never runs and "done" is never checked.
 //!
 //! This module compares each file at the base revision with the working tree and names what
 //! weakens the referee:
-//! - `disableAllHooks` turned on;
+//! - `disableAllHooks` turned on, or Codex's `[features] hooks = false`;
 //! - a Countercheck hook removed or changed in any way (a lower `timeout` makes the hook give up and
 //!   the agent stop unchecked);
 //! - a `COUNTERCHECK_*` variable set in the file's `env` block that changes what the hook does
 //!   (`COUNTERCHECK_HOOK_DISABLED`, `_BASE`, `_SANDBOX`, `_MAX_NUDGES`, ...).
 //!
 //! Adding hooks, adding other settings or removing a weakening entry is fine. Files are hostile
-//! input: size-capped, never followed through a symlink, and a file that can't be read as JSON
-//! counts as changed. This module can only add a reason and turn the verdict into FAILED.
+//! input: size-capped, never followed through a symlink, and a file that can't be read (JSON, or
+//! TOML for `config.toml`) counts as changed. This module can only add a reason and turn the verdict into FAILED.
 
 use crate::receipt::Verdict;
 use serde::{Deserialize, Serialize};
@@ -25,13 +26,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// The project-level hook settings files of the agents Countercheck hooks into (the project files
 /// of `apps/countercheck/src/agents/`: a new agent's file goes here too).
-pub const FILES: [&str; 12] = [
+pub const FILES: [&str; 13] = [
     ".claude/settings.json",
     ".claude/settings.local.json",
     ".cortex/settings.json",
     ".cortex/settings.local.json",
     ".cursor/hooks.json",
     ".codex/hooks.json",
+    // Codex's project config: `[features] hooks = false` turns every hook off, and it can hold
+    // `[hooks]` tables too. Read as TOML.
+    ".codex/config.toml",
     ".github/hooks/countercheck.json",
     ".agents/plugins/countercheck/hooks/hooks.json",
     ".kiro/hooks/countercheck.json",
@@ -84,26 +88,49 @@ struct Summary {
     disable_all: bool,
     /// The countercheck plugin listed in `disabledPlugins` (Goose).
     plugin_off: bool,
+    /// Codex's hooks feature switched off (`[features] hooks = false`, or the old `codex_hooks`).
+    feature_off: bool,
     /// Event name -> every Countercheck handler under it, as canonical JSON.
     hooks: BTreeMap<String, BTreeSet<String>>,
     /// `COUNTERCHECK_*` variables that change what the hook does.
     env: BTreeMap<String, String>,
 }
 
-/// `None` when the bytes aren't a JSON object (Claude Code wouldn't read it either, but
-/// Countercheck can't tell what it holds). `path` says where the hooks sit in the file.
+/// `None` when the bytes aren't a JSON object (or, for a `.toml` file, a TOML table): the agent
+/// wouldn't read it either, but Countercheck can't tell what it holds. `path` says where the hooks
+/// sit in the file.
 fn summarize(path: &str, bytes: &[u8]) -> Option<Summary> {
     if bytes.len() > MAX_BYTES {
         return None;
     }
-    let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let v: serde_json::Value = if path.ends_with(".toml") {
+        let table: toml::Table = toml::from_str(std::str::from_utf8(bytes).ok()?).ok()?;
+        serde_json::to_value(table).ok()?
+    } else {
+        serde_json::from_slice(bytes).ok()?
+    };
     let obj = v.as_object()?;
+    // `[features]`, or a profile's (`profile = "x"` with `[profiles.x.features]` switches it too).
+    let off_in = |t: &serde_json::Value| {
+        ["hooks", "codex_hooks"].iter().any(|k| {
+            t.get("features").and_then(|f| f.get(*k)) == Some(&serde_json::Value::Bool(false))
+        })
+    };
+    let feature_off = off_in(&v)
+        || obj
+            .get("profiles")
+            .and_then(|p| p.as_object())
+            .is_some_and(|p| p.values().any(off_in));
+    // Each switch only means something in its own agent's format.
+    let is_toml = path.ends_with(".toml");
     let mut s = Summary {
-        disable_all: obj.get("disableAllHooks") == Some(&serde_json::Value::Bool(true)),
-        plugin_off: obj
-            .get("disabledPlugins")
-            .and_then(|p| p.as_array())
-            .is_some_and(|p| p.iter().any(|n| n.as_str() == Some("countercheck"))),
+        feature_off: is_toml && feature_off,
+        disable_all: !is_toml && obj.get("disableAllHooks") == Some(&serde_json::Value::Bool(true)),
+        plugin_off: !is_toml
+            && obj
+                .get("disabledPlugins")
+                .and_then(|p| p.as_array())
+                .is_some_and(|p| p.iter().any(|n| n.as_str() == Some("countercheck"))),
         ..Summary::default()
     };
     let hooks = if WHOLE_FILE_HOOKS.contains(&path) {
@@ -226,7 +253,7 @@ pub fn compare(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
             Some(s) => s,
             None => {
                 return vec![finding(
-                    "was changed and can't be read as settings (not a JSON object, or larger than 1 MiB)"
+                    "was changed and can't be read as settings (not a JSON object or TOML table, or larger than 1 MiB)"
                         .to_string(),
                 )];
             }
@@ -242,6 +269,11 @@ pub fn compare(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
     if now_summary.plugin_off && !base_summary.plugin_off {
         out.push(finding(
             "switches the countercheck plugin off (\"disabledPlugins\")".to_string(),
+        ));
+    }
+    if now_summary.feature_off && !base_summary.feature_off {
+        out.push(finding(
+            "turns every Codex hook off ([features] hooks = false)".to_string(),
         ));
     }
     for (event, handlers) in &base_summary.hooks {
@@ -298,6 +330,8 @@ pub fn switched_off(path: &str, now: &File) -> Option<HookSettingsChange> {
         "turns every hook off (\"disableAllHooks\": true)"
     } else if s.plugin_off {
         "switches the countercheck plugin off (\"disabledPlugins\")"
+    } else if s.feature_off {
+        "turns every Codex hook off ([features] hooks = false)"
     } else if s.env.contains_key("COUNTERCHECK_HOOK_DISABLED") {
         "turns the Countercheck hook off (COUNTERCHECK_HOOK_DISABLED)"
     } else {
@@ -542,6 +576,51 @@ mod tests {
             r#",{"name":"lint","trigger":"Stop","action":{"type":"command","command":"npm run lint"}}]}"#,
         );
         assert!(compare(".kiro/hooks/countercheck.json", &reg(kiro), &reg(&more)).is_empty());
+    }
+
+    #[test]
+    fn codex_config_toml_is_read_as_toml() {
+        let p = ".codex/config.toml";
+        let w = |base: &File, now: &File| {
+            compare(p, base, now)
+                .into_iter()
+                .map(|f| f.what)
+                .collect::<Vec<_>>()
+        };
+        let plain = reg("model = \"o4\"\n[features]\nweb_search = true\n");
+        // Other settings, or a new config that switches nothing off: fine.
+        assert!(w(&File::Absent, &plain).is_empty());
+        assert!(w(&plain, &reg("model = \"o5\"\n")).is_empty());
+        // Hooks switched off, under the current key or the old alias, in a new or an edited file.
+        for off in [
+            "[features]\nhooks = false\n",
+            "[features]\ncodex_hooks = false\n",
+        ] {
+            assert_eq!(
+                w(&plain, &reg(off)),
+                ["turns every Codex hook off ([features] hooks = false)"]
+            );
+            assert_eq!(w(&File::Absent, &reg(off)).len(), 1);
+            assert!(switched_off(p, &reg(off)).is_some());
+        }
+        // Through a profile.
+        let via_profile = "profile = \"x\"\n[profiles.x.features]\nhooks = false\n";
+        assert_eq!(w(&plain, &reg(via_profile)).len(), 1);
+        // Turning them back on is not a finding.
+        assert!(w(&reg("[features]\nhooks = false\n"), &plain).is_empty());
+        // A Countercheck hook in a [hooks] table: removing or weakening it is found.
+        let hooked = "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"countercheck hook codex-stop\"\ntimeout = 600\n";
+        assert_eq!(
+            w(&reg(hooked), &reg("model = \"o4\"\n")),
+            ["removes the Countercheck Stop hook"]
+        );
+        assert_eq!(
+            w(&reg(hooked), &reg(&hooked.replace("600", "1"))),
+            ["changes the Countercheck Stop hook (its command, timeout or type)"]
+        );
+        // Not TOML any more: counted as changed. And `disableAllHooks` means nothing in TOML.
+        assert_eq!(w(&plain, &reg("[features\n")).len(), 1);
+        assert!(w(&plain, &reg("disableAllHooks = true\n")).is_empty());
     }
 
     #[test]

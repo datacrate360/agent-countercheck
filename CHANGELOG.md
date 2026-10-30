@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Security:** `.codex/config.toml` is in the tamper check, read as TOML: an agent writing `[features] hooks = false`
+  (or the old `codex_hooks = false`, or either in a `[profiles.<name>.features]` table) there, or removing or changing a Countercheck entry in its `[hooks]` tables,
+  makes the run FAILED. Before, one line there switched the Codex hook off unseen.
+- **Fixed:** OpenClaw allows 3 revisions per run and then stops calling the hook, the same as Countercheck's default
+  push-back limit, so the ⚠ "did NOT pass" line never showed. `openclaw-stop` now allows 2 by default
+  (`COUNTERCHECK_MAX_NUDGES` still overrides it).
+- **Fixed:** a Devin CLI session is recorded as `devin`, not `claude-code`: the session start reads `DEVIN_PROJECT_DIR`,
+  which Devin sets for every hook it runs.
+
 ## v0.20.0 (2026-10-30)
 
 Four more agents: `countercheck hook install` now covers ten (Devin CLI, JetBrains Junie CLI and Amp are new), and

@@ -204,13 +204,15 @@ fn no_final_message_and_failing_checks_is_sent_back() {
     assert!(revise_reason(&out).contains("\"calc\""), "{out}");
 }
 
+/// The default limit is 2, below OpenClaw's own 3 revisions: OpenClaw still calls the hook a
+/// third time, so the user gets the ⚠ line instead of an unmarked answer.
 #[test]
 fn after_the_push_back_limit_openclaw_may_finish_with_a_warning() {
     let d = project();
     let log = d.path().join("hook.log");
     let envs = [("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())];
     let input = payload(d.path(), Some("All tests pass."));
-    for _ in 0..3 {
+    for _ in 0..2 {
         let (code, out) = openclaw_stop(d.path(), &input, &envs);
         assert_eq!(code, 0);
         revise_reason(&out);
@@ -228,6 +230,11 @@ fn after_the_push_back_limit_openclaw_may_finish_with_a_warning() {
     let other = with_session(&input, "s2");
     let (_, out) = openclaw_stop(d.path(), &other, &[("COUNTERCHECK_MAX_NUDGES", "0")]);
     assert!(lets_finish(&out).contains("did NOT pass"), "{out}");
+    let third = with_session(&input, "s3");
+    for _ in 0..3 {
+        let (_, out) = openclaw_stop(d.path(), &third, &[("COUNTERCHECK_MAX_NUDGES", "3")]);
+        revise_reason(&out);
+    }
 }
 
 #[test]

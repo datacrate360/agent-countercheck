@@ -350,6 +350,10 @@ fn agent_from_session_start(payload: &serde_json::Value) -> Option<&'static str>
         "session.start" => return Some("amp"),
         _ => {}
     }
+    // Devin CLI sends Claude Code's shape, but sets `DEVIN_PROJECT_DIR` for every hook it runs.
+    if std::env::var_os("DEVIN_PROJECT_DIR").is_some() {
+        return Some("devin");
+    }
     if !text("transcript_path").is_empty() {
         return Some(agent_from_transcript(text("transcript_path")));
     }
@@ -549,10 +553,17 @@ fn prune_old(dir: &Path) {
 /// next to the receipts (already git-ignored) in `hook-state/<session>.json`. If the state can't be
 /// read or written the push-back is still allowed: Claude Code's own cap stops a runaway loop.
 pub(crate) fn take_nudge(receipt: &Path, session: &str) -> bool {
+    take_nudge_up_to(receipt, session, 3)
+}
+
+/// [`take_nudge`] with another default, for an agent whose own retry limit is no higher than ours
+/// (it would stop calling the hook first, and the user would never see the ⚠ line).
+/// `COUNTERCHECK_MAX_NUDGES` still wins.
+pub(crate) fn take_nudge_up_to(receipt: &Path, session: &str, default: u64) -> bool {
     let max: u64 = std::env::var("COUNTERCHECK_MAX_NUDGES")
         .ok()
         .and_then(|v| v.trim().parse().ok())
-        .unwrap_or(3);
+        .unwrap_or(default);
     let Some(file) = nudge_file(receipt, session) else {
         return true;
     };

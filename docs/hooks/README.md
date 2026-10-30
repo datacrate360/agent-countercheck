@@ -35,7 +35,8 @@ yourself, or let CI run it on every pull request.
 
 Hook details come from each agent's own documentation (checked in October 2026); "How sure" says which rows were
 also run against the real agent. Since 0.19 every project hook file `hook install` writes is guarded: if the agent removes
-or weakens Countercheck's hook in a committed file, the next run is FAILED, naming the file. User files (`--scope
+or weakens Countercheck's hook in a committed file, the next run is FAILED, naming the file (since 0.20.1 also
+Codex's `.codex/config.toml`, where `[features] hooks = false` switches hooks off). User files (`--scope
 user`, and Junie's `~/.junie/config.json`) are outside the repository and aren't compared.
 
 ## Adding an agent
