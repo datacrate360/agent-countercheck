@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Clearer:** the reason for a protected file put back from base names the files (up to 3, then "and N more") and
+  says what to do when the change was the person's, not the agent's: commit it on its own, so checks use it once the
+  base includes that commit. Reported from a real project, where a `checks.toml` and a CI workflow change each gave
+  FAILED with a reason that named neither.
 - **New: Devin CLI hook.** `countercheck hook install --agent devin` adds `SessionStart` and `Stop` hooks to
   `.devin/hooks.v1.json`; the new `hook devin-stop` sends Devin back while the checks fail. The file is in the tamper
   check (its hooks are the whole file, not a `"hooks"` key), and install warns when `.claude/settings*.json`, which

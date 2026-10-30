@@ -45,7 +45,7 @@ countercheck receipt 9073a384e88f9d37  FAILED
          |     self.assertEqual(apply_discount(10, 150), 0)
          | AssertionError: -5.0 != 0
   cost:     $0.4200 (reported)
-  - the worker changed 1 protected file(s); countercheck ran the checks with the base version
+  - the worker changed 1 protected file(s) (tests/test_discount.py); countercheck ran the checks with the base version. If you made this change yourself, not the agent (a new rule, a CI edit), commit it on its own: checks use it once the base includes that commit
   - check "unit tests" failed (exit 1)
 ```
 
