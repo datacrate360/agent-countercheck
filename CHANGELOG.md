@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **New:** Amp: `countercheck hook install --agent amp` writes a small plugin, `.amp/plugins/countercheck.ts`, that runs
+  `countercheck hook amp-stop` when the agent ends a turn and sends it back while the checks fail. The tamper check
+  compares the committed plugin byte for byte ([docs/hooks/amp.md](docs/hooks/amp.md)).
 - **Internal:** `hook install` can install agents whose hook is a whole plugin file (TypeScript, for Amp and
   OpenClaw next): written only over nothing or an older Countercheck plugin, removed only if unchanged, and compared
   byte for byte by the tamper check (`hook_settings::PLUGIN_FILES`). No agent uses it yet; nothing changes for the

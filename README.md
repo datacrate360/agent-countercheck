@@ -118,6 +118,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | Cursor (editor, CLI, cloud agents) | a `stop` hook: `countercheck hook install --agent cursor` ([page](docs/hooks/cursor.md); built from Cursor's docs, not yet run against Cursor) |
 | GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps; built from Copilot's docs, not yet run against Copilot) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
+| Amp | a plugin on `agent.end`: `countercheck hook install --agent amp` ([page](docs/hooks/amp.md); built from Amp's Plugin API docs, not yet run in a live Amp thread) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
 | GitHub | the [Action on the Marketplace](https://github.com/marketplace/actions/agent-countercheck), on every pull request ([step 4d](#4d-ci)) |
