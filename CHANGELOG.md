@@ -10,6 +10,8 @@
   Cortex Code would run the check twice. `hook uninstall` takes out only Countercheck's entries. `hook status` lists
   every agent, project and user, installed or not, and whether the project file is committed (an uncommitted hook
   is one an agent could remove unnoticed). New agents plug in as one file in `apps/countercheck/src/agents/`.
+- **Docs (CC-04):** [docs/hooks/README.md](docs/hooks/README.md) lists which agents Countercheck can stop at "done"
+  (gated), which it can only report on, and how sure each row is.
 
 ## v0.18.0 (2026-10-30)
 

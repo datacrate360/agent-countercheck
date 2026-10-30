@@ -111,10 +111,10 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 
 | You use | How Countercheck plugs in |
 |---|---|
-| Claude Code | a `Stop` hook: `countercheck hook claude-stop` ([step 4a](#4a-claude-code-and-cortex-code)) |
-| Cortex Code (Snowflake) | the same hooks as Claude Code ([what differs](docs/hooks/claude-code.md#cortex-code); not yet tried on a real install) |
+| Claude Code | a `Stop` hook: `countercheck hook install --agent claude-code` ([step 4a](#4a-claude-code-and-cortex-code)) |
+| Cortex Code (Snowflake) | the same hooks: `countercheck hook install --agent cortex-code` ([what differs](docs/hooks/claude-code.md#cortex-code); used in a real project) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
-| Codex, Cursor, Copilot, Aider, OpenClaw, your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)) |
+| Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
 | GitHub | the [Action on the Marketplace](https://github.com/marketplace/actions/agent-countercheck), on every pull request ([step 4d](#4d-ci)) |
 | Any other CI | `countercheck verify --base origin/main`; fail the job on any exit code but `0` ([step 4d](#4d-ci)) |
 
