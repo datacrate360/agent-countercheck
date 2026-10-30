@@ -23,7 +23,8 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
 | Devin CLI | `Stop` (block + reason), in `.devin/hooks.v1.json` | **Gated**: `hook install --agent devin` ([page](devin.md)) | Tested end to end in CI with payloads from Devin's docs and CLI binary (3000.11.234); not yet run in a real Devin session |
 | JetBrains Junie CLI (EAP; CLI interactive and `-p`, not the IDE/ACP) | `Stop` (block + reason); no hooks from project files | **Gated**: `hook install --agent junie`, user scope only ([page](junie.md)) | Tested end to end in CI with payloads from Junie's docs and its 26.11.3 code; not yet run in a real Junie session |
-| Amp, OpenClaw | a blocking finish hook | Report only | Planned |
+| Amp | `agent.end` in a plugin (continue + user message) | **Gated**: `hook install --agent amp` writes the plugin ([page](amp.md)) | Tested end to end in CI with the plugin's payloads, and the plugin run under Bun with a stand-in for Amp's API; not yet run in a live Amp thread |
+| OpenClaw (embedded runner, Gateway) | `before_agent_finalize` plugin hook (revise + reason); not dispatched under the Copilot harness | **Gated**: a plugin set up by hand with `openclaw plugins install`, plus the `allowConversationAccess` grant ([page](openclaw.md)) | Tested end to end in CI (the plugin under Node too); run with OpenClaw 2026.10.9 against a stand-in model (sent back 3 times, then OpenClaw's cap) |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
 

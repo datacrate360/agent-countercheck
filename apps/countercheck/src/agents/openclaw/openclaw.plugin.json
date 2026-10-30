@@ -1,0 +1,14 @@
+{
+  "id": "countercheck",
+  "name": "Countercheck",
+  "description": "Re-runs the project's locked checks before OpenClaw accepts a final answer, and asks for another pass while they fail",
+  "categories": ["developer-tools"],
+  "activation": { "onCapabilities": ["hook"] },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "bin": { "type": "string", "description": "The command that runs Countercheck (default: countercheck on PATH)" }
+    }
+  }
+}

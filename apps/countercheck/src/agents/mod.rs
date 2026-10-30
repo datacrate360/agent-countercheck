@@ -9,6 +9,7 @@
 
 pub mod json;
 
+pub mod amp;
 mod claude;
 pub mod codex;
 pub mod copilot;
@@ -17,6 +18,7 @@ pub mod devin;
 pub mod goose;
 pub mod junie;
 pub mod kiro;
+pub mod openclaw;
 
 use json::Node;
 use std::io::IsTerminal;
@@ -86,8 +88,6 @@ fn plugin_plan(old: Option<&str>, new: &str) -> PluginPlan {
 /// A plugin template with the command that runs Countercheck filled in: every
 /// `"__COUNTERCHECK_BIN__"` (quotes included) becomes `bin` as a string literal, valid in
 /// JavaScript and TypeScript as in JSON.
-// Its first callers are the plugin agents (Amp, OpenClaw), added one file each.
-#[allow(dead_code)]
 pub fn plugin_with_bin(template: &str, bin: &str) -> String {
     template.replace("\"__COUNTERCHECK_BIN__\"", &quoted(bin))
 }
@@ -104,14 +104,21 @@ pub fn all() -> Vec<Target> {
         copilot::target(),
         devin::target(),
         junie::target(),
+        amp::target(),
     ]
 }
 
 /// Agents with hooks Countercheck can't write for you (no project file, or not JSON).
-pub const MANUAL: &[(&str, &str)] = &[(
-    "hermes",
-    "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
-)];
+pub const MANUAL: &[(&str, &str)] = &[
+    (
+        "hermes",
+        "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
+    ),
+    (
+        "openclaw",
+        "a plugin folder plus a grant in ~/.openclaw/openclaw.json: see docs/hooks/openclaw.md",
+    ),
+];
 
 /// Agents that run no hooks from any project file: `--scope project` is refused with the reason,
 /// and `hook install` without `--scope` uses the user file.

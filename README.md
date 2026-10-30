@@ -119,6 +119,8 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps; built from Copilot's docs, not yet run against Copilot) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | JetBrains Junie CLI | a `Stop` hook in your user config: `countercheck hook install --agent junie` (Junie runs no hooks from a project file; [page](docs/hooks/junie.md); built from Junie's docs and code, not yet run in a real Junie session) |
+| Amp | a plugin on `agent.end`: `countercheck hook install --agent amp` ([page](docs/hooks/amp.md); built from Amp's Plugin API docs, not yet run in a live Amp thread) |
+| OpenClaw | a `before_agent_finalize` plugin, installed with `openclaw plugins install` and granted conversation access ([page](docs/hooks/openclaw.md); set up by hand; run with OpenClaw 2026.10.9 against a stand-in model) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Devin CLI | a `Stop` hook: `countercheck hook install --agent devin` ([page](docs/hooks/devin.md); built from Devin's docs and CLI binary, not yet run in a real Devin session) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
@@ -260,7 +262,7 @@ Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro: one com
 It shows the change first, keeps a backup, and touches nothing else:
 
 ```sh
-countercheck hook install --agent claude-code     # or: cortex-code, cursor, codex, copilot, goose, kiro
+countercheck hook install --agent claude-code     # or: cortex-code, cursor, codex, copilot, goose, kiro, devin, junie, amp
 git add <the file it names> && git commit -m "Countercheck hooks"   # then removing the hook makes a run FAILED
 countercheck hook status                          # which agents are hooked, and committed
 ```
@@ -419,7 +421,7 @@ verdict.
 | `ui` | A live page of every run, on this computer only | `countercheck ui` |
 | `report` | The same page as one offline HTML file | `countercheck report --open` |
 | `prune` | Delete receipts older than an age (by their own date); nothing else ever deletes them | `countercheck prune --older-than 90d --dry-run` |
-| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `cursor-stop`, `codex-stop`, `copilot-stop`, `goose-stop`, `kiro-stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
+| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `cursor-stop`, `codex-stop`, `copilot-stop`, `goose-stop`, `kiro-stop`, `devin-stop`, `junie-stop`, `amp-stop`, `openclaw-stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
 | `windows-setup` | Windows, once as administrator: the full check sandbox ([below](#platforms-and-the-sandbox)) | `countercheck windows-setup` |
 
 Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
@@ -611,7 +613,7 @@ v0.19.0 ([CHANGELOG](CHANGELOG.md)). Sandbox on macOS and Linux; on Windows a pa
 after `countercheck windows-setup` (experimental). A GitHub Action on the
 [Marketplace](https://github.com/marketplace/actions/agent-countercheck). Not yet: signed receipts, a per-host network
 allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, hooks for Devin,
-Junie, Amp and OpenClaw ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
+Junie and Amp ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## ⭐ Why star it?
 
