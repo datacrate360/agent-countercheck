@@ -57,6 +57,7 @@ pub fn target() -> Target {
                 Access build: curl -fsSL https://junie.jetbrains.com/install-eap.sh | bash). The hook runs in every \
                 project; in one without .countercheck/checks.toml it lets Junie finish as UNVERIFIED.",
         docs: "docs/hooks/junie.md",
+        plugin: None,
     }
 }
 

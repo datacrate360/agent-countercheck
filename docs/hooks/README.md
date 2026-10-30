@@ -22,9 +22,8 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | **Gated**: `hook install --agent copilot`; the cloud agent needs `countercheck` installed by its setup steps ([page](copilot.md)) | Tested end to end in CI with payloads from the docs; not yet run in a live Copilot session |
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
 | Devin CLI | `Stop` (block + reason), in `.devin/hooks.v1.json` | **Gated**: `hook install --agent devin` ([page](devin.md)) | Tested end to end in CI with payloads from Devin's docs and CLI binary (3000.11.234); not yet run in a real Devin session |
-| JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | JetBrains Junie CLI (EAP; CLI interactive and `-p`, not the IDE/ACP) | `Stop` (block + reason); no hooks from project files | **Gated**: `hook install --agent junie`, user scope only ([page](junie.md)) | Tested end to end in CI with payloads from Junie's docs and its 26.11.3 code; not yet run in a real Junie session |
-| Devin CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
+| Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
 
