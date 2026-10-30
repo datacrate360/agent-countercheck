@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.18.0 (2026-10-30)
 
 Linked folders (a `.venv`, `node_modules`) can no longer carry the agent's own files into the checks.
 
