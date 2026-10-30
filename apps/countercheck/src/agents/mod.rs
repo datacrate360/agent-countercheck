@@ -13,6 +13,7 @@ mod claude;
 pub mod codex;
 pub mod copilot;
 pub mod cursor;
+pub mod devin;
 pub mod goose;
 pub mod kiro;
 
@@ -66,6 +67,7 @@ pub fn all() -> Vec<Target> {
         goose::target(),
         cursor::target(),
         copilot::target(),
+        devin::target(),
     ]
 }
 

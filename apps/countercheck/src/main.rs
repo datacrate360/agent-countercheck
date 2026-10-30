@@ -229,6 +229,8 @@ enum HookCmd {
     GooseStop,
     /// Cursor `stop` hook: send the agent back (`followup_message`) while the checks fail.
     CursorStop,
+    /// Devin CLI `Stop` hook: block the stop while the checks fail.
+    DevinStop,
     /// GitHub Copilot `agentStop` hook (CLI, cloud agent, VS Code): block the stop while the
     /// checks fail.
     CopilotStop,
@@ -252,7 +254,7 @@ enum HookCmd {
 
 #[derive(clap::Args)]
 struct InstallArgs {
-    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro (see
+    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, devin (see
     /// `countercheck hook status`).
     #[arg(long)]
     agent: String,
@@ -501,6 +503,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                 HookCmd::CodexStop => agents::codex::stop(),
                 HookCmd::GooseStop => agents::goose::stop(),
                 HookCmd::CursorStop => agents::cursor::stop(),
+                HookCmd::DevinStop => agents::devin::stop(),
                 HookCmd::CopilotStop => agents::copilot::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
