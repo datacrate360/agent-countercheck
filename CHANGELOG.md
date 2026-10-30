@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Clearer:** the reason for a protected file put back from base names the files (up to 3, then "and N more") and
+  says what to do when the change was the person's, not the agent's: commit it on its own, so checks use it once the
+  base includes that commit. Reported from a real project, where a `checks.toml` and a CI workflow change each gave
+  FAILED with a reason that named neither.
 - **Internal:** `hook install` can install agents whose hook is a whole plugin file (TypeScript, for Amp and
   OpenClaw next): written only over nothing or an older Countercheck plugin, removed only if unchanged, and compared
   byte for byte by the tamper check (`hook_settings::PLUGIN_FILES`). No agent uses it yet; nothing changes for the

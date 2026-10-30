@@ -193,13 +193,27 @@ pub fn decide(
 ) -> (Verdict, Vec<String>) {
     let mut reasons = Vec::new();
     let failed: Vec<&CheckResult> = results.iter().filter(|r| !r.passed).collect();
-    let restored = protected
+    let restored_paths: Vec<&str> = protected
         .iter()
         .filter(|p| p.action == "restored_from_base")
-        .count();
+        .map(|p| p.path.as_str())
+        .collect();
+    let restored = restored_paths.len();
     if restored > 0 {
+        // Name the first few, so the reader knows which change was ignored and why.
+        let mut named = restored_paths
+            .iter()
+            .take(3)
+            .copied()
+            .collect::<Vec<_>>()
+            .join(", ");
+        if restored > 3 {
+            named.push_str(&format!(" and {} more", restored - 3));
+        }
         reasons.push(format!(
-            "the worker changed {restored} protected file(s); countercheck ran the checks with the base version"
+            "the worker changed {restored} protected file(s) ({named}); countercheck ran the checks with the base \
+             version. If you made this change yourself, not the agent (a new rule, a CI edit), commit it on its own: \
+             checks use it once the base includes that commit"
         ));
     }
     let removed = protected
@@ -572,6 +586,27 @@ mod tests {
         assert_eq!(decide(false, &[result(true)], &[]).0, Verdict::Unverified);
         assert_eq!(decide(true, &[], &[]).0, Verdict::Unverified);
         assert_eq!(decide(false, &[result(false)], &[]).0, Verdict::Failed);
+    }
+
+    #[test]
+    fn a_restored_protected_file_is_named_with_what_to_do() {
+        let p = |path: &str| ProtectedChange {
+            path: path.into(),
+            change: crate::protect::Change::Modified,
+            action: "restored_from_base".into(),
+        };
+        let (_, r) = decide(true, &[result(true)], &[p(".countercheck/checks.toml")]);
+        assert!(
+            r[0].starts_with("the worker changed 1 protected file(s) (.countercheck/checks.toml);"),
+            "{r:?}"
+        );
+        assert!(
+            r[0].contains("not the agent") && r[0].contains("commit it on its own"),
+            "{r:?}"
+        );
+        let many: Vec<_> = ["a", "b", "c", "d", "e"].iter().map(|n| p(n)).collect();
+        let (_, r) = decide(true, &[result(true)], &many);
+        assert!(r[0].contains("(a, b, c and 2 more)"), "{r:?}");
     }
 
     #[test]
