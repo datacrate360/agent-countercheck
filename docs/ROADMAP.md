@@ -38,6 +38,7 @@ section. Ideas and use cases are welcome as issues.
 | Agent named from its shell when `--agent` is missing (Claude Code, Cursor, Codex, Hermes); `countercheck prune`; dead runs' progress files and old hook counters cleaned | v0.14.0 |
 | Security (CC-01): an agent switching its own hook off in `.claude/` / `.cortex/` settings (`disableAllHooks`, a removed or changed Countercheck hook, a `COUNTERCHECK_*` variable) fails the run; `report` / `ui` warn while hooks are off | v0.15.0 |
 | Security: `frozen = [...]` paths (a new file there is left out of the clean copy: a new `conftest.py`, a `pytest.py` shadowing the runner); links the agent adds that lead outside the project are taken out; **Not checked** sessions (started, no receipt) in `report` / `ui` | v0.16.0 |
+| From the first real Cortex Code user: the hook shows the verdict to the user on every stop it lets through (VERIFIED, and FAILED after the push-back limit); symlinked `link` folders linked again; agent label from the session start; Cortex Code docs from a real setup | v0.17.0 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
 | Fix: on Linux, a timed-out check could make `kill` signal every process (`kill -KILL -<pgid>` misread by procps-ng 4.0.4); now `kill -s KILL -- -<pgid>` + a test | v0.2.0 |
 | Mutation + property tests for the verdict logic (32 → 69 tests); fixes: receipts with a cost read back as BROKEN, `./` and `..` paths in protected matching | v0.2.0 |

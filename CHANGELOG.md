@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## v0.17.0 (2026-10-29)
 
 Fixes from the first real Cortex Code setup, found by a user and his agent.
+
+**Upgrade:** recommended for anyone using the Claude Code or Cortex Code hook, and required if a `link` folder in
+your `checks.toml` is a symlink (v0.16.0 failed those runs).
 
 - **A stop the hook lets through now says so.** On VERIFIED, UNVERIFIED, an honest blocker or the push-back limit,
   the Claude Code / Cortex Code hook prints one line for the user (`systemMessage`), e.g. `✓ Countercheck: VERIFIED,
