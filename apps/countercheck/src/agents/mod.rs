@@ -10,11 +10,11 @@
 pub mod json;
 
 mod claude;
-pub mod kiro;
 pub mod codex;
-pub mod goose;
-pub mod cursor;
 pub mod copilot;
+pub mod cursor;
+pub mod goose;
+pub mod kiro;
 
 use json::Node;
 use std::io::IsTerminal;
