@@ -14,7 +14,7 @@ The rules are the same as for every agent ([Claude Code page](claude-code.md)):
   stop. It is telling the truth, and the FAILED receipt is kept.
 - **FAILED after protected tests were edited:** the stop is blocked, whatever the agent says.
 
-Needs a Countercheck release with `hook copilot-stop` (the one after 0.18.0).
+Needs Countercheck 0.19.0 or later (the first release with `hook copilot-stop`).
 
 ## Setup
 

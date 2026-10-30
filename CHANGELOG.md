@@ -1,36 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.19.0 (2026-10-30)
 
-- **Security: the tamper check now covers every agent `hook install` supports.** `verify` compares `.cursor/hooks.json`,
-  `.codex/hooks.json`, `.github/hooks/countercheck.json`, `.agents/plugins/countercheck/hooks/hooks.json`,
-  `.kiro/hooks/countercheck.json` and Goose's `.config/goose/settings*.json` with the base, like the Claude Code files:
-  a removed, disabled or weakened Countercheck hook (Copilot's `bash`/`powershell` commands, Kiro's hook list, Goose's
-  `disabledPlugins`) makes the run FAILED, naming the file. Install now says to commit the file for every agent.
-- **New: Kiro hook.** `countercheck hook install --agent kiro` writes `.kiro/hooks/countercheck.json` (`SessionStart` +
-  `Stop`, IDE and CLI V3; `--scope user` for `~/.kiro/hooks/`), and `countercheck hook kiro-stop` sends Kiro back in its
-  own format while the checks fail ([docs/hooks/kiro.md](docs/hooks/kiro.md)).
-- **New: OpenAI Codex hook.** `countercheck hook install --agent codex` adds `SessionStart` and `Stop` hooks to
-  `.codex/hooks.json` (`--scope user`: `~/.codex/hooks.json`); the new `hook codex-stop` sends Codex back while the
-  checks fail and labels receipts `codex`. Codex runs it only after you trust it (`/hooks`): see
-  [docs/hooks/codex.md](docs/hooks/codex.md). `verify` from a Codex shell is now named from `CODEX_THREAD_ID` too.
-- **New: Goose hook.** `countercheck hook install --agent goose` adds Countercheck as a Goose plugin
-  (`.agents/plugins/countercheck/hooks/hooks.json`, or `~/.agents/...` with `--scope user`) with `SessionStart` and a
-  new `hook goose-stop`, which reads Goose's `working_dir` and answers in Goose's format. `hook session-start` also
-  reads `working_dir`. `verify` names Goose from `GOOSE_TERMINAL` / `AGENT=goose`. [docs/hooks/goose.md](docs/hooks/goose.md)
-- **New: Cursor hook.** `countercheck hook install --agent cursor` adds `sessionStart` and `stop` to `.cursor/hooks.json` (or `~/.cursor/hooks.json`); `countercheck hook cursor-stop` sends the agent back with `followup_message` while the checks fail ([docs/hooks/cursor.md](docs/hooks/cursor.md)).
-- **New: GitHub Copilot hook.** `countercheck hook install --agent copilot` writes `.github/hooks/countercheck.json`
-  (`sessionStart` + `agentStop`, `bash` and `powershell`, 600 s timeout) for the Copilot CLI, the cloud agent and VS Code;
-  `hook copilot-stop` reads Copilot's input and transcript and answers in its format. `verify` labels Copilot runs. See
-  [docs/hooks/copilot.md](docs/hooks/copilot.md), including the cloud agent's `copilot-setup-steps.yml`.
-- **Changed (CC-19, [ADR-0005](docs/decisions/0005-network-only-failures.md)): a check that fails only because the
-  sandbox blocked the internet makes the run UNVERIFIED, not FAILED.** Countercheck confirms it by running that check
-  once more on the base revision; it counts only if the base fails for lack of internet too, so an agent can't use it
-  to soften a real failure. The receipt marks the check `needs_network`. Fix for such checks: `network = true`.
-- **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
-  Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
-  `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project
-  or local settings, which closes the `~/.claude/settings.json` gap. A refused write says how to get admin rights.
+One command hooks Countercheck into seven agents: `countercheck hook install --agent <name>` for Claude Code, Cortex
+Code, Cursor, Codex, GitHub Copilot, Goose and Kiro, each guarded against the agent removing its own hook.
+
 - **New (CC-05): `countercheck hook install / uninstall / status`.** `hook install --agent claude-code` (or
   `cortex-code`; `--scope user` for every project) adds the `SessionStart` and `Stop` hooks to the agent's settings:
   it shows the change and asks first (`--yes`, `--dry-run`), keeps the previous file as `*.countercheck-backup`,
@@ -39,6 +13,35 @@
   Cortex Code would run the check twice. `hook uninstall` takes out only Countercheck's entries. `hook status` lists
   every agent, project and user, installed or not, and whether the project file is committed (an uncommitted hook
   is one an agent could remove unnoticed). New agents plug in as one file in `apps/countercheck/src/agents/`.
+- **New: OpenAI Codex hook.** `countercheck hook install --agent codex` adds `SessionStart` and `Stop` hooks to
+  `.codex/hooks.json` (`--scope user`: `~/.codex/hooks.json`); the new `hook codex-stop` sends Codex back while the
+  checks fail and labels receipts `codex`. Codex runs it only after you trust it (`/hooks`): see
+  [docs/hooks/codex.md](docs/hooks/codex.md). `verify` from a Codex shell is now named from `CODEX_THREAD_ID` too.
+- **New: Cursor hook.** `countercheck hook install --agent cursor` adds `sessionStart` and `stop` to `.cursor/hooks.json` (or `~/.cursor/hooks.json`); `countercheck hook cursor-stop` sends the agent back with `followup_message` while the checks fail ([docs/hooks/cursor.md](docs/hooks/cursor.md)).
+- **New: GitHub Copilot hook.** `countercheck hook install --agent copilot` writes `.github/hooks/countercheck.json`
+  (`sessionStart` + `agentStop`, `bash` and `powershell`, 600 s timeout) for the Copilot CLI, the cloud agent and VS Code;
+  `hook copilot-stop` reads Copilot's input and transcript and answers in its format. `verify` labels Copilot runs. See
+  [docs/hooks/copilot.md](docs/hooks/copilot.md), including the cloud agent's `copilot-setup-steps.yml`.
+- **New: Goose hook.** `countercheck hook install --agent goose` adds Countercheck as a Goose plugin
+  (`.agents/plugins/countercheck/hooks/hooks.json`, or `~/.agents/...` with `--scope user`) with `SessionStart` and a
+  new `hook goose-stop`, which reads Goose's `working_dir` and answers in Goose's format. `hook session-start` also
+  reads `working_dir`. `verify` names Goose from `GOOSE_TERMINAL` / `AGENT=goose`. [docs/hooks/goose.md](docs/hooks/goose.md)
+- **New: Kiro hook.** `countercheck hook install --agent kiro` writes `.kiro/hooks/countercheck.json` (`SessionStart` +
+  `Stop`, IDE and CLI V3; `--scope user` for `~/.kiro/hooks/`), and `countercheck hook kiro-stop` sends Kiro back in its
+  own format while the checks fail ([docs/hooks/kiro.md](docs/hooks/kiro.md)).
+- **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
+  Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
+  `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project
+  or local settings, which closes the `~/.claude/settings.json` gap. A refused write says how to get admin rights.
+- **Security: the tamper check now covers every agent `hook install` supports.** `verify` compares `.cursor/hooks.json`,
+  `.codex/hooks.json`, `.github/hooks/countercheck.json`, `.agents/plugins/countercheck/hooks/hooks.json`,
+  `.kiro/hooks/countercheck.json` and Goose's `.config/goose/settings*.json` with the base, like the Claude Code files:
+  a removed, disabled or weakened Countercheck hook (Copilot's `bash`/`powershell` commands, Kiro's hook list, Goose's
+  `disabledPlugins`) makes the run FAILED, naming the file. Install now says to commit the file for every agent.
+- **Changed (CC-19, [ADR-0005](docs/decisions/0005-network-only-failures.md)): a check that fails only because the
+  sandbox blocked the internet makes the run UNVERIFIED, not FAILED.** Countercheck confirms it by running that check
+  once more on the base revision; it counts only if the base fails for lack of internet too, so an agent can't use it
+  to soften a real failure. The receipt marks the check `needs_network`. Fix for such checks: `network = true`.
 - **Docs (CC-04):** [docs/hooks/README.md](docs/hooks/README.md) lists which agents Countercheck can stop at "done"
   (gated), which it can only report on, and how sure each row is.
 
