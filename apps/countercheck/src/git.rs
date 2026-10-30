@@ -58,6 +58,12 @@ pub fn git_dir(root: &Path) -> Result<PathBuf, String> {
     run_text(root, &["rev-parse", "--absolute-git-dir"]).map(PathBuf::from)
 }
 
+/// True when `rel` is in HEAD exactly as it is on disk (tracked, and no change since).
+pub fn is_committed(root: &Path, rel: &str) -> bool {
+    run(root, &["ls-files", "--error-unmatch", "--", rel]).is_ok()
+        && run(root, &["diff", "--quiet", "HEAD", "--", rel]).is_ok()
+}
+
 pub fn is_dirty(root: &Path) -> Result<bool, String> {
     Ok(!run(root, &["status", "--porcelain", "-z"])?.is_empty())
 }

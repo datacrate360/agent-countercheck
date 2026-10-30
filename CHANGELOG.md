@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **New (CC-05): `countercheck hook install / uninstall / status`.** `hook install --agent claude-code` (or
+  `cortex-code`; `--scope user` for every project) adds the `SessionStart` and `Stop` hooks to the agent's settings:
+  it shows the change and asks first (`--yes`, `--dry-run`), keeps the previous file as `*.countercheck-backup`,
+  leaves every other setting exactly as written, adds nothing when the hooks are there (also as `hook stop`), refuses
+  a symlinked or broken file, quotes a `--bin` path with spaces, warns when `countercheck` isn't on PATH and when
+  Cortex Code would run the check twice. `hook uninstall` takes out only Countercheck's entries. `hook status` lists
+  every agent, project and user, installed or not, and whether the project file is committed (an uncommitted hook
+  is one an agent could remove unnoticed). New agents plug in as one file in `apps/countercheck/src/agents/`.
+
 ## v0.18.0 (2026-10-30)
 
 Linked folders (a `.venv`, `node_modules`) can no longer carry the agent's own files into the checks.
