@@ -221,6 +221,8 @@ enum HookCmd {
     /// `countercheck hook stop`.
     #[command(alias = "stop")]
     ClaudeStop,
+    /// Kiro `Stop` hook (IDE and CLI V3): send Kiro back while the checks fail.
+    KiroStop,
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
     SessionStart,
@@ -485,6 +487,7 @@ fn run(cli: Cli) -> Result<u8, String> {
             let result = match which {
                 HookCmd::HermesPreVerify => hook::hermes_pre_verify(),
                 HookCmd::ClaudeStop => hook::claude_stop(),
+                HookCmd::KiroStop => agents::kiro::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
             };
