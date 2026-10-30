@@ -727,7 +727,7 @@ fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
         base = escape(&short(&r.repo.base_commit, 12)),
         head = escape(&short(&r.repo.head_commit, 12)),
         dirty = if r.repo.dirty {
-            " + uncommitted changes"
+            " + <b>uncommitted changes</b> (this receipt covers the files on disk, not only the commit)"
         } else {
             ""
         },
@@ -745,7 +745,15 @@ fn run_html(e: &Entry, open: bool, agent: Option<usize>) -> String {
 fn steps_html(e: &Entry, who: &str, open: bool) -> String {
     let r = &e.receipt;
     let passed = r.checks.iter().filter(|c| c.passed).count();
-    let protected = r.protected_changes.len();
+    // Only files whose worker version the checks didn't use; new protected files are kept.
+    let undone: Vec<&str> = r
+        .protected_changes
+        .iter()
+        .filter(|p| p.undone())
+        .map(|p| p.path.as_str())
+        .collect();
+    let kept = r.protected_changes.len() - undone.len();
+    let protected = undone.len();
     let mut steps: Vec<(&str, String, String)> = vec![
         (
             "ok",
@@ -784,13 +792,16 @@ fn steps_html(e: &Entry, who: &str, open: bool) -> String {
                 ),
                 format!(
                     "the agent changed {}; the checks used the base version",
-                    escape(
-                        &r.protected_changes
-                            .iter()
-                            .map(|p| p.path.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
+                    escape(&undone.join(", "))
+                ),
+            )
+        } else if kept > 0 {
+            (
+                "ok",
+                "No protected file changed".to_string(),
+                format!(
+                    "{kept} new file{} on protected paths kept (new tests are allowed)",
+                    if kept == 1 { "" } else { "s" }
                 ),
             )
         } else {
@@ -1455,6 +1466,26 @@ mod tests {
     }
 
     #[test]
+    fn steps_say_when_new_protected_files_were_only_kept() {
+        let mut e = by_checks(
+            "UI",
+            "2026-01-01T00:00:01Z",
+            Verdict::Verified,
+            vec![check("unit", true, "")],
+        );
+        e.receipt.protected_changes = vec![crate::protect::ProtectedChange::decide(
+            "tests/new_test.py",
+            crate::protect::Change::Added,
+        )];
+        let html = render_html(&[e], &page());
+        assert!(!html.contains("Put back"), "{html}");
+        assert!(
+            html.contains("1 new file on protected paths kept (new tests are allowed)"),
+            "{html}"
+        );
+    }
+
+    #[test]
     fn steps_replay_what_happened_from_the_receipt() {
         let mut e = by_checks(
             "UI",
@@ -1462,10 +1493,21 @@ mod tests {
             Verdict::Failed,
             vec![check("unit", false, "x"), check("lint", true, "")],
         );
-        e.receipt.protected_changes = vec![crate::protect::ProtectedChange::decide(
-            "tests/a<b>.py",
-            crate::protect::Change::Modified,
-        )];
+        // One changed test (put back) and two new files that were kept: only the first counts.
+        e.receipt.protected_changes = vec![
+            crate::protect::ProtectedChange::decide(
+                "tests/a<b>.py",
+                crate::protect::Change::Modified,
+            ),
+            crate::protect::ProtectedChange::decide(
+                ".countercheck/checks.toml",
+                crate::protect::Change::Added,
+            ),
+            crate::protect::ProtectedChange::decide(
+                "tests/pytest.ini",
+                crate::protect::Change::Added,
+            ),
+        ];
         let older = by(
             Some("UI"),
             "claude-code",
@@ -1488,6 +1530,8 @@ mod tests {
             html.contains("<div class=\"rcpt failed\"><span class=\"wax\""),
             "{html}"
         );
+        // New protected files are kept, never counted as put back.
+        assert!(!html.contains("Put back 3"), "{html}");
     }
 
     #[test]

@@ -44,7 +44,7 @@ Exit codes: `0` verified, `2` failed, `3` unverified, `1` Countercheck itself co
 A hook is how an agent gets checked automatically when it tries to finish. Each hook reads the agent's own JSON input,
 runs the same `verify`, and answers in the agent's format: `apps/countercheck/src/hook.rs`.
 
-- `decide` in `hook.rs`: VERIFIED → stay silent (the agent may finish). FAILED and the agent claims success → **continue**,
+- `decide` in `hook.rs`: VERIFIED → the agent may finish (the Claude Code / Cortex Code hook shows the user one `systemMessage` line with the verdict and receipt id). FAILED and the agent claims success → **continue**,
   with the failing check's output. FAILED but the agent honestly reports a blocker and changed no protected file → let it
   stop (`HonestBlocker`), keeping the FAILED receipt.
 - "Reports a blocker" is `crates/countercheck-core/src/claim.rs::reports_blocker`, tested on real agent answers in

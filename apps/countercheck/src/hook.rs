@@ -243,7 +243,15 @@ pub fn claude_stop() -> Result<(), String> {
             .or_else(|| std::env::current_dir().ok())
             .ok_or("no working directory in hook input")?,
         claim,
-        agent: agent_from_transcript(text("transcript_path").unwrap_or("")),
+        // The transcript's folder says which app this is; without one, the app the session's start
+        // recorded (a label only, never part of a verdict).
+        agent: match text("transcript_path") {
+            Some(t) if !t.is_empty() => agent_from_transcript(t),
+            _ => text("cwd")
+                .zip(text("session_id"))
+                .and_then(|(cwd, s)| recorded_agent(Path::new(cwd), s))
+                .unwrap_or("claude-code"),
+        },
         // Claude Code's Stop input has no model (only SessionStart's does): read it from the last
         // assistant message (right after a `/model` switch too), else what SessionStart recorded.
         model: text("model")
@@ -262,13 +270,53 @@ pub fn claude_stop() -> Result<(), String> {
         _ => false,
     };
     log_call(&session, &receipt, &path, &decision, Some(gave_up));
-    if let Decision::Continue(reason) = decision
-        && !gave_up
-    {
-        let out = serde_json::json!({ "decision": "block", "reason": reason });
-        println!("{out}");
-    }
+    let out = match decision {
+        Decision::Continue(reason) if !gave_up => {
+            serde_json::json!({ "decision": "block", "reason": reason })
+        }
+        // Every stop the hook lets through says so, so a pass, a give-up and a hook that never ran
+        // don't look the same. `systemMessage` is shown to the user and doesn't keep the agent going.
+        d => serde_json::json!({ "systemMessage": stop_message(&receipt, &d, gave_up) }),
+    };
+    println!("{out}");
     Ok(())
+}
+
+/// The one line the user sees when the agent is allowed to stop.
+pub fn stop_message(r: &Receipt, d: &Decision, gave_up: bool) -> String {
+    let checks = r.checks.len();
+    let passed = r.checks.iter().filter(|c| c.passed).count();
+    let uncommitted = if r.repo.dirty {
+        ", including uncommitted changes"
+    } else {
+        ""
+    };
+    match (r.verdict, d) {
+        (Verdict::Verified, _) => format!(
+            "✓ Countercheck: VERIFIED, {checks} check(s) passed in a clean copy{uncommitted} (receipt {})",
+            r.id
+        ),
+        (Verdict::Unverified, _) => format!(
+            "Countercheck: UNVERIFIED: {} (receipt {})",
+            r.reasons
+                .first()
+                .map(String::as_str)
+                .unwrap_or("not proven"),
+            r.id
+        ),
+        (Verdict::Failed, Decision::HonestBlocker) => format!(
+            "⚠ Countercheck: FAILED ({passed} of {checks} check(s) passed); the agent says it is blocked, so it may stop. The work is not done (receipt {})",
+            r.id
+        ),
+        (Verdict::Failed, _) if gave_up => format!(
+            "⚠ Countercheck: FAILED ({passed} of {checks} check(s) passed). Stopped sending the agent back after the push-back limit: the work did NOT pass (receipt {}; countercheck report --open)",
+            r.id
+        ),
+        (Verdict::Failed, _) => format!(
+            "⚠ Countercheck: FAILED ({passed} of {checks} check(s) passed) (receipt {})",
+            r.id
+        ),
+    }
 }
 
 /// Claude Code and Cortex Code send the same Stop input; only where the transcript lives tells
@@ -305,6 +353,17 @@ fn session_file(cwd: &Path, session: &str) -> Option<PathBuf> {
             .join("sessions")
             .join(format!("{}.json", safe_id(session))),
     )
+}
+
+/// The app SessionStart recorded for this session (only names Countercheck knows).
+fn recorded_agent(cwd: &Path, session: &str) -> Option<&'static str> {
+    let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    match v.get("agent")?.as_str()? {
+        "cortex-code" => Some("cortex-code"),
+        "claude-code" => Some("claude-code"),
+        _ => None,
+    }
 }
 
 /// The model SessionStart recorded for this session, if any.
