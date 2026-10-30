@@ -182,7 +182,7 @@ Pick one. Each gives you the same `countercheck` command.
 | Direct download | [Releases](https://github.com/datacrate360/agent-countercheck/releases): one file per platform, plus `SHA256SUMS.txt` |
 
 ```sh
-countercheck --version        # countercheck 0.20.0
+countercheck --version        # countercheck 0.20.1
 ```
 
 - **Windows needs [Git for Windows](https://git-scm.com/download/win).** Countercheck calls `git`, and checks run
@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: datacrate360/agent-countercheck@v0.20.0
+      - uses: datacrate360/agent-countercheck@v0.20.1
 ```
 
 Any other CI: pass where the branch started.
@@ -577,7 +577,7 @@ Yes, MIT-licensed. See [Contribute](#contribute).
 
 A referee has to be right, so it's tested harder than most tools its size:
 
-- **499 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **501 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
   that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 45
   fields changes; `decide` never says VERIFIED when a check failed).

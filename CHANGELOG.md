@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.20.1 (2026-10-30)
+
+Security fix: Codex's `.codex/config.toml` could switch the Codex hook off unseen; it is now in the tamper check.
+Upgrade if you use the Codex hook.
 
 - **Security:** `.codex/config.toml` is in the tamper check, read as TOML: an agent writing `[features] hooks = false`
   (or the old `codex_hooks = false`, or either in a `[profiles.<name>.features]` table) there, or removing or changing a Countercheck entry in its `[hooks]` tables,
