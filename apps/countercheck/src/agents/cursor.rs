@@ -42,6 +42,7 @@ pub fn target() -> Target {
         also_reads: &[".claude/settings.json", ".claude/settings.local.json"],
         after: "Cursor reloads hooks.json when it changes: check the Hooks tab in Customize (or the Hooks output channel) that both hooks are listed.",
         docs: "docs/hooks/cursor.md",
+        plugin: None,
     }
 }
 

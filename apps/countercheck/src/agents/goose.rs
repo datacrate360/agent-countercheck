@@ -44,6 +44,7 @@ pub fn target() -> Target {
         also_reads: &[],
         after: "Goose loads plugin hooks when it starts, and project plugins from the folder it starts in: start a new goose session from the project's root folder.",
         docs: "docs/hooks/goose.md",
+        plugin: None,
     }
 }
 
