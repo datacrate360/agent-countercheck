@@ -262,10 +262,8 @@ enum HookCmd {
 
 #[derive(clap::Args)]
 struct InstallArgs {
-    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, devin (see
-    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, junie (see
-    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, amp (see
-    /// `countercheck hook status`).
+    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, devin, junie, amp
+    /// (openclaw and hermes are set up by hand; see `countercheck hook status`).
     #[arg(long)]
     agent: String,
     /// `project` (this repository, committed with it; the default), `user` (every project, for this

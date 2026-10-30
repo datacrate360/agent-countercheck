@@ -262,7 +262,7 @@ Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro: one com
 It shows the change first, keeps a backup, and touches nothing else:
 
 ```sh
-countercheck hook install --agent claude-code     # or: cortex-code, cursor, codex, copilot, goose, kiro
+countercheck hook install --agent claude-code     # or: cortex-code, cursor, codex, copilot, goose, kiro, devin, junie, amp
 git add <the file it names> && git commit -m "Countercheck hooks"   # then removing the hook makes a run FAILED
 countercheck hook status                          # which agents are hooked, and committed
 ```
@@ -421,7 +421,7 @@ verdict.
 | `ui` | A live page of every run, on this computer only | `countercheck ui` |
 | `report` | The same page as one offline HTML file | `countercheck report --open` |
 | `prune` | Delete receipts older than an age (by their own date); nothing else ever deletes them | `countercheck prune --older-than 90d --dry-run` |
-| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `cursor-stop`, `codex-stop`, `copilot-stop`, `goose-stop`, `kiro-stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
+| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `cursor-stop`, `codex-stop`, `copilot-stop`, `goose-stop`, `kiro-stop`, `devin-stop`, `junie-stop`, `amp-stop`, `openclaw-stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
 | `windows-setup` | Windows, once as administrator: the full check sandbox ([below](#platforms-and-the-sandbox)) | `countercheck windows-setup` |
 
 Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
