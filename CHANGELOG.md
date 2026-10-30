@@ -13,7 +13,8 @@ protected file the agent changed. Such a venv now makes runs UNVERIFIED until it
   into the venv, so a check imported the agent's real files instead of the clean copy: a protected file Countercheck
   put back was not what ran, and the receipt said it was. Countercheck now reads each linked folder 4 levels deep
   for files and symlinks that name a project path outside the linked folders (an editable `.pth` or finder, a
-  workspace `node_modules/<pkg>` symlink) and lists them as `linked_pointers`. The run is UNVERIFIED, or FAILED when
+  workspace `node_modules/<pkg>` symlink; on Windows and macOS in any letter case) and lists them as
+  `linked_pointers`. The run is UNVERIFIED, or FAILED when
   the agent also changed a protected or frozen file (the hook sends it back).
 - **New (CC-22): a linked folder that changes during a session.** `SessionStart` records a fingerprint of each
   linked folder; the stop hook compares, and a package installed or edited since makes the run UNVERIFIED

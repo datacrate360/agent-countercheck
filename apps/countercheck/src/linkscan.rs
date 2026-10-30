@@ -16,6 +16,9 @@ const SCAN_DEPTH: usize = 4;
 const MAX_ENTRIES: usize = 500_000;
 /// Files larger than this are not read for pointers (`.pth` and finder files are tiny).
 const MAX_FILE_BYTES: u64 = 64 * 1024;
+/// Compare paths without case where the file system usually ignores it (Windows, and macOS's
+/// default APFS), so `~/code/proj` typed in lower case still names `~/Code/proj`.
+const FOLD_CASE: bool = cfg!(any(windows, target_os = "macos"));
 /// Bytes one pointer scan reads in total.
 const MAX_READ_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -84,7 +87,7 @@ impl Scan<'_> {
                 if let Ok(target) = fs::read_link(e.path()) {
                     let abs = lexical(&real.join(target));
                     if let Some(rel) =
-                        linked::project_rel(&abs.to_string_lossy(), &self.roots, cfg!(windows))
+                        linked::project_rel(&abs.to_string_lossy(), &self.roots, FOLD_CASE)
                         && linked::outside_linked(&rel, self.linked)
                     {
                         self.found.push(Pointer { file, target: rel });
@@ -100,7 +103,7 @@ impl Scan<'_> {
                     continue;
                 };
                 let text = String::from_utf8_lossy(&bytes);
-                for target in linked::pointers_in(&text, &self.roots, self.linked, cfg!(windows)) {
+                for target in linked::pointers_in(&text, &self.roots, self.linked, FOLD_CASE) {
                     self.found.push(Pointer {
                         file: file.clone(),
                         target,

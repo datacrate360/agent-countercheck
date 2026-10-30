@@ -4741,3 +4741,21 @@ fn checks_keep_python_bytecode_caches_out_of_the_folders_they_read() {
     let (code, r) = countercheck(d.path(), &[]);
     assert_eq!(code, 0, "{r:#}");
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_pointer_in_other_letter_case_is_found_on_macos() {
+    let d = pointing_project();
+    let p = d.path();
+    // macOS disks ignore case by default: an installer run from a path typed in other case
+    // still sends Python to the project.
+    fs::write(
+        p.join("deps/env.sh"),
+        format!("T='{}/tests'\n", toplevel(p).to_uppercase()),
+    )
+    .unwrap();
+    fs::write(p.join("tests/real.sh"), "exit 0\n").unwrap();
+    let (code, r) = countercheck(p, &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["linked_pointers"][0]["file"], "deps/env.sh", "{r:#}");
+}

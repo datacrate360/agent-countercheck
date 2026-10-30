@@ -551,7 +551,7 @@ Yes, MIT-licensed. See [Contribute](#contribute).
 
 A referee has to be right, so it's tested harder than most tools its size:
 
-- **346 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
+- **347 tests** (`cargo test --workspace`): unit tests, end-to-end tests that run the real binary on throwaway git
   repositories (tampered tests, timeouts, every sandbox, the agent hooks, every check type), and **property tests**
   that throw thousands of generated inputs at the verdict and seal logic (a receipt's seal breaks if any one of 35
   fields changes; `decide` never says VERIFIED when a check failed).
