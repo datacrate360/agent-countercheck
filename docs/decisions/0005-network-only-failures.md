@@ -1,6 +1,6 @@
 # ADR-0005: A check that fails only because the sandbox blocked the internet is UNVERIFIED
 
-Status: **proposed** (2026-10-30), awaiting the maintainer's approval. Backlog CC-19.
+Status: **accepted** (2026-10-30, by the maintainer). Backlog CC-19.
 
 ## The problem
 
