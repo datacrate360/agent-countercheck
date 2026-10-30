@@ -172,7 +172,11 @@ run = "pytest -q -c tests/pytest.ini --rootdir=. --confcutdir=tests -o addopts= 
   `conftest.py` you want yourself; then it's part of the base.
 - A symlink the agent adds or changes that leads **outside** the project (say `tests/unit` pointing at a folder with
   a `conftest.py` elsewhere on disk) is always taken out of the clean copy (`removed_outside_link`), whatever
-  `protected` and `frozen` say.
+  `protected` and `frozen` say. A folder named in `link` may itself be a symlink (a shared venv): it is linked in.
+- **`link` folders come from the agent's own folder.** A linked `.venv` is read-only while the checks run, but the
+  agent can change it before (a `.pth` file or a patched package in `site-packages`), and nothing in the checks sees
+  that. For a guarantee, run the same check in CI with a fresh environment built from your protected lock file
+  (`pip install -r requirements.lock`), where the agent's venv doesn't exist.
 - A new test file still runs inside pytest and could patch it. If that worries you, refuse such lines with a
   [forbid](#only-new-lines-scope--added) on `tests/**` (`pattern = '\b_pytest\b|pytest_plugins|hookimpl|sys\.modules'`,
   `scope = "added"`), and keep the same check in CI.

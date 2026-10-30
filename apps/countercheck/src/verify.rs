@@ -204,6 +204,13 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         changes.push((change, path.clone()));
         // A link the worker added or changed that leads out of the copy: the checks would read
         // files Countercheck never saw (a conftest.py elsewhere on disk). Taken out, and recorded.
+        // A folder named in `link` may itself be a symlink (a shared venv): it is linked in, read-only,
+        // below, not copied; take the copied link out so `link_dir` puts its own in.
+        if change != Change::Deleted && checks.link.iter().any(|l| l.trim_end_matches('/') == path)
+        {
+            snapshot::restore(&work, &path, None)?;
+            continue;
+        }
         if change != Change::Deleted && snapshot::link_escapes(&work, &path) {
             snapshot::restore(&work, &path, None)?;
             protected_changes.push(ProtectedChange {

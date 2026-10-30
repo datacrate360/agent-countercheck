@@ -1824,7 +1824,7 @@ fn without_session_start_a_committed_test_edit_moves_the_base() {
         &claude_payload(d.path(), "s2", "Done, all tests pass."),
         &[],
     );
-    assert_eq!(out.trim(), "");
+    lets_stop(&out);
 }
 
 /// A resumed session keeps its first start; another session gets its own; COUNTERCHECK_BASE wins.
@@ -1841,7 +1841,7 @@ fn session_start_keeps_the_first_record_and_env_wins() {
     assert!(block_reason(&out).contains("FAILED"), "{out}");
     session_start(d.path(), "s3"); // a new session starts from the weakened commit
     let (_, out) = claude_hook(&claude_payload(d.path(), "s3", "Done."), &[]);
-    assert_eq!(out.trim(), "", "{out}");
+    lets_stop(&out);
     let (_, out) = claude_hook(
         &claude_payload(d.path(), "s3", "Done."),
         &[("COUNTERCHECK_BASE", "HEAD~1")],
@@ -1881,6 +1881,14 @@ fn claude_payload(dir: &Path, session: &str, last_message: &str) -> String {
     .to_string()
 }
 
+/// The agent may stop: no block, and the one line shown to the user (`systemMessage`).
+fn lets_stop(out: &str) -> String {
+    let v: serde_json::Value =
+        serde_json::from_str(out.trim()).unwrap_or_else(|_| panic!("not one JSON object: {out}"));
+    assert!(v.get("decision").is_none(), "blocked: {out}");
+    v["systemMessage"].as_str().unwrap().to_string()
+}
+
 /// The reason in a Claude Code block, or panic.
 fn block_reason(out: &str) -> String {
     let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
@@ -1893,7 +1901,17 @@ fn claude_hook_lets_passing_work_stop() {
     let d = project(CHECKS);
     fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
     let (code, out) = claude_hook(&claude_payload(d.path(), "s1", "Done."), &[]);
-    assert_eq!((code, out.trim()), (0, ""));
+    assert_eq!(code, 0);
+    // The user sees that the check ran: a pass never looks like a hook that never fired.
+    let msg = lets_stop(&out);
+    assert!(
+        msg.starts_with("✓ Countercheck: VERIFIED, 1 check(s) passed"),
+        "{msg}"
+    );
+    assert!(
+        msg.contains("including uncommitted changes") && msg.contains("(receipt "),
+        "{msg}"
+    );
 }
 
 #[test]
@@ -1926,7 +1944,12 @@ fn claude_hook_lets_an_honest_blocker_report_stop() {
     let d = project(CHECKS);
     let said = "I fixed what I could, but test_export can't pass: it contradicts test_display.";
     let (code, out) = claude_hook(&claude_payload(d.path(), "s1", said), &[]);
-    assert_eq!((code, out.trim()), (0, ""));
+    assert_eq!(code, 0);
+    let msg = lets_stop(&out);
+    assert!(
+        msg.contains("FAILED") && msg.contains("says it is blocked"),
+        "{msg}"
+    );
 }
 
 #[test]
@@ -1966,7 +1989,8 @@ fn claude_hook_reads_the_final_message_from_the_transcript() {
     let log = d.path().join("hook.log");
     let (code, out) = claude_hook(&input, &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())]);
     // The last text says it is blocked, so the FAILED work may stop.
-    assert_eq!((code, out.trim()), (0, ""));
+    assert_eq!(code, 0);
+    lets_stop(&out);
     let line: serde_json::Value =
         serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
     assert_eq!(line["agent_reported_blocker"], true);
@@ -2088,7 +2112,8 @@ fn cortex_code_stop_reads_the_claim_from_its_session_files() {
         let _ = fs::remove_file(&log);
         let (code, out) = claude_hook(&input, &[("COUNTERCHECK_HOOK_LOG", log.to_str().unwrap())]);
         // The last text reports a blocker, so the FAILED work may stop.
-        assert_eq!((code, out.trim()), (0, ""), "{transcript}");
+        assert_eq!(code, 0, "{transcript}");
+        lets_stop(&out);
         let line: serde_json::Value =
             serde_json::from_str(fs::read_to_string(&log).unwrap().trim()).unwrap();
         assert_eq!(line["agent_reported_blocker"], true, "{transcript}");
@@ -2129,7 +2154,13 @@ fn claude_hook_gives_up_after_three_push_backs() {
         block_reason(&out);
     }
     let (code, out) = claude_hook(&payload, &envs);
-    assert_eq!((code, out.trim()), (0, ""));
+    assert_eq!(code, 0);
+    // Giving up must not look like a pass: the user is told the work did NOT pass.
+    let msg = lets_stop(&out);
+    assert!(
+        msg.contains("FAILED") && msg.contains("did NOT pass"),
+        "{msg}"
+    );
     let last: serde_json::Value =
         serde_json::from_str(fs::read_to_string(&log).unwrap().lines().last().unwrap()).unwrap();
     assert_eq!(last["gave_up"], true);
@@ -4467,5 +4498,62 @@ fn links_inside_the_project_stay() {
         (0, Some("verified")),
         "{r:#}"
     );
+    assert!(!r.to_string().contains("removed_outside_link"), "{r:#}");
+}
+
+// ---- field feedback (a user's Cortex Code setup) ----
+
+/// A Stop with no transcript path takes the app SessionStart recorded, not a guess.
+#[test]
+fn the_agent_comes_from_the_session_start_when_the_stop_has_no_transcript() {
+    let d = project(CHECKS);
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let start = serde_json::json!({
+        "session_id": "c1", "cwd": d.path(), "hook_event_name": "SessionStart",
+        "transcript_path": "/Users/x/.snowflake/cortex/conversations/c1.json"
+    });
+    let (code, _) = run_hook("session-start", &start.to_string(), &[]);
+    assert_eq!(code, 0);
+    let stop = serde_json::json!({
+        "session_id": "c1", "cwd": d.path(), "hook_event_name": "Stop",
+        "last_assistant_message": "Done."
+    });
+    let (_, out) = claude_hook(&stop.to_string(), &[]);
+    lets_stop(&out);
+    let receipt = newest_receipt(d.path());
+    assert_eq!(receipt["worker"]["agent"], "cortex-code", "{receipt:#}");
+}
+
+fn newest_receipt(dir: &Path) -> serde_json::Value {
+    let mut files: Vec<_> = fs::read_dir(dir.join(".countercheck/receipts"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+        .collect();
+    files.sort_by_key(|e| e.metadata().unwrap().modified().unwrap());
+    serde_json::from_str(&fs::read_to_string(files.last().unwrap().path()).unwrap()).unwrap()
+}
+
+/// A `link` folder that is itself a symlink (a shared venv) is linked in, not dropped as a link
+/// out of the project.
+#[cfg(unix)]
+#[test]
+fn a_linked_folder_that_is_a_symlink_is_still_linked() {
+    let checks = "link = [\"deps\"]\n[[check]]\nname = \"calc\"\nrun = \"[ -f deps/tool.sh ] && sh tests/check.sh\"\ntimeout_secs = 30\n";
+    let d = project(checks);
+    // `deps/` with a slash, like `.venv/`: git doesn't ignore a symlink by that pattern.
+    fs::write(d.path().join(".gitignore"), "deps/\n").unwrap();
+    sh(d.path(), "git add .gitignore && git commit -qm ignore");
+    let shared = tempfile::tempdir().unwrap();
+    fs::write(shared.path().join("tool.sh"), "true\n").unwrap();
+    std::os::unix::fs::symlink(shared.path(), d.path().join("deps")).unwrap();
+    fs::write(d.path().join("src/calc.sh"), "echo $(($1 + $2))\n").unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(
+        (code, r["verdict"].as_str()),
+        (0, Some("verified")),
+        "{r:#}"
+    );
+    assert_eq!(r["linked"][0], "deps", "{r:#}");
     assert!(!r.to_string().contains("removed_outside_link"), "{r:#}");
 }

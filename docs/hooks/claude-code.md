@@ -1,8 +1,18 @@
 # Claude Code (and Cortex Code) Stop hook
 
-`countercheck hook claude-stop` runs when Claude Code tries to finish a turn. It runs `countercheck verify` on the
-working tree. If the checks FAILED, it blocks the stop and tells the agent why, so the agent keeps working.
-Otherwise it says nothing and the agent stops.
+`countercheck hook claude-stop` runs when Claude Code tries to finish a turn (every turn end, not only when the agent
+says "done"). It runs `countercheck verify` on the working tree. If the checks FAILED, it blocks the stop and tells
+the agent why, so the agent keeps working. Otherwise the agent stops, and the user sees one line in the agent's
+window (`systemMessage`), so a pass never looks like a hook that didn't run:
+
+| Outcome | The user sees |
+|---|---|
+| VERIFIED | `✓ Countercheck: VERIFIED, 2 check(s) passed in a clean copy, including uncommitted changes (receipt …)` |
+| UNVERIFIED | `Countercheck: UNVERIFIED: <the first reason> (receipt …)` |
+| FAILED, the agent reports a blocker | `⚠ Countercheck: FAILED (…); the agent says it is blocked, so it may stop. The work is not done (receipt …)` |
+| FAILED after the push-back limit | `⚠ Countercheck: FAILED (…). Stopped sending the agent back after the push-back limit: the work did NOT pass (receipt …)` |
+
+"Including uncommitted changes" means the receipt covers the files on disk: commit them, or HEAD may not pass.
 
 It uses the same rules as the Hermes hook:
 
@@ -134,11 +144,20 @@ Countercheck does about it:
 - **No `last_assistant_message`.** The claim is read from Cortex Code's own session files in
   `~/.snowflake/cortex/conversations/`: `<id>.json`, with the messages in its `history` array or in
   `<id>.history.jsonl` next to it. `transcript_path` may name either file.
-- **The receipt says `cortex-code`** when the transcript is under `.snowflake/cortex/`, else `claude-code`.
-- **Whether Stop can push back is not settled.** Snowflake's Desktop hooks page says Stop "can force continuation";
-  the CLI page lists Stop as unable to block. If the CLI ignores the push-back, the receipt is still written (FAILED
-  when the work fails), but the agent is not sent back to work: read it with `countercheck report --open`.
+- **The receipt says `cortex-code`** when the transcript is under `.snowflake/cortex/`. When the Stop input has no
+  transcript path, the app the `SessionStart` hook recorded for that session is used; else `claude-code`. A label
+  only: the model inside Cortex Code (Claude or another) never changes the verdict.
+- **Push-back:** Snowflake's Desktop hooks page says Stop "can force continuation"; the CLI page lists Stop as unable
+  to block. Not yet seen in a real session. Either way the FAILED receipt is written: read it with
+  `countercheck report --open`.
 
-Tested only with hook input and session files shaped from Snowflake's docs, its `cortex-code-agent-sdk` types and
-the `cortex-replay` parser; not yet in a real Cortex Code session. If you try it, please
-[open an issue](https://github.com/datacrate360/agent-countercheck/issues) with what you saw.
+**Seen in a real setup** (Cortex Code 1.2.24, macOS, a user's project, October 2026): hooks load from the project's
+`.cortex/settings.json` when a session starts (a session already open doesn't pick up a new hook); the `Stop` hook ran
+at every turn end and its receipts say `cortex-code`; `SessionStart` recorded the session. Cortex Code also loads
+`AGENTS.md`, `CLAUDE.md`, `CORTEX.md`, `RULES.md` and `.cursorrules` from the project as instructions (see `/rules`).
+
+**Claude Code and Cortex Code in one project:** Claude Code reads only `.claude/settings.json`. Snowflake's docs say
+Cortex Code reads `.claude/settings.json` too; if both files hold the hook and a Cortex session writes two receipts
+per stop, keep only `.claude/settings.json`. Each session gets its own base, push-back count and receipts, and
+`COUNTERCHECK_ROLE` in each file's `env` names them on the page. Please
+[open an issue](https://github.com/datacrate360/agent-countercheck/issues) with what you see.

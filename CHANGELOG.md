@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Fixes from the first real Cortex Code setup, found by a user and his agent.
+
+- **A stop the hook lets through now says so.** On VERIFIED, UNVERIFIED, an honest blocker or the push-back limit,
+  the Claude Code / Cortex Code hook prints one line for the user (`systemMessage`), e.g. `✓ Countercheck: VERIFIED,
+  2 check(s) passed in a clean copy (receipt …)`. Before, a pass, a hook that never ran and a FAILED after the
+  push-back limit all looked the same; after the limit the user now reads "the work did NOT pass".
+- **Fix: a `link` folder that is a symlink** (a shared venv, ignored as `.venv/`) was taken out as a link leading
+  outside the project in v0.16.0, so the checks failed; it is linked in again.
+- **Agent label:** a Stop with no transcript path takes the app `SessionStart` recorded for the session
+  (`cortex-code`) before falling back to `claude-code`.
+- **Report:** the run replay counted new files on protected paths (kept) as "put back"; a receipt for uncommitted
+  work says it covers the files on disk, not only the commit.
+- **Docs:** Cortex Code behaviour seen in a real setup (hooks from `.cortex/settings.json`, receipts labelled
+  `cortex-code`, instruction files it loads), Claude Code and Cortex Code in one project, the hook runs at every turn
+  end, and the limit of `link` folders (a linked venv the agent can change before the run; use CI with a fresh one).
+
 ## v0.16.0 (2026-10-29)
 
 Closes two ways a new file could fake a pass, and shows sessions that were never checked.
