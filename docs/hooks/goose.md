@@ -101,10 +101,10 @@ with nothing on stdout, and Goose ends the turn. Goose also lets the turn end on
 
 ## Limits
 
-- **The agent can switch the plugin off.** Goose skips a plugin named in `disabledPlugins` in
-  `<project>/.config/goose/settings.json` or `settings.local.json`, and the agent can edit
-  `.agents/plugins/countercheck/hooks/hooks.json` itself. Countercheck's hook-settings check doesn't watch these
-  files yet. Keep the [GitHub Action](../guides/github-action.md) on your pull requests.
+- **The agent can try to switch the plugin off,** with `disabledPlugins` in `<project>/.config/goose/settings.json`
+  or `settings.local.json`, or by editing `.agents/plugins/countercheck/hooks/hooks.json`. Countercheck's tamper
+  check compares all three with the base (0.19+): either makes the run FAILED, naming the file. The user-wide
+  `~/.config/goose/` files aren't compared. Keep the [GitHub Action](../guides/github-action.md) on your pull requests.
 - **Windows:** Goose runs hooks with `sh -c` on every OS, so on Windows it needs an `sh` on PATH (Git for Windows).
   Not tried yet.
 - `GOOSE_PATH_ROOT` moves Goose's user plugin folder to `$GOOSE_PATH_ROOT/.agents/plugins/`. `--scope user` writes

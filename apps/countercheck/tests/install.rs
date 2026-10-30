@@ -329,3 +329,59 @@ fn a_managed_folder_without_write_access_says_how_to_get_it() {
     assert!(!o.status.success());
     assert!(text(&o).contains("sudo"), "{}", text(&o));
 }
+
+#[test]
+fn every_agents_installed_hook_is_guarded_against_removal() {
+    for (agent, file) in [
+        ("cursor", ".cursor/hooks.json"),
+        ("codex", ".codex/hooks.json"),
+        ("copilot", ".github/hooks/countercheck.json"),
+        ("goose", ".agents/plugins/countercheck/hooks/hooks.json"),
+        ("kiro", ".kiro/hooks/countercheck.json"),
+    ] {
+        let d = project();
+        let p = d.path();
+        let home = tempfile::tempdir().unwrap();
+        let envs = [("HOME", home.path()), ("USERPROFILE", home.path())];
+        let o = hook(p, &["install", "--agent", agent, "--yes"], &envs);
+        assert!(o.status.success(), "{agent}: {}", text(&o));
+        assert!(
+            text(&o).contains("so Countercheck can tell if an agent removes the hook"),
+            "{agent}: {}",
+            text(&o)
+        );
+        sh(p, "git add -A && git commit -qm hooks");
+        assert_eq!(verify(p)["verdict"], "verified", "{agent}");
+        // The agent deletes its own hook file: FAILED, naming it.
+        fs::remove_file(p.join(file)).unwrap();
+        let r = verify(p);
+        assert_eq!(r["verdict"], "failed", "{agent}: {r:#}");
+        assert!(r["reasons"].to_string().contains(file), "{agent}: {r:#}");
+    }
+}
+
+#[test]
+fn a_goose_plugin_switched_off_in_project_settings_fails() {
+    let d = project();
+    let p = d.path();
+    let home = tempfile::tempdir().unwrap();
+    let envs = [("HOME", home.path()), ("USERPROFILE", home.path())];
+    assert!(
+        hook(p, &["install", "--agent", "goose", "--yes"], &envs)
+            .status
+            .success()
+    );
+    sh(p, "git add -A && git commit -qm hooks");
+    fs::create_dir_all(p.join(".config/goose")).unwrap();
+    fs::write(
+        p.join(".config/goose/settings.local.json"),
+        r#"{"disabledPlugins": ["countercheck"]}"#,
+    )
+    .unwrap();
+    let r = verify(p);
+    assert_eq!(r["verdict"], "failed", "{r:#}");
+    assert!(
+        r["reasons"].to_string().contains("disabledPlugins"),
+        "{r:#}"
+    );
+}

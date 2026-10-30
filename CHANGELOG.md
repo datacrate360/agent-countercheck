@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Security: the tamper check now covers every agent `hook install` supports.** `verify` compares `.cursor/hooks.json`,
+  `.codex/hooks.json`, `.github/hooks/countercheck.json`, `.agents/plugins/countercheck/hooks/hooks.json`,
+  `.kiro/hooks/countercheck.json` and Goose's `.config/goose/settings*.json` with the base, like the Claude Code files:
+  a removed, disabled or weakened Countercheck hook (Copilot's `bash`/`powershell` commands, Kiro's hook list, Goose's
+  `disabledPlugins`) makes the run FAILED, naming the file. Install now says to commit the file for every agent.
 - **New: Kiro hook.** `countercheck hook install --agent kiro` writes `.kiro/hooks/countercheck.json` (`SessionStart` +
   `Stop`, IDE and CLI V3; `--scope user` for `~/.kiro/hooks/`), and `countercheck hook kiro-stop` sends Kiro back in its
   own format while the checks fail ([docs/hooks/kiro.md](docs/hooks/kiro.md)).

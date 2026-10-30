@@ -598,6 +598,8 @@ fn confirm_offline(
 /// and a file too large to parse is passed on as its first bytes (it then counts as changed).
 pub fn read_settings(root: &std::path::Path, rel: &str) -> hook_settings::File {
     let path = root.join(rel);
+    // Folders on the way are read through, like the agent reads them: what counts is the hook it
+    // will load. Only the file itself is never followed.
     match std::fs::symlink_metadata(&path) {
         Err(_) => hook_settings::File::Absent,
         Ok(m) if m.file_type().is_symlink() => hook_settings::File::Symlink(

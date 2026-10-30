@@ -102,9 +102,9 @@ nothing on stdout, and Codex finishes. A broken referee must never trap an agent
 
 ## Not covered yet
 
-- **Tamper check:** `countercheck verify` doesn't yet compare `.codex/hooks.json` (or `.codex/config.toml`) with the
-  base, as it does for `.claude/settings.json`. An agent that removes the hook from the project file isn't reported
-  by the next run; commit the file, and keep the check in CI (`countercheck verify --base origin/main`).
+- **Tamper check:** `countercheck verify` compares `.codex/hooks.json` with the base (0.19+): an agent that removes
+  or weakens the hook there makes the run FAILED. `.codex/config.toml` (where hooks can also be switched off) isn't
+  compared yet; keep the check in CI (`countercheck verify --base origin/main`).
 - **Not tried in a real Codex session yet.** Checked against Codex 0.166.0 (`codex --version`, `codex features list`:
   `hooks stable true`) and its source (`codex-rs/hooks`, Oct 30 2026). The input and output shapes come from Codex's
   generated hook schemas; see the PR for each claim's source.

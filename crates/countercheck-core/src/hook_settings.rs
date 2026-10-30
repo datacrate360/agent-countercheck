@@ -1,8 +1,9 @@
 //! Agent hook settings: did the worker switch its own referee off?
 //!
 //! A coding agent reads its hooks from settings files inside the project (Claude Code
-//! `.claude/settings.json` and `.claude/settings.local.json`, Cortex Code `.cortex/...`), and
-//! the worker can edit those files mid-session. One line (`"disableAllHooks": true`) turns every
+//! `.claude/settings.json` and `.claude/settings.local.json`, Cortex Code `.cortex/...`, and the
+//! files `countercheck hook install` writes for Cursor, Codex, Copilot, Goose and Kiro), and the
+//! worker can edit those files mid-session. One line (`"disableAllHooks": true`) turns every
 //! hook off, a project setting overrides the user's, and the agent picks the edit up at once. Then
 //! the Stop hook never runs and "done" is never checked.
 //!
@@ -22,12 +23,21 @@ use crate::receipt::Verdict;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// The project-level hook settings files of the agents Countercheck hooks into.
-pub const FILES: [&str; 4] = [
+/// The project-level hook settings files of the agents Countercheck hooks into (the project files
+/// of `apps/countercheck/src/agents/`: a new agent's file goes here too).
+pub const FILES: [&str; 11] = [
     ".claude/settings.json",
     ".claude/settings.local.json",
     ".cortex/settings.json",
     ".cortex/settings.local.json",
+    ".cursor/hooks.json",
+    ".codex/hooks.json",
+    ".github/hooks/countercheck.json",
+    ".agents/plugins/countercheck/hooks/hooks.json",
+    ".kiro/hooks/countercheck.json",
+    // Goose's project settings, where `disabledPlugins` can switch the countercheck plugin off.
+    ".config/goose/settings.json",
+    ".config/goose/settings.local.json",
 ];
 
 /// Larger files are not parsed (and count as changed when they differ from the base).
@@ -57,6 +67,8 @@ pub struct HookSettingsChange {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Summary {
     disable_all: bool,
+    /// The countercheck plugin listed in `disabledPlugins` (Goose).
+    plugin_off: bool,
     /// Event name -> every Countercheck handler under it, as canonical JSON.
     hooks: BTreeMap<String, BTreeSet<String>>,
     /// `COUNTERCHECK_*` variables that change what the hook does.
@@ -73,16 +85,38 @@ fn summarize(bytes: &[u8]) -> Option<Summary> {
     let obj = v.as_object()?;
     let mut s = Summary {
         disable_all: obj.get("disableAllHooks") == Some(&serde_json::Value::Bool(true)),
+        plugin_off: obj
+            .get("disabledPlugins")
+            .and_then(|p| p.as_array())
+            .is_some_and(|p| p.iter().any(|n| n.as_str() == Some("countercheck"))),
         ..Summary::default()
     };
-    if let Some(events) = obj.get("hooks").and_then(|h| h.as_object()) {
-        for (event, groups) in events {
-            let mut found = BTreeSet::new();
-            collect_handlers(groups, &mut found);
-            if !found.is_empty() {
-                s.hooks.insert(event.clone(), found);
+    match obj.get("hooks") {
+        // Event name -> handlers (Claude Code, Cortex, Cursor, Codex, Copilot, Goose).
+        Some(serde_json::Value::Object(events)) => {
+            for (event, groups) in events {
+                let mut found = BTreeSet::new();
+                collect_handlers(groups, &mut found);
+                if !found.is_empty() {
+                    s.hooks.insert(event.clone(), found);
+                }
             }
         }
+        // A list of hook definitions, each naming its event in `trigger` (Kiro).
+        Some(serde_json::Value::Array(defs)) => {
+            for def in defs {
+                let event = def
+                    .get("trigger")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("(no trigger)");
+                let mut found = BTreeSet::new();
+                collect_handlers(def, &mut found);
+                if !found.is_empty() {
+                    s.hooks.entry(event.to_string()).or_default().extend(found);
+                }
+            }
+        }
+        _ => {}
     }
     if let Some(env) = obj.get("env").and_then(|e| e.as_object()) {
         for (k, val) in env {
@@ -94,8 +128,26 @@ fn summarize(bytes: &[u8]) -> Option<Summary> {
     Some(s)
 }
 
-/// Every object under `v` that runs Countercheck (a `command` naming it), as canonical JSON, so
-/// any change to it (command, timeout, type) shows. Depth-limited: settings are small.
+/// Whether this object runs Countercheck: a command field naming it (`command`; Copilot's `bash` /
+/// `powershell`), directly or in its `action` (Kiro), so the whole definition, timeout and any
+/// on/off flag included, is what gets compared.
+fn runs_countercheck(map: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let names_us = |m: &serde_json::Map<String, serde_json::Value>| {
+        ["command", "bash", "powershell"].iter().any(|k| {
+            m.get(*k)
+                .and_then(|c| c.as_str())
+                .is_some_and(|c| c.contains("countercheck"))
+        })
+    };
+    names_us(map)
+        || map
+            .get("action")
+            .and_then(|a| a.as_object())
+            .is_some_and(names_us)
+}
+
+/// Every object under `v` that runs Countercheck, as canonical JSON, so any change to it
+/// (command, timeout, type, enabled) shows. Depth-limited: settings are small.
 fn collect_handlers(v: &serde_json::Value, out: &mut BTreeSet<String>) {
     fn walk(v: &serde_json::Value, out: &mut BTreeSet<String>, depth: usize) {
         if depth > 8 {
@@ -108,11 +160,7 @@ fn collect_handlers(v: &serde_json::Value, out: &mut BTreeSet<String>) {
                 }
             }
             serde_json::Value::Object(map) => {
-                let runs_us = map
-                    .get("command")
-                    .and_then(|c| c.as_str())
-                    .is_some_and(|c| c.contains("countercheck"));
-                if runs_us {
+                if runs_countercheck(map) {
                     // serde_json's Map is sorted, so this is canonical.
                     out.insert(v.to_string());
                 } else {
@@ -171,6 +219,11 @@ pub fn compare(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
             "turns every hook off (\"disableAllHooks\": true)".to_string(),
         ));
     }
+    if now_summary.plugin_off && !base_summary.plugin_off {
+        out.push(finding(
+            "switches the countercheck plugin off (\"disabledPlugins\")".to_string(),
+        ));
+    }
     for (event, handlers) in &base_summary.hooks {
         match now_summary.hooks.get(event) {
             None => out.push(finding(format!("removes the Countercheck {event} hook"))),
@@ -199,6 +252,8 @@ pub fn switched_off(path: &str, now: &File) -> Option<HookSettingsChange> {
     let s = summarize(bytes)?;
     let what = if s.disable_all {
         "turns every hook off (\"disableAllHooks\": true)"
+    } else if s.plugin_off {
+        "switches the countercheck plugin off (\"disabledPlugins\")"
     } else if s.env.contains_key("COUNTERCHECK_HOOK_DISABLED") {
         "turns the Countercheck hook off (COUNTERCHECK_HOOK_DISABLED)"
     } else {
@@ -341,6 +396,91 @@ mod tests {
         );
         assert_eq!(apply(Verdict::Unverified, vec![], &f).0, Verdict::Failed);
         assert_eq!(apply(Verdict::Verified, vec![], &[]).0, Verdict::Verified);
+    }
+
+    #[test]
+    fn every_agents_hook_file_is_guarded() {
+        // Cursor: flat handlers.
+        let cursor = r#"{"version":1,"hooks":{"stop":[{"command":"countercheck hook cursor-stop","timeout":600}]}}"#;
+        let cursor_short = cursor.replace("600", "1");
+        assert_eq!(
+            compare(".cursor/hooks.json", &reg(cursor), &reg(&cursor_short)).len(),
+            1
+        );
+        assert_eq!(
+            compare(
+                ".cursor/hooks.json",
+                &reg(cursor),
+                &reg(r#"{"version":1,"hooks":{}}"#)
+            )[0]
+            .what,
+            "removes the Countercheck stop hook"
+        );
+        // Copilot: the command is under `bash` / `powershell`.
+        let copilot = r#"{"version":1,"hooks":{"agentStop":[{"type":"command","bash":"countercheck hook copilot-stop","powershell":"countercheck hook copilot-stop","timeoutSec":600}]}}"#;
+        assert_eq!(
+            compare(
+                ".github/hooks/countercheck.json",
+                &reg(copilot),
+                &File::Absent
+            )[0]
+            .what,
+            "removes the Countercheck agentStop hook"
+        );
+        let wrapped = copilot.replacen(
+            "\"bash\":\"countercheck hook copilot-stop\"",
+            "\"bash\":\"countercheck hook copilot-stop || true\"",
+            1,
+        );
+        assert_eq!(
+            compare(
+                ".github/hooks/countercheck.json",
+                &reg(copilot),
+                &reg(&wrapped)
+            )
+            .len(),
+            1
+        );
+        // Kiro: a list of definitions; the timeout and any flag sit beside `action`.
+        let kiro = r#"{"version":"v1","hooks":[{"name":"countercheck-stop","trigger":"Stop","action":{"type":"command","command":"countercheck hook kiro-stop"},"timeout":600}]}"#;
+        assert_eq!(
+            compare(
+                ".kiro/hooks/countercheck.json",
+                &reg(kiro),
+                &reg(r#"{"version":"v1","hooks":[]}"#)
+            )[0]
+            .what,
+            "removes the Countercheck Stop hook"
+        );
+        let off = kiro.replace("\"timeout\":600", "\"timeout\":600,\"enabled\":false");
+        assert_eq!(
+            compare(".kiro/hooks/countercheck.json", &reg(kiro), &reg(&off))[0].what,
+            "changes the Countercheck Stop hook (its command, timeout or type)"
+        );
+        // Goose: the plugin switched off in the project's settings, even in a new local file.
+        assert_eq!(
+            compare(
+                ".config/goose/settings.local.json",
+                &File::Absent,
+                &reg(r#"{"disabledPlugins":["countercheck"]}"#)
+            )[0]
+            .what,
+            "switches the countercheck plugin off (\"disabledPlugins\")"
+        );
+        assert!(
+            compare(
+                ".config/goose/settings.json",
+                &File::Absent,
+                &reg(r#"{"disabledPlugins":["other"]}"#)
+            )
+            .is_empty()
+        );
+        // Honest edits stay fine: another hook added beside ours.
+        let more = kiro.replace(
+            "]}",
+            r#",{"name":"lint","trigger":"Stop","action":{"type":"command","command":"npm run lint"}}]}"#,
+        );
+        assert!(compare(".kiro/hooks/countercheck.json", &reg(kiro), &reg(&more)).is_empty());
     }
 
     #[test]

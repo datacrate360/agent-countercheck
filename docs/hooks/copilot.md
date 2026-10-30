@@ -157,10 +157,11 @@ stderr, exits 0 and lets the agent stop. A broken referee must never trap an age
 
 ## What it can't stop (yet)
 
-The agent can edit `.github/hooks/countercheck.json` like any other file. Countercheck's tamper check watches Claude
-Code's and Cortex Code's settings files, **not yet** `.github/hooks/`, so a Copilot agent that removes or weakens its
-own hook isn't reported. Keep the [GitHub Action](../guides/github-action.md) on your pull requests: on a pull request
-the checks run from the base branch, whatever the agent did to its hooks.
+The agent can edit `.github/hooks/countercheck.json` like any other file. Countercheck's tamper check compares it with
+the base (0.19+): a Copilot agent that removes or weakens its own hook there makes the run FAILED, naming the file.
+Another hook file the agent adds in `.github/hooks/` isn't a finding (adding hooks is allowed). Keep the
+[GitHub Action](../guides/github-action.md) on your pull requests: on a pull request the checks run from the base
+branch, whatever the agent did to its hooks.
 
 ## Sources
 
