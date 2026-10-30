@@ -9,6 +9,7 @@
 
 pub mod json;
 
+pub mod amp;
 mod claude;
 pub mod codex;
 pub mod copilot;
@@ -86,8 +87,6 @@ fn plugin_plan(old: Option<&str>, new: &str) -> PluginPlan {
 /// A plugin template with the command that runs Countercheck filled in: every
 /// `"__COUNTERCHECK_BIN__"` (quotes included) becomes `bin` as a string literal, valid in
 /// JavaScript and TypeScript as in JSON.
-// Its first callers are the plugin agents (Amp, OpenClaw), added one file each.
-#[allow(dead_code)]
 pub fn plugin_with_bin(template: &str, bin: &str) -> String {
     template.replace("\"__COUNTERCHECK_BIN__\"", &quoted(bin))
 }
@@ -104,6 +103,7 @@ pub fn all() -> Vec<Target> {
         copilot::target(),
         devin::target(),
         junie::target(),
+        amp::target(),
     ]
 }
 

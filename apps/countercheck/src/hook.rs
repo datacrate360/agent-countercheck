@@ -347,6 +347,7 @@ fn agent_from_session_start(payload: &serde_json::Value) -> Option<&'static str>
     match text("hook_event_name") {
         "sessionStart" => return Some("cursor"),
         "agentSpawn" => return Some("kiro"),
+        "session.start" => return Some("amp"),
         _ => {}
     }
     if !text("transcript_path").is_empty() {

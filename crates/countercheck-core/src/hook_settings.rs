@@ -48,7 +48,7 @@ const WHOLE_FILE_HOOKS: [&str; 1] = [".devin/hooks.v1.json"];
 /// Agents whose hook is a whole program file Countercheck writes (a TypeScript plugin), not JSON
 /// settings: compared byte for byte with the base by [`compare_plugin`]. Each plugin agent in
 /// `apps/countercheck/src/agents/` adds its project file here.
-pub const PLUGIN_FILES: &[&str] = &[];
+pub const PLUGIN_FILES: &[&str] = &[".amp/plugins/countercheck.ts"];
 
 /// Whether the tamper check compares this project file (a settings file or a plugin file).
 pub fn is_guarded(rel: &str) -> bool {

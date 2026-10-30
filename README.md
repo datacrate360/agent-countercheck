@@ -119,6 +119,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps; built from Copilot's docs, not yet run against Copilot) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | JetBrains Junie CLI | a `Stop` hook in your user config: `countercheck hook install --agent junie` (Junie runs no hooks from a project file; [page](docs/hooks/junie.md); built from Junie's docs and code, not yet run in a real Junie session) |
+| Amp | a plugin on `agent.end`: `countercheck hook install --agent amp` ([page](docs/hooks/amp.md); built from Amp's Plugin API docs, not yet run in a live Amp thread) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Devin CLI | a `Stop` hook: `countercheck hook install --agent devin` ([page](docs/hooks/devin.md); built from Devin's docs and CLI binary, not yet run in a real Devin session) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
