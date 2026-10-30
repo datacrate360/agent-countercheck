@@ -486,6 +486,7 @@ fn not_started(spec: &PlannedCheck, why: String) -> CheckResult {
         writes: Vec::new(),
         sandboxed: None,
         unsandboxed_reason: None,
+        needs_network: false,
     }
 }
 
@@ -872,6 +873,7 @@ pub fn run_check(
         },
         sandboxed: unsandboxed.map(|_| false),
         unsandboxed_reason: unsandboxed.map(str::to_string),
+        needs_network: false,
     };
     if let Some(b) = &spec.budget
         && result.passed

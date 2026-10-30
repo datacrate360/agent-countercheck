@@ -18,6 +18,10 @@
   (`sessionStart` + `agentStop`, `bash` and `powershell`, 600 s timeout) for the Copilot CLI, the cloud agent and VS Code;
   `hook copilot-stop` reads Copilot's input and transcript and answers in its format. `verify` labels Copilot runs. See
   [docs/hooks/copilot.md](docs/hooks/copilot.md), including the cloud agent's `copilot-setup-steps.yml`.
+- **Changed (CC-19, [ADR-0005](docs/decisions/0005-network-only-failures.md)): a check that fails only because the
+  sandbox blocked the internet makes the run UNVERIFIED, not FAILED.** Countercheck confirms it by running that check
+  once more on the base revision; it counts only if the base fails for lack of internet too, so an agent can't use it
+  to soften a real failure. The receipt marks the check `needs_network`. Fix for such checks: `network = true`.
 - **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
   Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
   `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project

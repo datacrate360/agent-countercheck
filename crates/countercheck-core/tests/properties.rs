@@ -59,6 +59,7 @@ fn check_result() -> impl Strategy<Value = CheckResult> {
                     writes,
                     sandboxed: None,
                     unsandboxed_reason: None,
+                    needs_network: false,
                 }
             },
         )
@@ -289,6 +290,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
             writes: Vec::new(),
             sandboxed: None,
             unsandboxed_reason: None,
+            needs_network: false,
         });
         return &mut r.checks[0];
     }
@@ -296,7 +298,7 @@ fn first_check(r: &mut Receipt) -> &mut CheckResult {
 }
 
 /// Number of single-field edits `edit` knows how to make.
-const EDITS: usize = 44;
+const EDITS: usize = 45;
 
 /// Change exactly one field (or one part of a nested field) of a sealed receipt.
 fn edit(r: &mut Receipt, which: usize) {
@@ -374,6 +376,7 @@ fn edit(r: &mut Receipt, which: usize) {
             target: "src".into(),
         }),
         43 => r.linked_changed.push(".venv".into()),
+        44 => first_check(r).needs_network ^= true,
         36 => first_check(r).writes.push("/var/tmp/x".into()),
         37 => match &mut r.checks_external {
             Some(e) => e.pinned ^= true,

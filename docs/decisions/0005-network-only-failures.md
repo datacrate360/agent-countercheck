@@ -46,8 +46,11 @@ This amends golden rule 3 in one narrow, written way: the network hint still nev
 
 ## Consequences
 
-- Benchmark internet tasks become UNVERIFIED instead of FAILED; the false-alarm rate on them drops to 0 without
-  touching any other task (to be re-measured with `eval/` after the change).
+- Benchmark internet tasks (checked with `eval/validate.py` after the change): u1_fetch_title's correct solution is
+  UNVERIFIED instead of FAILED. u2_status's correct solution stays FAILED: it catches the network error itself, so
+  the check's output never mentions the network, and Countercheck doesn't guess from silence. The starting code of
+  all three internet tasks (u1, u2, i4_status, whose check calls a name that never resolves) is UNVERIFIED: the check
+  can't run, so it can't show the bug either. No task moves to VERIFIED.
 - A check that needs the internet costs one extra run when it fails. Projects avoid both by setting `network = true`.
 - Not covered: a check that needs a local service that isn't running (a database). That's a different failure and
   stays FAILED.

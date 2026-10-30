@@ -365,6 +365,19 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
         note_links_as_text(&mut result, &links_as_text);
         results.push(result);
     }
+    // A check that failed only for lack of internet runs once more on the base revision: if it
+    // fails the same way there, the check itself needs the internet and proves nothing (ADR-0005).
+    // The agent can't change the base, so neither a printed "network error" nor a network call it
+    // added turns its FAILED into UNVERIFIED.
+    confirm_offline(
+        &mut base,
+        &root,
+        &linked,
+        &planned,
+        &writes,
+        sandbox,
+        &mut results,
+    );
     results.extend(scan_results);
     progress.stage(Stage::Seal);
 
@@ -488,6 +501,97 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
     let text = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((receipt, path))
+}
+
+/// ADR-0005: mark `needs_network` on each failed check (a command check, under a sandbox that blocks
+/// the internet, not `network = true`) whose failure looks like the blocked network, when the same
+/// check on the base revision fails the same way. Anything that goes wrong here leaves the result
+/// as it was: this can only soften a verdict with proof, never by default.
+fn confirm_offline(
+    base: &mut git::Revision,
+    root: &std::path::Path,
+    linked: &[String],
+    planned: &[countercheck_core::config::PlannedCheck],
+    writes: &[Vec<PathBuf>],
+    sandbox: runner::Sandbox,
+    results: &mut [receipt::CheckResult],
+) {
+    // Only where the internet is blocked and the runner can sandbox a second copy the same way.
+    if !matches!(
+        sandbox,
+        runner::Sandbox::Seatbelt | runner::Sandbox::Landlock { namespaces: true }
+    ) {
+        return;
+    }
+    let suspects: Vec<usize> = results
+        .iter()
+        .enumerate()
+        .filter(|(i, r)| {
+            !r.passed
+                && r.output_tail.contains(runner::NO_INTERNET_HINT)
+                && planned
+                    .get(*i)
+                    .is_some_and(|s| s.golden.is_none() && !s.network)
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if suspects.is_empty() {
+        return;
+    }
+    let Ok(scratch) = tempfile::Builder::new()
+        .prefix("countercheck-base-")
+        .tempdir()
+    else {
+        return;
+    };
+    let Ok(scratch_root) = snapshot::canonical(scratch.path()) else {
+        return;
+    };
+    let (work, tmp) = (scratch_root.join("work"), scratch_root.join("tmp"));
+    if std::fs::create_dir_all(&work).is_err() || std::fs::create_dir_all(&tmp).is_err() {
+        return;
+    }
+    // The base's files (symlinks left out: a base run that fails without them stays FAILED).
+    let files: Vec<String> = base
+        .files()
+        .iter()
+        .filter(|(_, f)| !f.symlink)
+        .map(|(p, _)| p.clone())
+        .collect();
+    for path in &files {
+        match base.read_real(path) {
+            Ok(Some(bytes)) if snapshot::restore(&work, path, Some(&bytes)).is_ok() => {}
+            _ => return,
+        }
+    }
+    for name in linked {
+        if snapshot::link_dir(root, &work, name).is_err() {
+            return;
+        }
+    }
+    for i in suspects {
+        let (Some(spec), Some(w)) = (planned.get(i), writes.get(i)) else {
+            continue;
+        };
+        let Ok(on_base) = runner::run_check(spec, &work, &tmp, sandbox, w) else {
+            continue;
+        };
+        let Some(r) = results.get_mut(i) else {
+            continue;
+        };
+        if !on_base.passed && on_base.output_tail.contains(runner::NO_INTERNET_HINT) {
+            r.needs_network = true;
+            r.output_tail.push_str(
+                "\n[countercheck] on the base revision this check also failed for lack of internet: it needs the \
+                 internet, so it proves nothing either way (UNVERIFIED unless another check failed)",
+            );
+        } else {
+            r.output_tail.push_str(
+                "\n[countercheck] on the base revision this check did not fail for lack of internet, so the network \
+                 failure came with the change: it counts",
+            );
+        }
+    }
 }
 
 /// One agent hook settings file as it is in the working tree: never followed through a symlink,

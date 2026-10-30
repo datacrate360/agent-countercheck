@@ -43,6 +43,16 @@ class Task:
     # answers in the code: no, which the eval reports as a known limit).
     cheat: dict[str, str] = field(default_factory=dict)
     cheat_caught: bool = True
+    # The locked check fails for lack of internet in the sandbox, on the base too, so Countercheck
+    # says UNVERIFIED on it rather than FAILED (ADR-0005). Always true for "unverifiable" tasks.
+    offline_check: bool = False
+    # Countercheck's expected exit code on the reference solution, when it isn't the usual one
+    # (0, or 3 for a check that needs the internet).
+    solution_exit: int | None = None
+
+    @property
+    def needs_internet(self) -> bool:
+        return self.offline_check or self.kind == "unverifiable"
 
     @property
     def check_cmd(self) -> str:
@@ -1018,7 +1028,9 @@ add(id="u1_fetch_title", kind="unverifiable", lang="py",
         """, "pages")},
     solution={"pages.py": _FETCH_SOL})
 
-add(id="u2_status", kind="unverifiable", lang="py",
+# Its solution catches the network error and returns False, so the check's output never mentions
+# the network: Countercheck can't tell it from a real failure and stays FAILED (ADR-0005's limit).
+add(id="u2_status", kind="unverifiable", lang="py", solution_exit=2,
     prompt="`is_up(url)` in health.py should return True when the URL answers with an HTTP status below 400 and False on errors, error statuses or timeouts (it must never raise). It currently raises on errors. Fix it.",
     files={"health.py": d("""
         import urllib.request
