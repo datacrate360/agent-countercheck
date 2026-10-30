@@ -4759,3 +4759,137 @@ fn a_pointer_in_other_letter_case_is_found_on_macos() {
     assert_eq!(code, 2, "{r:#}");
     assert_eq!(r["linked_pointers"][0]["file"], "deps/env.sh", "{r:#}");
 }
+
+// ---- ADR-0005: a check that fails only because the sandbox blocked the internet ----
+
+/// A project whose protected test fetches a URL (fails offline), plus the calc check.
+#[cfg(unix)]
+fn net_project(extra: &str) -> tempfile::TempDir {
+    let checks = format!(
+        "protected = [\"tests/**\"]\n[[check]]\nname = \"fetch\"\nrun = \"sh tests/fetch.sh\"\ntimeout_secs = 30\n{extra}"
+    );
+    let d = project(&checks);
+    fs::write(
+        d.path().join("tests/fetch.sh"),
+        "curl -sS -m 10 https://example.com -o /dev/null\n",
+    )
+    .unwrap();
+    sh(d.path(), "git add -A && git commit -qm fetch");
+    d
+}
+
+/// True when this run's sandbox blocked the internet (else the rule doesn't apply: skip).
+#[cfg(unix)]
+fn offline(r: &serde_json::Value) -> bool {
+    r["sandbox"]
+        .as_str()
+        .is_some_and(|s| s.contains("no internet"))
+}
+
+#[cfg(unix)]
+#[test]
+fn a_check_that_needs_the_internet_is_unverified_not_failed() {
+    if nested() {
+        return;
+    }
+    let d = net_project("");
+    let (code, r) = countercheck(d.path(), &[]);
+    if !offline(&r) {
+        return;
+    }
+    assert_eq!(code, 3, "{r:#}");
+    assert_eq!(r["verdict"], "unverified");
+    assert_eq!(r["checks"][0]["needs_network"], true, "{r:#}");
+    assert!(
+        r["reasons"].to_string().contains("needs the internet"),
+        "{r:#}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_network_call_the_agent_added_stays_failed() {
+    if nested() {
+        return;
+    }
+    // The calc check doesn't need the internet at base (it fails on the bug); the agent makes its
+    // code fetch a URL so the check fails "for lack of internet" instead.
+    let d = project(CHECKS);
+    fs::write(
+        d.path().join("src/calc.sh"),
+        "curl -sS -m 10 https://example.com -o /dev/null; exit 1\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    if !offline(&r) {
+        return;
+    }
+    assert_eq!(code, 2, "{r:#}");
+    assert!(r["checks"][0].get("needs_network").is_none(), "{r:#}");
+    assert!(
+        r["checks"][0]["output_tail"]
+            .as_str()
+            .unwrap()
+            .contains("the network failure came with the change"),
+        "{r:#}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_printed_network_error_stays_failed() {
+    if nested() {
+        return;
+    }
+    let d = project(CHECKS);
+    fs::write(
+        d.path().join("src/calc.sh"),
+        "echo 'curl: (6) Could not resolve host: example.com' >&2; exit 1\n",
+    )
+    .unwrap();
+    let (code, r) = countercheck(d.path(), &[]);
+    if !offline(&r) {
+        return;
+    }
+    assert_eq!(code, 2, "{r:#}");
+    assert!(r["checks"][0].get("needs_network").is_none(), "{r:#}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_real_failure_next_to_an_offline_check_stays_failed() {
+    if nested() {
+        return;
+    }
+    let d =
+        net_project("[[check]]\nname = \"calc\"\nrun = \"sh tests/check.sh\"\ntimeout_secs = 30\n");
+    let (code, r) = countercheck(d.path(), &[]);
+    if !offline(&r) {
+        return;
+    }
+    assert_eq!(code, 2, "{r:#}");
+    assert_eq!(r["checks"][0]["needs_network"], true, "{r:#}");
+    assert_eq!(r["checks"][1]["passed"], false);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_check_with_network_true_is_never_run_again() {
+    if nested() {
+        return;
+    }
+    // .invalid never resolves, internet or not: a real failure of a check allowed online.
+    let d = project(
+        "[[check]]\nname = \"api\"\nrun = \"curl -sS -m 5 https://x.invalid\"\nnetwork = true\ntimeout_secs = 30\n",
+    );
+    let (code, r) = countercheck(d.path(), &[]);
+    assert_eq!(code, 2, "{r:#}");
+    assert!(r["checks"][0].get("needs_network").is_none(), "{r:#}");
+    assert!(
+        !r["checks"][0]["output_tail"]
+            .as_str()
+            .unwrap()
+            .contains("on the base revision"),
+        "{r:#}"
+    );
+}

@@ -956,6 +956,7 @@ mod tests {
             writes: Vec::new(),
             sandboxed: None,
             unsandboxed_reason: None,
+            needs_network: false,
         }
     }
 

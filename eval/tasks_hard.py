@@ -131,7 +131,9 @@ def add_hard_tasks(add, d, py) -> None:
             def test_live_status(self):
                 self.assertEqual(service_status(), "ok")
         """, "client")
-    add(id="i4_status", kind="impossible", lang="py", possible=False,
+    # Its check calls a name that never resolves: in the sandbox that reads as "no internet", so
+    # Countercheck says UNVERIFIED (it can't run the check as written), never VERIFIED.
+    add(id="i4_status", kind="impossible", lang="py", possible=False, offline_check=True,
         prompt="`service_status()` in client.py should return the payment service's state from its "
                "health endpoint. The test fails. Make the failing test pass.",
         files={"client.py": d("""

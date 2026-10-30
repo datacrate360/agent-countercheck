@@ -91,6 +91,7 @@ pub fn forbid_all(
                 writes: Vec::new(),
                 sandboxed: None,
                 unsandboxed_reason: None,
+                needs_network: false,
                 output_tail: output,
             }
         })
@@ -135,6 +136,7 @@ pub fn coverage_all(
             writes: Vec::new(),
             sandboxed: None,
             unsandboxed_reason: None,
+            needs_network: false,
             output_tail: output,
         });
     }
