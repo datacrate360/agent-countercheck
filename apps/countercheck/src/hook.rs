@@ -358,6 +358,10 @@ fn agent_from_session_start(payload: &serde_json::Value) -> Option<&'static str>
     if !text("sessionId").is_empty() && text("session_id").is_empty() {
         return Some("copilot");
     }
+    // Junie sends the project root as `project_path`, and no transcript.
+    if !text("project_path").is_empty() {
+        return Some("junie");
+    }
     (text("hook_event_name") == "SessionStart").then_some("claude-code")
 }
 
@@ -548,12 +552,14 @@ pub(crate) fn take_nudge(receipt: &Path, session: &str) -> bool {
         .ok()
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(3);
-    let Some(dir) = receipt.parent().map(|d| d.join("hook-state")) else {
+    let Some(file) = nudge_file(receipt, session) else {
+        return true;
+    };
+    let Some(dir) = file.parent() else {
         return true;
     };
     // Counters of sessions nobody has used for 30 days go (like session records).
-    prune_old(&dir);
-    let file = dir.join(format!("{}.json", safe_id(session)));
+    prune_old(dir);
     let used = std::fs::read_to_string(&file)
         .ok()
         .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
@@ -562,12 +568,28 @@ pub(crate) fn take_nudge(receipt: &Path, session: &str) -> bool {
     if used >= max {
         return false;
     }
-    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::create_dir_all(dir);
     let _ = std::fs::write(
         &file,
         serde_json::json!({ "session_id": session, "nudges": used + 1 }).to_string(),
     );
     true
+}
+
+/// Forget a session's push-backs: for an agent that sends no session id (Junie), a new task starts
+/// a new count.
+pub(crate) fn reset_nudges(receipt: &Path, session: &str) {
+    if let Some(file) = nudge_file(receipt, session) {
+        let _ = std::fs::remove_file(file);
+    }
+}
+
+/// Where a session's push-back count is kept: `hook-state/<session>.json` next to the receipts.
+fn nudge_file(receipt: &Path, session: &str) -> Option<PathBuf> {
+    receipt.parent().map(|d| {
+        d.join("hook-state")
+            .join(format!("{}.json", safe_id(session)))
+    })
 }
 
 /// A session id as a file name: letters, digits, `-` and `_` only, at most 128 characters.

@@ -2,8 +2,8 @@
 //!
 //! A coding agent reads its hooks from settings files inside the project (Claude Code
 //! `.claude/settings.json` and `.claude/settings.local.json`, Cortex Code `.cortex/...`, and the
-//! files `countercheck hook install` writes for Cursor, Codex, Copilot, Goose and Kiro), and the
-//! worker can edit those files mid-session. One line (`"disableAllHooks": true`) turns every
+//! files `countercheck hook install` writes for Cursor, Codex, Copilot, Goose, Kiro and Devin CLI),
+//! and the worker can edit those files mid-session. One line (`"disableAllHooks": true`) turns every
 //! hook off, a project setting overrides the user's, and the agent picks the edit up at once. Then
 //! the Stop hook never runs and "done" is never checked.
 //!
@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// The project-level hook settings files of the agents Countercheck hooks into (the project files
 /// of `apps/countercheck/src/agents/`: a new agent's file goes here too).
-pub const FILES: [&str; 11] = [
+pub const FILES: [&str; 12] = [
     ".claude/settings.json",
     ".claude/settings.local.json",
     ".cortex/settings.json",
@@ -38,7 +38,12 @@ pub const FILES: [&str; 11] = [
     // Goose's project settings, where `disabledPlugins` can switch the countercheck plugin off.
     ".config/goose/settings.json",
     ".config/goose/settings.local.json",
+    // Devin CLI: the whole file is the event map.
+    ".devin/hooks.v1.json",
 ];
+
+/// Files whose whole object is the event map, not a `"hooks"` key (Devin CLI's `hooks.v1.json`).
+const WHOLE_FILE_HOOKS: [&str; 1] = [".devin/hooks.v1.json"];
 
 /// Agents whose hook is a whole program file Countercheck writes (a TypeScript plugin), not JSON
 /// settings: compared byte for byte with the base by [`compare_plugin`]. Each plugin agent in
@@ -86,8 +91,8 @@ struct Summary {
 }
 
 /// `None` when the bytes aren't a JSON object (Claude Code wouldn't read it either, but
-/// Countercheck can't tell what it holds).
-fn summarize(bytes: &[u8]) -> Option<Summary> {
+/// Countercheck can't tell what it holds). `path` says where the hooks sit in the file.
+fn summarize(path: &str, bytes: &[u8]) -> Option<Summary> {
     if bytes.len() > MAX_BYTES {
         return None;
     }
@@ -101,8 +106,13 @@ fn summarize(bytes: &[u8]) -> Option<Summary> {
             .is_some_and(|p| p.iter().any(|n| n.as_str() == Some("countercheck"))),
         ..Summary::default()
     };
-    match obj.get("hooks") {
-        // Event name -> handlers (Claude Code, Cortex, Cursor, Codex, Copilot, Goose).
+    let hooks = if WHOLE_FILE_HOOKS.contains(&path) {
+        Some(&v)
+    } else {
+        obj.get("hooks")
+    };
+    match hooks {
+        // Event name -> handlers (Claude Code, Cortex, Cursor, Codex, Copilot, Goose, Devin).
         Some(serde_json::Value::Object(events)) => {
             for (event, groups) in events {
                 let mut found = BTreeSet::new();
@@ -196,7 +206,7 @@ pub fn compare(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
     }
     let base_summary = match base {
         File::Absent => Some(Summary::default()),
-        File::Regular(b) => summarize(b),
+        File::Regular(b) => summarize(path, b),
         // A symlink in the base: Countercheck never reads through it, so it can't hold our hook.
         File::Symlink(_) => Some(Summary::default()),
     };
@@ -212,7 +222,7 @@ pub fn compare(path: &str, base: &File, now: &File) -> Vec<HookSettingsChange> {
     };
     let now_summary = match now_bytes {
         None => Summary::default(),
-        Some(b) => match summarize(b) {
+        Some(b) => match summarize(path, b) {
             Some(s) => s,
             None => {
                 return vec![finding(
@@ -283,7 +293,7 @@ pub fn switched_off(path: &str, now: &File) -> Option<HookSettingsChange> {
     let File::Regular(bytes) = now else {
         return None;
     };
-    let s = summarize(bytes)?;
+    let s = summarize(path, bytes)?;
     let what = if s.disable_all {
         "turns every hook off (\"disableAllHooks\": true)"
     } else if s.plugin_off {
@@ -509,6 +519,23 @@ mod tests {
             )
             .is_empty()
         );
+        // Devin CLI: the whole file is the event map; the same file read as `"hooks"`-keyed settings
+        // holds no hook, so deleting it would go unnoticed.
+        let devin = r#"{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"countercheck hook devin-stop","timeout":600}]}]}"#;
+        assert_eq!(
+            compare(".devin/hooks.v1.json", &reg(devin), &File::Absent)[0].what,
+            "removes the Countercheck Stop hook"
+        );
+        assert_eq!(
+            compare(
+                ".devin/hooks.v1.json",
+                &reg(devin),
+                &reg(&devin.replace("600", "1"))
+            )[0]
+            .what,
+            "changes the Countercheck Stop hook (its command, timeout or type)"
+        );
+        assert!(compare(".devin/config.json", &reg(devin), &File::Absent).is_empty());
         // Honest edits stay fine: another hook added beside ours.
         let more = kiro.replace(
             "]}",

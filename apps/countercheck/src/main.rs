@@ -227,8 +227,13 @@ enum HookCmd {
     CodexStop,
     /// Goose `Stop` hook (from its plugin's `hooks/hooks.json`): block the stop while the checks fail.
     GooseStop,
+    /// JetBrains Junie CLI `Stop` hook (from `~/.junie/config.json`): block the stop while the
+    /// checks fail.
+    JunieStop,
     /// Cursor `stop` hook: send the agent back (`followup_message`) while the checks fail.
     CursorStop,
+    /// Devin CLI `Stop` hook: block the stop while the checks fail.
+    DevinStop,
     /// GitHub Copilot `agentStop` hook (CLI, cloud agent, VS Code): block the stop while the
     /// checks fail.
     CopilotStop,
@@ -252,14 +257,16 @@ enum HookCmd {
 
 #[derive(clap::Args)]
 struct InstallArgs {
-    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro (see
+    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, devin (see
+    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro, junie (see
     /// `countercheck hook status`).
     #[arg(long)]
     agent: String,
-    /// `project` (this repository, committed with it), `user` (every project, for this user), or
-    /// `managed` (Claude Code only: every user of this machine, can't be switched off; needs admin).
-    #[arg(long, value_enum, default_value = "project")]
-    scope: ScopeArg,
+    /// `project` (this repository, committed with it; the default), `user` (every project, for this
+    /// user; the default and only choice for junie, which ignores project hooks), or `managed`
+    /// (Claude Code only: every user of this machine, can't be switched off; needs admin).
+    #[arg(long, value_enum)]
+    scope: Option<ScopeArg>,
     /// Project (any folder inside it).
     #[arg(long, default_value = ".")]
     repo: PathBuf,
@@ -285,11 +292,11 @@ impl InstallArgs {
     fn options(self) -> agents::Options {
         agents::Options {
             agent: self.agent,
-            scope: match self.scope {
+            scope: self.scope.map(|s| match s {
                 ScopeArg::Project => agents::Scope::Project,
                 ScopeArg::User => agents::Scope::User,
                 ScopeArg::Managed => agents::Scope::Managed,
-            },
+            }),
             repo: self.repo,
             yes: self.yes,
             dry_run: self.dry_run,
@@ -500,7 +507,9 @@ fn run(cli: Cli) -> Result<u8, String> {
                 HookCmd::KiroStop => agents::kiro::stop(),
                 HookCmd::CodexStop => agents::codex::stop(),
                 HookCmd::GooseStop => agents::goose::stop(),
+                HookCmd::JunieStop => agents::junie::stop(),
                 HookCmd::CursorStop => agents::cursor::stop(),
+                HookCmd::DevinStop => agents::devin::stop(),
                 HookCmd::CopilotStop => agents::copilot::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
