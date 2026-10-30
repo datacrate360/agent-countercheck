@@ -81,15 +81,22 @@ network = true
 - Only that check gets the internet; writes outside the check folder stay blocked. The receipt marks it
   (`internet allowed`).
 - It lives in the locked check file, so a worker can't grant itself the internet.
-- When a check fails while it ran without the internet, Countercheck adds a hint saying so. The verdict stays
-  FAILED: a failure that might be caused by the missing internet is still a failure until the check file says the
-  check may use it.
-- The hint only appears when the output looks like a connection error (can't resolve, unreachable).
+- When a check fails while it ran without the internet, Countercheck adds a hint saying so. The hint only appears
+  when the output looks like a connection error (can't resolve, unreachable).
+- **(0.19+) A check that only needs the internet is UNVERIFIED, not FAILED**
+  ([ADR-0005](decisions/0005-network-only-failures.md)). When the hint appears, Countercheck runs that check once
+  more on the base revision, in its own clean copy and sandbox. If it fails for lack of internet there too, the check
+  itself needs the internet and proves nothing either way: the receipt marks it `needs_network` and the run is
+  UNVERIFIED ("set network = true on it, or run it in CI"), unless another check failed for real. If the base run
+  doesn't fail that way, the network failure came with the change and the run stays FAILED, so neither a printed
+  "network error" nor a network call the agent added can soften a verdict. Applies on macOS and on Linux with
+  namespaces; elsewhere (Windows) such a failure stays FAILED.
 - **Writes outside the check folder** (and the temp dir) are refused too; a check that must write to a fixed path
   can be allowed one with [`writes`](#checks-that-write-to-a-fixed-path). When the output names the refused path
   (`Operation not permitted: '/var/tmp/x'`, `EPERM … open '/var/tmp/x'`), the hint says the check tried to write
   there, not that it lacked the internet. A bare "Operation not permitted" with no path is what both a refused
-  connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict.
+  connection to an IP address and a refused write print, so then the hint names both. Hints never change a verdict on
+  their own; only the base run above can.
 - On Linux the internet is blocked the same way when the system allows unprivileged user namespaces; where it
   doesn't, checks have the internet and the receipt's `sandbox` says so. On Windows the sandbox confines writes of
   `shell = "pwsh"` and `"cmd"` checks; `sh` checks run without it (Git for Windows' `sh` can't start in it), each

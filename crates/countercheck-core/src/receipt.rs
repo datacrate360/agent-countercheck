@@ -59,6 +59,10 @@ pub struct CheckResult {
     /// The check ran with internet access (`network = true`). Absent on older receipts.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub network: bool,
+    /// It failed only because the sandbox blocked the internet, and the same check on the base
+    /// revision failed the same way (ADR-0005): it needs the internet, so it proves nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_network: bool,
     /// Extra locations the sandbox let this check write to (`writes = [...]`), resolved. Absent on
     /// older receipts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -216,8 +220,20 @@ pub fn decide(
             "the worker added {links} link(s) leading outside the project; countercheck ran the checks without them"
         ));
     }
+    // A check that only needs the internet the sandbox blocks proves nothing either way (ADR-0005):
+    // UNVERIFIED, unless something else failed too.
+    let offline = failed.iter().all(|r| r.needs_network);
     let verdict = if results.is_empty() {
         reasons.push("no checks ran".to_string());
+        Verdict::Unverified
+    } else if !failed.is_empty() && offline {
+        for r in failed {
+            reasons.push(format!(
+                "check \"{}\" needs the internet, which the sandbox blocks (on the base revision too), so it proves \
+                 nothing either way; set network = true on it in .countercheck/checks.toml, or run it in CI",
+                r.name
+            ));
+        }
         Verdict::Unverified
     } else if !failed.is_empty() {
         for r in failed {
@@ -435,6 +451,7 @@ mod tests {
             writes: Vec::new(),
             sandboxed: None,
             unsandboxed_reason: None,
+            needs_network: false,
         }
     }
 
