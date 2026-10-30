@@ -107,7 +107,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 
 ### Where it fits
 
-![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro, set up by countercheck hook install, and Hermes Agent), any other agent or person (Aider, Windsurf, Cline, OpenCode, scripts) through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
+![Where Countercheck fits: agents with a built-in hook (Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose, Kiro and Devin CLI, set up by countercheck hook install, and Hermes Agent), any other agent or person (Aider, Windsurf, Cline, OpenCode, scripts) through the CLI, and CI all call Countercheck; its six check types cover web apps, data and analytics, code migrations, games and media, and machine learning; results go back to the agent, to you as a sealed receipt, and to CI as an exit code.](docs/img/where-it-fits.svg)
 
 | You use | How Countercheck plugs in |
 |---|---|
@@ -118,7 +118,9 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | Cursor (editor, CLI, cloud agents) | a `stop` hook: `countercheck hook install --agent cursor` ([page](docs/hooks/cursor.md); built from Cursor's docs, not yet run against Cursor) |
 | GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps; built from Copilot's docs, not yet run against Copilot) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
+| JetBrains Junie CLI | a `Stop` hook in your user config: `countercheck hook install --agent junie` (Junie runs no hooks from a project file; [page](docs/hooks/junie.md); built from Junie's docs and code, not yet run in a real Junie session) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
+| Devin CLI | a `Stop` hook: `countercheck hook install --agent devin` ([page](docs/hooks/devin.md); built from Devin's docs and CLI binary, not yet run in a real Devin session) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
 | GitHub | the [Action on the Marketplace](https://github.com/marketplace/actions/agent-countercheck), on every pull request ([step 4d](#4d-ci)) |
 | Any other CI | `countercheck verify --base origin/main`; fail the job on any exit code but `0` ([step 4d](#4d-ci)) |
