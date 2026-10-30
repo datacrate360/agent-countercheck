@@ -28,7 +28,20 @@ claim.
 
 ## Setup
 
-Commit `.countercheck/checks.toml` first (`countercheck init`), then add this to `.claude/settings.json`:
+Commit `.countercheck/checks.toml` first (`countercheck init`), then let Countercheck add the hooks:
+
+```sh
+countercheck hook install --agent claude-code      # or cortex-code; --scope user for every project
+git add .claude/settings.json && git commit -m "Countercheck hooks"
+```
+
+It prints the change and asks before writing (`--yes` skips the question, `--dry-run` only shows it), keeps the
+previous file as `settings.json.countercheck-backup`, leaves every other setting as written, and adds nothing when the
+hooks are already there. `countercheck hook status` lists which agents are hooked here and for your user, and
+whether the project file is committed; `countercheck hook uninstall --agent claude-code` takes only ours out. If
+`countercheck` isn't on the agent's PATH, pass `--bin <full path>`.
+
+The same thing by hand, in `.claude/settings.json`:
 
 ```json
 {

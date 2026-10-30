@@ -20,6 +20,8 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 clap = { workspace = true }
 tempfile = { workspace = true }
+# The diff `hook install` shows (already in the tree through the core).
+similar = { workspace = true }
 wait-timeout = { workspace = true }
 humantime = { workspace = true }
 # Random token and nonces for `countercheck ui` (already in the tree through tempfile).
@@ -45,4 +47,6 @@ countercheck-winsandbox = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# The diff `hook install` shows (already in the tree through the core).
+similar = { workspace = true }
 serde_json = { workspace = true }

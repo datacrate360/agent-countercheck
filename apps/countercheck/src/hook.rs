@@ -25,16 +25,16 @@ pub enum Decision {
 }
 
 /// What one agent's hook input says, after parsing.
-struct HookInput {
-    cwd: PathBuf,
-    claim: Option<String>,
-    agent: &'static str,
-    model: Option<String>,
-    session: String,
+pub(crate) struct HookInput {
+    pub(crate) cwd: PathBuf,
+    pub(crate) claim: Option<String>,
+    pub(crate) agent: &'static str,
+    pub(crate) model: Option<String>,
+    pub(crate) session: String,
 }
 
 /// Read the hook JSON from stdin (8 MiB cap). `None` means the hook is switched off.
-fn read_payload() -> Result<Option<serde_json::Value>, String> {
+pub(crate) fn read_payload() -> Result<Option<serde_json::Value>, String> {
     let mut input = String::new();
     std::io::stdin()
         .take(8 * 1024 * 1024)
@@ -49,7 +49,7 @@ fn read_payload() -> Result<Option<serde_json::Value>, String> {
 }
 
 /// Run the checks for one hook call: the shared core behind every agent adapter.
-fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
+pub(crate) fn check(input: HookInput) -> Result<(Receipt, PathBuf, Decision), String> {
     let blocker = input.claim.as_deref().is_some_and(reports_blocker);
     let sandbox = if std::env::var("COUNTERCHECK_SANDBOX").is_ok_and(|v| v == "none") {
         runner::Sandbox::None
@@ -374,7 +374,7 @@ fn recorded_agent(cwd: &Path, session: &str) -> Option<&'static str> {
 }
 
 /// The model SessionStart recorded for this session, if any.
-fn recorded_model(cwd: &Path, session: &str) -> Option<String> {
+pub(crate) fn recorded_model(cwd: &Path, session: &str) -> Option<String> {
     let text = std::fs::read_to_string(session_file(cwd, session)?).ok()?;
     let v: serde_json::Value = serde_json::from_str(&text).ok()?;
     v.get("model")?.as_str().map(str::to_string)
@@ -505,7 +505,7 @@ fn prune_old(dir: &Path) {
 /// Count one push-back for this session; false once the session has used them all. State lives
 /// next to the receipts (already git-ignored) in `hook-state/<session>.json`. If the state can't be
 /// read or written the push-back is still allowed: Claude Code's own cap stops a runaway loop.
-fn take_nudge(receipt: &Path, session: &str) -> bool {
+pub(crate) fn take_nudge(receipt: &Path, session: &str) -> bool {
     let max: u64 = std::env::var("COUNTERCHECK_MAX_NUDGES")
         .ok()
         .and_then(|v| v.trim().parse().ok())
@@ -552,7 +552,7 @@ fn safe_id(session: &str) -> String {
 /// - Cortex Code: `<id>.json` holds the session, with the messages in a `history` array (older
 ///   versions) or in `<id>.history.jsonl` next to it, one `{"role":"assistant","content":...}` per
 ///   line. `transcript_path` may name either file.
-fn last_assistant_text(path: &str) -> Option<String> {
+pub(crate) fn last_assistant_text(path: &str) -> Option<String> {
     let path = home_path(path);
     let (text, whole) = read_tail(&path)?;
     last_in_lines(&text)
@@ -715,7 +715,13 @@ pub fn decide(r: &Receipt, agent_reported_blocker: bool) -> Decision {
 }
 
 /// `gave_up` is only logged by hooks with a loop guard (Claude Code).
-fn log_call(session: &str, r: &Receipt, path: &Path, d: &Decision, gave_up: Option<bool>) {
+pub(crate) fn log_call(
+    session: &str,
+    r: &Receipt,
+    path: &Path,
+    d: &Decision,
+    gave_up: Option<bool>,
+) {
     let Some(log) = std::env::var_os("COUNTERCHECK_HOOK_LOG") else {
         return;
     };

@@ -9,6 +9,7 @@
     clippy::unreachable
 )]
 
+mod agents;
 mod external;
 mod git;
 mod golden;
@@ -223,6 +224,63 @@ enum HookCmd {
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
     SessionStart,
+    /// Add Countercheck's hooks to an agent's settings: shows the change, asks, keeps a backup.
+    Install(InstallArgs),
+    /// Take Countercheck's hooks out of an agent's settings (only ours; the rest stays).
+    Uninstall(InstallArgs),
+    /// Which agents have Countercheck's hooks, here and for your user, and whether they're committed.
+    Status {
+        /// Project (any folder inside it).
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+        /// The command the hooks run.
+        #[arg(long, default_value = "countercheck")]
+        bin: String,
+    },
+}
+
+#[derive(clap::Args)]
+struct InstallArgs {
+    /// The agent: claude-code, cortex-code (see `countercheck hook status`).
+    #[arg(long)]
+    agent: String,
+    /// `project` (this repository, committed with it) or `user` (every project, for this user).
+    #[arg(long, value_enum, default_value = "project")]
+    scope: ScopeArg,
+    /// Project (any folder inside it).
+    #[arg(long, default_value = ".")]
+    repo: PathBuf,
+    /// Write without asking.
+    #[arg(long, short = 'y')]
+    yes: bool,
+    /// Show the change, write nothing.
+    #[arg(long)]
+    dry_run: bool,
+    /// The command the hooks run (a full path if `countercheck` isn't on the agent's PATH).
+    #[arg(long, default_value = "countercheck")]
+    bin: String,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ScopeArg {
+    Project,
+    User,
+}
+
+impl InstallArgs {
+    fn options(self) -> agents::Options {
+        agents::Options {
+            agent: self.agent,
+            scope: match self.scope {
+                ScopeArg::Project => agents::Scope::Project,
+                ScopeArg::User => agents::Scope::User,
+            },
+            repo: self.repo,
+            yes: self.yes,
+            dry_run: self.dry_run,
+            bin: self.bin,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -410,11 +468,22 @@ fn run(cli: Cli) -> Result<u8, String> {
             );
             Ok(0)
         }
+        // Setting hooks up is not a hook run: its errors are real errors.
+        Cmd::Hook {
+            hook: HookCmd::Install(a),
+        } => agents::install(&a.options()).map(|()| 0),
+        Cmd::Hook {
+            hook: HookCmd::Uninstall(a),
+        } => agents::uninstall(&a.options()).map(|()| 0),
+        Cmd::Hook {
+            hook: HookCmd::Status { repo, bin },
+        } => agents::status(&repo, &bin).map(|()| 0),
         Cmd::Hook { hook: which } => {
             let result = match which {
                 HookCmd::HermesPreVerify => hook::hermes_pre_verify(),
                 HookCmd::ClaudeStop => hook::claude_stop(),
                 HookCmd::SessionStart => hook::session_start(),
+                HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
             };
             // Fail open: a broken referee must never stop the agent.
             if let Err(e) = result {

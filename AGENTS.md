@@ -15,7 +15,8 @@ code: the rules, one run step by step, and where each part lives.
 - `apps/countercheck`: the `countercheck` binary: `git.rs` (git CLI wrappers), `snapshot.rs` (clean copy, restore,
   tree hash), `runner.rs` (run a check, macOS sandbox, timeouts, budget), `linux_sandbox.rs` / `windows_sandbox.rs` (the
   `sandbox-exec` helper), `scan.rs` (forbid + coverage scans),
-  `golden.rs`, `verify.rs` (the flow), `hook.rs` (agent hooks), `main.rs` (CLI).
+  `golden.rs`, `verify.rs` (the flow), `hook.rs` (agent hooks), `agents/` (one file per agent: where its hooks
+  live, `hook install / uninstall / status`), `main.rs` (CLI).
 - `apps/countercheck/tests/verify.rs`: end-to-end tests with real git repos and the real binary.
   `crates/countercheck-core/tests/`: property tests and claim fixtures.
 - `examples/`: one made-up project per domain. `eval/` + `docs/eval/`: the benchmark (tasks with hidden tests).

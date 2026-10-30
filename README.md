@@ -249,7 +249,18 @@ git add .countercheck/checks.toml && git commit -m "Countercheck checks"
 
 #### 4a. Claude Code and Cortex Code
 
-In the project's `.claude/settings.json`:
+One command adds the hooks to the project's settings. It shows the change first, keeps a backup, and touches nothing
+else:
+
+```sh
+countercheck hook install --agent claude-code     # .claude/settings.json
+countercheck hook install --agent cortex-code     # .cortex/settings.json
+git add .claude .cortex && git commit -m "Countercheck hooks"
+countercheck hook status                          # which agents are hooked, and committed
+```
+
+`--scope user` installs for every project; `countercheck hook uninstall --agent <name>` takes them out again.
+By hand, the same lines in `.claude/settings.json`:
 
 ```json
 {
@@ -397,7 +408,7 @@ verdict.
 | `ui` | A live page of every run, on this computer only | `countercheck ui` |
 | `report` | The same page as one offline HTML file | `countercheck report --open` |
 | `prune` | Delete receipts older than an age (by their own date); nothing else ever deletes them | `countercheck prune --older-than 90d --dry-run` |
-| `hook` | Run as an agent hook: `session-start`, `claude-stop`, `hermes-pre-verify` | `countercheck hook claude-stop` |
+| `hook` | Run as an agent hook (`session-start`, `claude-stop` / `stop`, `hermes-pre-verify`), or set the hooks up: `install`, `uninstall`, `status` | `countercheck hook install --agent claude-code` |
 | `windows-setup` | Windows, once as administrator: the full check sandbox ([below](#platforms-and-the-sandbox)) | `countercheck windows-setup` |
 
 Useful `verify` options: `--base <rev>` (where the work started; default `HEAD`), `--claim`, `--agent`, `--model`,
