@@ -24,7 +24,12 @@ const PACKAGE: &str = include_str!("openclaw/package.json");
 /// `sessionId`, `model` and `lastAssistantMessage`; stdout is `{"action":"revise","reason":...}`
 /// (the plugin returns it, and OpenClaw runs one more model pass) or `{"action":"continue",
 /// "message":...}` (the plugin logs the message). Same env as `claude-stop`, including
-/// `COUNTERCHECK_MAX_NUDGES`. OpenClaw's embedded runner allows 3 revisions per run.
+/// `COUNTERCHECK_MAX_NUDGES`, whose default here is 2: OpenClaw's embedded runner allows 3
+/// revisions per run and then stops calling the hook, so with our usual 3 the user would never see
+/// the ⚠ line.
+/// Push-backs per session before the ⚠ line: below OpenClaw's own limit of 3 revisions.
+const MAX_NUDGES: u64 = 2;
+
 pub fn stop() -> Result<(), String> {
     let Some(payload) = hook::read_payload()? else {
         return Ok(());
@@ -44,7 +49,7 @@ pub fn stop() -> Result<(), String> {
     let session = input.session.clone();
     let (receipt, path, decision) = hook::check(input)?;
     let gave_up = match &decision {
-        Decision::Continue(_) => !hook::take_nudge(&path, &session),
+        Decision::Continue(_) => !hook::take_nudge_up_to(&path, &session, MAX_NUDGES),
         _ => false,
     };
     hook::log_call(&session, &receipt, &path, &decision, Some(gave_up));

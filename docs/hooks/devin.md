@@ -125,8 +125,9 @@ also reads as "block").
   aren't compared; keep the check in CI (`countercheck verify --base origin/main`).
 - **`verify` from a Devin shell** isn't labelled `devin` yet: Devin documents no variable in the agent's own shell
   (`DEVIN_PROJECT_DIR` is for hooks). Pass `--agent devin`.
-- **The session record** written at `SessionStart` can't tell Devin from Claude Code (same input shape), so a Devin
-  session that never gets a receipt may show as `claude-code` on the project page. Receipts are always `devin`.
+- **The session record** written at `SessionStart` has Claude Code's input shape; Countercheck tells them apart by
+  `DEVIN_PROJECT_DIR`, which Devin sets for every hook it runs (0.20.1+; before that, a Devin session without a
+  receipt showed as `claude-code` on the project page). Receipts are always `devin`.
 - **Devin cloud sessions and Devin Desktop:** not checked. The Devin CLI changelog mentions plugins that apply to
   `cloud`, but no page says cloud sessions run project hooks. Use `countercheck verify` or CI there.
 - **Not tried in a real Devin session yet** (a session needs a Devin login). Checked against Devin CLI 3000.11.234: its

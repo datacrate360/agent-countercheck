@@ -103,8 +103,10 @@ nothing on stdout, and Codex finishes. A broken referee must never trap an agent
 ## Not covered yet
 
 - **Tamper check:** `countercheck verify` compares `.codex/hooks.json` with the base (0.19+): an agent that removes
-  or weakens the hook there makes the run FAILED. `.codex/config.toml` (where hooks can also be switched off) isn't
-  compared yet; keep the check in CI (`countercheck verify --base origin/main`).
+  or weakens the hook there makes the run FAILED. Since 0.20.1 `.codex/config.toml` is compared too: `[features] hooks
+  = false` (or the old `codex_hooks = false`, or either under a profile's `features`) there, or a Countercheck entry in its `[hooks]` tables removed or changed,
+  makes the run FAILED. Your user files (`~/.codex/config.toml`, `~/.codex/hooks.json`) aren't compared; keep the check
+  in CI (`countercheck verify --base origin/main`).
 - **Not tried in a real Codex session yet.** Checked against Codex 0.166.0 (`codex --version`, `codex features list`:
   `hooks stable true`) and its source (`codex-rs/hooks`, Oct 30 2026). The input and output shapes come from Codex's
   generated hook schemas; see the PR for each claim's source.

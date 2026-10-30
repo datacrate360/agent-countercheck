@@ -178,9 +178,10 @@ event's `lastAssistantMessage`; receipts say `openclaw`, with the event's `model
 
 OpenClaw's embedded runner allows **3** revisions per run; after that it skips `before_agent_finalize` altogether
 (observed: `before_agent_finalize revision limit reached; skipping further finalize hooks … attempts=3/3`).
-Countercheck's `COUNTERCHECK_MAX_NUDGES` is also 3, per session. At the defaults OpenClaw stops first, so the
-answer is delivered without the ⚠ line (the last receipt still says FAILED). Set `COUNTERCHECK_MAX_NUDGES=2` in the
-Gateway's environment to get the ⚠ line in the log instead (observed). The plugin sends no `retry` metadata, so
+So `openclaw-stop` allows **2** push-backs per session by default (other agents: 3): at the third finish OpenClaw
+still calls the hook, and the answer goes out with the ⚠ "did NOT pass" line in the log instead of unmarked (0.20.1+;
+before that, set `COUNTERCHECK_MAX_NUDGES=2` in the Gateway's environment, observed). A `COUNTERCHECK_MAX_NUDGES` of 3
+or more brings back the old behaviour: OpenClaw stops first, and only the receipt says FAILED. The plugin sends no `retry` metadata, so
 OpenClaw's per-instruction retry budget (one pass by default) doesn't apply.
 
 ## Environment
@@ -194,7 +195,7 @@ Set in the environment the Gateway (or `openclaw agent --local`) runs in; the pl
 | `COUNTERCHECK_SANDBOX=none` | Run checks without Countercheck's sandbox. |
 | `COUNTERCHECK_RECEIPTS` | Folder for receipts (default `.countercheck/receipts`). |
 | `COUNTERCHECK_HOOK_LOG` | Append one JSON line per call to this file. |
-| `COUNTERCHECK_MAX_NUDGES` | Push-backs allowed per session (default 3; 2 recommended with OpenClaw, above). |
+| `COUNTERCHECK_MAX_NUDGES` | Push-backs allowed per session (default 2 for OpenClaw, below its own limit of 3; see above). |
 
 ## Fails open
 

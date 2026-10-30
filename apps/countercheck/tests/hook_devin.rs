@@ -302,8 +302,21 @@ fn session_start_locks_the_checks_against_a_committed_edit() {
     assert_eq!((code, out.trim()), (0, ""));
     let record = p.join(format!(".git/countercheck/sessions/{SESSION}.json"));
     let rec: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(record).unwrap()).unwrap();
+        serde_json::from_str(&fs::read_to_string(&record).unwrap()).unwrap();
     assert_eq!(rec["base"].as_str().unwrap().len(), 40, "{rec}");
+    // Same shape as Claude Code's: without DEVIN_PROJECT_DIR it can't be told apart.
+    assert_eq!(rec["agent"], "claude-code", "{rec}");
+    fs::remove_file(&record).unwrap();
+    let pd = p.to_str().unwrap();
+    run_hook(
+        "session-start",
+        p,
+        &payload(SESSION_START, p, None),
+        &[("DEVIN_PROJECT_DIR", pd)],
+    );
+    let rec: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&record).unwrap()).unwrap();
+    assert_eq!(rec["agent"], "devin", "{rec}");
     fs::write(
         p.join(".countercheck/checks.toml"),
         "[[check]]\nname = \"calc\"\nrun = \"true\"\n",

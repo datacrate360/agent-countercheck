@@ -98,6 +98,35 @@ fn installed_hooks_are_the_ones_the_tamper_check_guards() {
     );
 }
 
+/// Codex reads `[features] hooks = false` from the project's `.codex/config.toml`: one line there
+/// turns the installed hook off as surely as deleting `.codex/hooks.json`.
+#[test]
+fn codex_hooks_switched_off_in_config_toml_fail_the_run() {
+    let d = project();
+    let p = d.path();
+    let o = hook(p, &["install", "--agent", "codex", "--yes"], &[]);
+    assert!(o.status.success(), "{}", text(&o));
+    sh(p, "git add -A && git commit -qm hooks");
+    assert_eq!(verify(p)["verdict"], "verified");
+    // Other Codex settings: fine.
+    fs::write(p.join(".codex/config.toml"), "model = \"o4\"\n").unwrap();
+    assert_eq!(verify(p)["verdict"], "verified");
+    for off in [
+        "[features]\nhooks = false\n",
+        "[features]\ncodex_hooks = false\n",
+    ] {
+        fs::write(p.join(".codex/config.toml"), off).unwrap();
+        let r = verify(p);
+        assert_eq!(r["verdict"], "failed", "{r:#}");
+        assert!(
+            r["hook_settings"]
+                .to_string()
+                .contains("turns every Codex hook off"),
+            "{r:#}"
+        );
+    }
+}
+
 #[test]
 fn nothing_is_written_without_consent_or_on_a_dry_run() {
     let d = project();
