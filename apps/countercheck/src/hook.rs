@@ -327,13 +327,38 @@ pub fn stop_message(r: &Receipt, d: &Decision, gave_up: bool) -> String {
 }
 
 /// Claude Code and Cortex Code send the same Stop input; only where the transcript lives tells
-/// them apart (Cortex Code keeps sessions in `~/.snowflake/cortex/conversations/`).
+/// them apart (Cortex Code keeps sessions in `~/.snowflake/cortex/conversations/`). Codex sends
+/// the same field names, with its rollouts under `~/.codex/sessions/`.
 fn agent_from_transcript(path: &str) -> &'static str {
-    if path.replace('\\', "/").contains("/.snowflake/cortex/") {
+    let path = path.replace('\\', "/");
+    if path.contains("/.snowflake/cortex/") {
         "cortex-code"
+    } else if path.contains("/.codex/") {
+        "codex"
     } else {
         "claude-code"
     }
+}
+
+/// Which agent sent this session start, from the shape of its input (every agent runs the same
+/// `hook session-start` command). A label for the project page only; `None` when nothing tells.
+fn agent_from_session_start(payload: &serde_json::Value) -> Option<&'static str> {
+    let text = |k: &str| payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    match text("hook_event_name") {
+        "sessionStart" => return Some("cursor"),
+        "agentSpawn" => return Some("kiro"),
+        _ => {}
+    }
+    if !text("transcript_path").is_empty() {
+        return Some(agent_from_transcript(text("transcript_path")));
+    }
+    if text("event") == "SessionStart" {
+        return Some("goose");
+    }
+    if !text("sessionId").is_empty() && text("session_id").is_empty() {
+        return Some("copilot");
+    }
+    (text("hook_event_name") == "SessionStart").then_some("claude-code")
 }
 
 /// The commit the checks are locked to: `COUNTERCHECK_BASE` if set, else the commit this session
@@ -441,7 +466,6 @@ pub fn session_start() -> Result<(), String> {
     let text = |k: &str| payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
     // The project folder: `cwd` (Claude Code, Codex, Copilot, Kiro), Goose's `working_dir` (left out
     // of some of its session starts), Cursor's `workspace_roots`, else the folder the hook runs in.
-    let cursor = text("hook_event_name") == "sessionStart";
     let first_root = payload
         .get("workspace_roots")
         .and_then(|v| v.as_array())
@@ -485,12 +509,7 @@ pub fn session_start() -> Result<(), String> {
             // The linked folders (a venv) as they were at the start: the stop hook compares.
             "linked": linked_fingerprints(&root, &head),
             // Shown on the project page if this session never gets a receipt.
-            "agent": match payload.get("transcript_path").and_then(|v| v.as_str()) {
-                _ if cursor => Some("cursor"),
-                Some(t) => Some(agent_from_transcript(t)),
-                None if text("hook_event_name") == "SessionStart" => Some("claude-code"),
-                None => None,
-            },
+            "agent": agent_from_session_start(&payload),
             // Claude Code gives the model only here; the stop hook falls back to it.
             "model": payload
                 .get("model")
@@ -662,7 +681,8 @@ fn assistant_text(v: &serde_json::Value) -> Option<String> {
     (!text.trim().is_empty()).then_some(text)
 }
 
-/// Only a FAILED verdict keeps the agent going; VERIFIED and UNVERIFIED stay silent. A FAILED
+/// Only a FAILED verdict keeps the agent going; VERIFIED and UNVERIFIED let it stop (with one line
+/// for the user, see [`stop_message`]). A FAILED
 /// verdict from an agent that already reports a blocker lets it stop, unless it changed protected
 /// files: pushing an honest agent to "keep going" on impossible work wastes time and invites gaming
 /// (see docs/eval/pilot-results.md).

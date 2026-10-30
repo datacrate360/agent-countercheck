@@ -74,7 +74,7 @@ enum Cmd {
         #[arg(long)]
         claim: Option<String>,
         /// Which agent did the work (claude-code, codex, hermes...). Default: the agent whose shell
-        /// this is, when it marks it (Claude Code, Cursor, Codex, Hermes).
+        /// this is, when it marks it (Claude Code, Cursor, Codex, GitHub Copilot, Goose, Hermes).
         #[arg(long)]
         agent: Option<String>,
         /// Which model did the work.
@@ -252,9 +252,8 @@ enum HookCmd {
 
 #[derive(clap::Args)]
 struct InstallArgs {
-    /// The agent: claude-code, cortex-code, codex (see `countercheck hook status`).
-    /// The agent: claude-code, cortex-code, cursor (see `countercheck hook status`).
-    /// The agent: claude-code, cortex-code, copilot (see `countercheck hook status`).
+    /// The agent: claude-code, cortex-code, cursor, codex, copilot, goose, kiro (see
+    /// `countercheck hook status`).
     #[arg(long)]
     agent: String,
     /// `project` (this repository, committed with it), `user` (every project, for this user), or

@@ -385,3 +385,85 @@ fn a_goose_plugin_switched_off_in_project_settings_fails() {
         "{r:#}"
     );
 }
+
+/// The session record `hook session-start` writes names the agent that started the session, from
+/// the shape of each agent's input (they all run the same command).
+#[test]
+fn session_start_records_which_agent_started_the_session() {
+    use std::io::Write;
+    let d = project();
+    let p = d.path();
+    let cwd = serde_json::to_string(&p.to_string_lossy()).unwrap();
+    let cases = [
+        (
+            "claude",
+            format!(
+                r#"{{"session_id":"s-claude","cwd":{cwd},"hook_event_name":"SessionStart","transcript_path":"/home/u/.claude/projects/x/s.jsonl"}}"#
+            ),
+            "claude-code",
+        ),
+        (
+            "cortex",
+            format!(
+                r#"{{"session_id":"s-cortex","cwd":{cwd},"hook_event_name":"SessionStart","transcript_path":"/home/u/.snowflake/cortex/conversations/s.jsonl"}}"#
+            ),
+            "cortex-code",
+        ),
+        (
+            "codex",
+            format!(
+                r#"{{"session_id":"s-codex","cwd":{cwd},"hook_event_name":"SessionStart","transcript_path":"/home/u/.codex/sessions/2026/10/30/rollout-s.jsonl","source":"startup"}}"#
+            ),
+            "codex",
+        ),
+        (
+            "cursor",
+            format!(
+                r#"{{"session_id":"s-cursor","conversation_id":"s-cursor","hook_event_name":"sessionStart","workspace_roots":[{cwd}]}}"#
+            ),
+            "cursor",
+        ),
+        (
+            "copilot",
+            format!(
+                r#"{{"sessionId":"s-copilot","timestamp":1704614400000,"cwd":{cwd},"source":"new"}}"#
+            ),
+            "copilot",
+        ),
+        (
+            "goose",
+            format!(
+                r#"{{"event":"SessionStart","session_id":"s-goose","matcher_context":null,"working_dir":{cwd}}}"#
+            ),
+            "goose",
+        ),
+        (
+            "kiro",
+            format!(r#"{{"hook_event_name":"agentSpawn","cwd":{cwd},"session_id":"s-kiro"}}"#),
+            "kiro",
+        ),
+    ];
+    for (name, payload, want) in cases {
+        let mut c = Command::new(BIN)
+            .args(["hook", "session-start"])
+            .current_dir(p)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        c.stdin
+            .take()
+            .unwrap()
+            .write_all(payload.as_bytes())
+            .unwrap();
+        let o = c.wait_with_output().unwrap();
+        assert!(o.status.success(), "{name}: {}", text(&o));
+        let rec = p.join(format!(".git/countercheck/sessions/s-{name}.json"));
+        let v: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(&rec).unwrap_or_else(|e| panic!("{name}: {e}")),
+        )
+        .unwrap();
+        assert_eq!(v["agent"], want, "{name}: {v}");
+    }
+}
