@@ -528,6 +528,8 @@ pub fn agent_from_env() -> Option<&'static str> {
         Some("cursor")
     } else if set("CODEX_SANDBOX") || set("CODEX_SANDBOX_NETWORK_DISABLED") {
         Some("codex")
+    } else if set("COPILOT_CLI") || set("COPILOT_AGENT_PROMPT") {
+        Some("copilot")
     } else if set("HERMES_SESSION_ID") {
         Some("hermes")
     } else {

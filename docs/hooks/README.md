@@ -18,7 +18,7 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Hermes Agent | `pre_verify` (continue + message) | **Gated**: `hook hermes-pre-verify`, set up by hand ([page](hermes.md)) | Used in the 29-task benchmark |
 | OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | Report only, for now: `countercheck verify` | Adapter in progress |
 | Cursor | `stop` (`followup_message`) | Report only, for now | Adapter in progress |
-| GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | Report only, for now | Adapter in progress |
+| GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | **Gated**: `hook install --agent copilot`; the cloud agent needs `countercheck` installed by its setup steps ([page](copilot.md)) | Tested end to end with payloads from the docs; not yet run in a live Copilot session |
 | Goose | `Stop` (block + reason, or exit 2) | Report only, for now | Adapter in progress |
 | Kiro (IDE, CLI) | Agent Stop (block + reason) | Report only, for now | Adapter in progress |
 | Devin CLI, JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **New: GitHub Copilot hook.** `countercheck hook install --agent copilot` writes `.github/hooks/countercheck.json`
+  (`sessionStart` + `agentStop`, `bash` and `powershell`, 600 s timeout) for the Copilot CLI, the cloud agent and VS Code;
+  `hook copilot-stop` reads Copilot's input and transcript and answers in its format. `verify` labels Copilot runs. See
+  [docs/hooks/copilot.md](docs/hooks/copilot.md), including the cloud agent's `copilot-setup-steps.yml`.
 - **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
   Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
   `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project

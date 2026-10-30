@@ -439,7 +439,10 @@ pub fn session_start() -> Result<(), String> {
     };
     let text = |k: &str| payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
     let cwd = PathBuf::from(text("cwd"));
-    let session = text("session_id");
+    // Copilot names it `sessionId`.
+    let session = Some(text("session_id"))
+        .filter(|s| !s.is_empty())
+        .unwrap_or(text("sessionId"));
     let Some(file) = session_file(&cwd, session) else {
         return Ok(()); // no session id, or not a git repository: nothing to lock
     };
@@ -573,7 +576,7 @@ pub(crate) fn last_assistant_text(path: &str) -> Option<String> {
 }
 
 /// `~/...` (or `~\...` on Windows, where the home folder is USERPROFILE when HOME isn't set).
-fn home_path(path: &str) -> PathBuf {
+pub(crate) fn home_path(path: &str) -> PathBuf {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     let rest = path
         .strip_prefix("~/")
@@ -585,7 +588,7 @@ fn home_path(path: &str) -> PathBuf {
 }
 
 /// The last 8 MiB of a file, and whether that is the whole file.
-fn read_tail(path: &Path) -> Option<(String, bool)> {
+pub(crate) fn read_tail(path: &Path) -> Option<(String, bool)> {
     use std::io::{Seek, SeekFrom};
     const TAIL: u64 = 8 * 1024 * 1024;
     let mut f = std::fs::File::open(path).ok()?;
