@@ -429,7 +429,8 @@ fn recorded_base(cwd: &Path, session: &str) -> Option<String> {
     git::resolve_commit(&root, base).ok()
 }
 
-/// Session start (Claude Code / Cortex Code `SessionStart`, Hermes `on_session_start`): remember
+/// Session start (Claude Code / Cortex Code `SessionStart`, Cursor `sessionStart`, Hermes
+/// `on_session_start`): remember
 /// the commit the session starts from, so the stop hook locks the checks to it even if the agent
 /// commits. Prints nothing. A resumed session keeps its first record. Files older than 30 days
 /// are removed.
@@ -438,7 +439,14 @@ pub fn session_start() -> Result<(), String> {
         return Ok(());
     };
     let text = |k: &str| payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
-    let cwd = PathBuf::from(text("cwd"));
+    // Cursor's `sessionStart` names the project in `workspace_roots`, not `cwd`.
+    let cursor = text("hook_event_name") == "sessionStart";
+    let cwd = match payload.get("workspace_roots").and_then(|v| v.as_array()) {
+        Some(roots) if text("cwd").is_empty() => {
+            PathBuf::from(roots.iter().find_map(|r| r.as_str()).unwrap_or(""))
+        }
+        _ => PathBuf::from(text("cwd")),
+    };
     let session = text("session_id");
     let Some(file) = session_file(&cwd, session) else {
         return Ok(()); // no session id, or not a git repository: nothing to lock
@@ -468,6 +476,7 @@ pub fn session_start() -> Result<(), String> {
             "linked": linked_fingerprints(&root, &head),
             // Shown on the project page if this session never gets a receipt.
             "agent": match payload.get("transcript_path").and_then(|v| v.as_str()) {
+                _ if cursor => Some("cursor"),
                 Some(t) => Some(agent_from_transcript(t)),
                 None if text("hook_event_name") == "SessionStart" => Some("claude-code"),
                 None => None,
@@ -573,7 +582,7 @@ pub(crate) fn last_assistant_text(path: &str) -> Option<String> {
 }
 
 /// `~/...` (or `~\...` on Windows, where the home folder is USERPROFILE when HOME isn't set).
-fn home_path(path: &str) -> PathBuf {
+pub(crate) fn home_path(path: &str) -> PathBuf {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     let rest = path
         .strip_prefix("~/")
@@ -585,7 +594,7 @@ fn home_path(path: &str) -> PathBuf {
 }
 
 /// The last 8 MiB of a file, and whether that is the whole file.
-fn read_tail(path: &Path) -> Option<(String, bool)> {
+pub(crate) fn read_tail(path: &Path) -> Option<(String, bool)> {
     use std::io::{Seek, SeekFrom};
     const TAIL: u64 = 8 * 1024 * 1024;
     let mut f = std::fs::File::open(path).ok()?;
