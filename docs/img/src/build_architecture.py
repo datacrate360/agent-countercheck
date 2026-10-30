@@ -38,19 +38,22 @@ head(CX + CW / 2, "WHERE IT GOES")
 
 # --- who asks
 callers = [
-    ("Claude Code · Cortex Code", ["hook claude-session-start", "hook claude-stop"], "saves the start; checks “done”"),
-    ("Hermes Agent", ["hook hermes-pre-verify"], "runs before the agent may finish"),
-    ("Any agent, a script, you", ["countercheck verify"], "agent named from its shell or --agent"),
-    ("CI · GitHub Action", ["verify --base origin/main"], "on every pull request"),
+    (["Claude Code · Cortex Code"], ["hook session-start", "hook claude-stop"], "set up by hook install"),
+    (["Cursor · Codex · Copilot", "Goose · Kiro"], ["hook session-start", "hook <agent>-stop"], "set up by hook install"),
+    (["Hermes Agent"], ["hook hermes-pre-verify"], "runs before the agent may finish"),
+    (["Any agent, a script, you"], ["countercheck verify"], "agent named from its shell or --agent"),
+    (["CI · GitHub Action"], ["verify --base origin/main"], "on every pull request"),
 ]
 y = 56
 caller_mid = []
-for title, cmds, note in callers:
-    h = 40 + 17 * len(cmds) + 16
+for titles, cmds, note in callers:
+    extra = 17 * (len(titles) - 1)
+    h = 40 + extra + 17 * len(cmds) + 16
     box(AX, y, AW, h)
-    t(AX + 14, y + 22, title, 13, 650)
+    for i, title in enumerate(titles):
+        t(AX + 14, y + 22 + 17 * i, title, 13, 650)
     for i, c in enumerate(cmds):
-        t(AX + 14, y + 42 + 17 * i, c, 11, 500, TEAL, mono=True)
+        t(AX + 14, y + 42 + extra + 17 * i, c, 11, 500, TEAL, mono=True)
     t(AX + 14, y + h - 12, note, 10.5, 400, MUTED)
     caller_mid.append(y + h / 2)
     y += h + 14
@@ -175,7 +178,7 @@ for i, (c, d) in enumerate(crates):
 
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Countercheck architecture</title>
-  <desc>Who asks for a check: Claude Code and Cortex Code through their hooks, Hermes Agent through its pre-verify hook, any agent, script or person through countercheck verify, and CI or the GitHub Action. One run reads the base commit and the working tree of your git repository, then: 1 locks the checks from the base commit, 2 makes a clean copy with every protected file put back, 3 runs each check in a sandbox (macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job object) with six check types, 4 decides the verdict, 5 seals the receipt with SHA-256. The results go to a sealed receipt file, back to the agent through the hook, and to CI as an exit code. Receipts are read with show, report, ui and pruned with prune. If the work failed, the agent fixes the code and says done again. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.</desc>
+  <desc>Who asks for a check: Claude Code and Cortex Code, and Cursor, Codex, GitHub Copilot, Goose and Kiro, through the hooks countercheck hook install sets up, Hermes Agent through its pre-verify hook, any agent, script or person through countercheck verify, and CI or the GitHub Action. One run reads the base commit and the working tree of your git repository, then: 1 locks the checks from the base commit, 2 makes a clean copy with every protected file put back, 3 runs each check in a sandbox (macOS Seatbelt, Linux Landlock and namespaces, Windows restricted token and job object) with six check types, 4 decides the verdict, 5 seals the receipt with SHA-256. The results go to a sealed receipt file, back to the agent through the hook, and to CI as an exit code. Receipts are read with show, report, ui and pruned with prune. If the work failed, the agent fixes the code and says done again. In the code: countercheck-core is pure logic, countercheck-winsandbox holds the Windows calls, apps/countercheck is the binary.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#55554F"/></marker>
     <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{CORAL}"/></marker>

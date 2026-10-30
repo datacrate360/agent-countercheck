@@ -15,14 +15,12 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 |---|---|---|---|
 | Claude Code | `Stop` (block + reason) | **Gated**: `hook install --agent claude-code`; `--scope managed` so it can't be switched off ([page](claude-code.md#strict-mode-managed-settings)) | Tested end to end in CI (every hook path, all three OSes) |
 | Snowflake Cortex Code | `Stop`, same format as Claude Code | **Gated**: `hook install --agent cortex-code` ([page](claude-code.md#cortex-code)) | Used in a real project (Cortex Code 1.2.24): pushed back on FAILED, VERIFIED after the fix |
+| Goose | `Stop` (block + reason), from a plugin's `hooks/hooks.json` | **Gated**: `hook install --agent goose` ([page](goose.md)) | Tested end to end in CI; run for real with Goose 1.57.0 against a stand-in model (blocked a false claim 3 times, then let it stop at the limit) |
 | Hermes Agent | `pre_verify` (continue + message) | **Gated**: `hook hermes-pre-verify`, set up by hand ([page](hermes.md)) | Used in the 29-task benchmark |
-| OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | **Gated**: `hook install --agent codex`, then trust it in Codex ([page](codex.md)) | Tested end to end in CI against fixtures from Codex's hook schemas; not yet tried in a real Codex session |
-| Cursor | `stop` (`followup_message`) | Report only, for now | Adapter in progress |
-| GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | **Gated**: `hook install --agent copilot`; the cloud agent needs `countercheck` installed by its setup steps ([page](copilot.md)) | Tested end to end with payloads from the docs; not yet run in a live Copilot session |
-| Goose | `Stop` (block + reason, or exit 2) | Report only, for now | Adapter in progress |
+| OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | **Gated**: `hook install --agent codex`, then trust it in Codex ([page](codex.md)) | Tested end to end in CI with fixtures from Codex's hook schemas; not yet run in a real Codex session |
+| Cursor (editor, CLI, cloud agents) | `stop` (`followup_message`) | **Gated**: `hook install --agent cursor` ([page](cursor.md)) | Tested end to end in CI with payloads from Cursor's docs; not yet run against Cursor |
+| GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | **Gated**: `hook install --agent copilot`; the cloud agent needs `countercheck` installed by its setup steps ([page](copilot.md)) | Tested end to end in CI with payloads from the docs; not yet run in a live Copilot session |
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
-| Goose | `Stop` (block + reason, or exit 2), from a plugin's `hooks/hooks.json` | **Gated**: `hook install --agent goose` ([page](goose.md)) | Tested end to end in CI; tried with Goose 1.57.0 against a stand-in model (blocked a false claim, then gave up at the limit) |
-| Kiro (IDE, CLI) | Agent Stop (block + reason) | Report only, for now | Adapter in progress |
 | Devin CLI, JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
@@ -32,8 +30,9 @@ just runs after the agent instead of stopping it. The usual ways: ask the agent 
 `countercheck verify --claim "<what you did>"` before it says done (put that in its instructions file), run it
 yourself, or let CI run it on every pull request.
 
-Hook details come from each agent's own documentation (checked in October 2026). Rows marked "Adapter in progress"
-or "Planned" were not tested against the real agent yet; each adapter's own page will say what was.
+Hook details come from each agent's own documentation (checked in October 2026); "How sure" says which rows were
+also run against the real agent. Since 0.19 every hook file `hook install` writes is guarded: if the agent removes or
+weakens Countercheck's hook in a committed file, the next run is FAILED, naming the file.
 
 ## Adding an agent
 

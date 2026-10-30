@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Where Countercheck fits</title>
-  <desc>On the left, who does the work: agents with a built-in hook (Claude Code, Cortex Code, Hermes Agent), any other agent or person through the CLI (Codex, Cursor, Copilot, Aider, scripts), and CI. In the middle, Countercheck locks the checks, makes a clean copy, runs the checks in a sandbox and seals a receipt, using six check types. On the right, what it checks for different kinds of projects: web apps, data and analytics, code migrations, games and media, and machine learning. At the bottom, where results go: back to the agent, to you as a receipt, and to CI as an exit code.</desc>
+  <desc>On the left, who does the work: agents with a built-in hook (Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro, set up by countercheck hook install, and Hermes Agent), any other agent or person through the CLI (Aider, Windsurf, Cline, OpenCode, scripts), and CI. In the middle, Countercheck locks the checks, makes a clean copy, runs the checks in a sandbox and seals a receipt, using six check types. On the right, what it checks for different kinds of projects: web apps, data and analytics, code migrations, games and media, and machine learning. At the bottom, where results go: back to the agent, to you as a receipt, and to CI as an exit code.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#55554F"/>
@@ -13,33 +13,33 @@
   <text x="815" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#6B6B66" letter-spacing="1">WHAT YOUR CHECKS COVER</text>
 
   <!-- Left: agents -->
-  <rect x="20" y="52" width="260" height="138" rx="12" fill="#EEF4F3" stroke="#0F4C4C" stroke-width="1.5"/>
+  <rect x="20" y="52" width="260" height="184" rx="12" fill="#EEF4F3" stroke="#0F4C4C" stroke-width="1.5"/>
   <text x="36" y="76" font-size="14" font-weight="700" fill="#141414">Agents with a built-in hook</text>
   <text x="36" y="94" font-size="11.5" fill="#0F4C4C" font-weight="700">can't say "done" until the checks pass</text>
   <g font-size="13" fill="#3A3A36">
-    <text x="36" y="118"><tspan font-weight="700" fill="#141414">Claude Code</tspan>  hook claude-stop</text>
-    <text x="36" y="140"><tspan font-weight="700" fill="#141414">Cortex Code</tspan>  same hook format*</text>
-    <text x="36" y="162"><tspan font-weight="700" fill="#141414">Hermes Agent</tspan>  hook hermes-pre-verify</text>
+    <text x="36" y="118"><tspan font-weight="700" fill="#141414">Claude Code · Cortex Code</tspan></text>
+    <text x="36" y="137"><tspan font-weight="700" fill="#141414">Cursor · Codex · GitHub Copilot</tspan></text>
+    <text x="36" y="156"><tspan font-weight="700" fill="#141414">Goose · Kiro</tspan></text>
   </g>
-  <text x="36" y="182" font-size="11" fill="#6B6B66">* not yet tried on a real install</text>
+  <text x="36" y="177" font-size="11.5" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#0F4C4C">hook install --agent &lt;name&gt;</text>
+  <text x="36" y="201" font-size="13" fill="#3A3A36"><tspan font-weight="700" fill="#141414">Hermes Agent</tspan>  hook hermes-pre-verify</text>
+  <text x="36" y="224" font-size="10.5" fill="#6B6B66">Cursor, Codex, Copilot, Kiro: from their docs</text>
 
-  <rect x="20" y="206" width="260" height="128" rx="12" fill="#FAFAF9" stroke="#A3A39C" stroke-width="1.5"/>
-  <text x="36" y="230" font-size="14" font-weight="700" fill="#141414">Any other agent or person</text>
-  <text x="36" y="252" font-size="13" fill="#3A3A36">Codex, Cursor, Copilot, Aider,</text>
-  <text x="36" y="270" font-size="13" fill="#3A3A36">your own scripts, a teammate</text>
-  <text x="36" y="294" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">countercheck verify \</text>
-  <text x="36" y="312" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">  --claim "what it said"</text>
-  <text x="36" y="328" font-size="11" fill="#6B6B66">named from its shell (Codex, Cursor) or --agent</text>
+  <rect x="20" y="250" width="260" height="110" rx="12" fill="#FAFAF9" stroke="#A3A39C" stroke-width="1.5"/>
+  <text x="36" y="274" font-size="14" font-weight="700" fill="#141414">Any other agent or person</text>
+  <text x="36" y="294" font-size="13" fill="#3A3A36">Aider, Windsurf, Cline, OpenCode,</text>
+  <text x="36" y="312" font-size="13" fill="#3A3A36">your own scripts, a teammate</text>
+  <text x="36" y="334" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">countercheck verify --claim …</text>
+  <text x="36" y="352" font-size="11" fill="#6B6B66">named from its shell or --agent</text>
 
-  <rect x="20" y="350" width="260" height="92" rx="12" fill="#FAFAF9" stroke="#A3A39C" stroke-width="1.5"/>
-  <text x="36" y="374" font-size="14" font-weight="700" fill="#141414">CI on every pull request</text>
-  <text x="36" y="396" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">countercheck verify --base main</text>
-  <text x="36" y="416" font-size="13" fill="#3A3A36">in any CI runner today</text>
-  <text x="36" y="434" font-size="11" fill="#6B6B66">GitHub Action on the Marketplace</text>
+  <rect x="20" y="374" width="260" height="68" rx="12" fill="#FAFAF9" stroke="#A3A39C" stroke-width="1.5"/>
+  <text x="36" y="398" font-size="14" font-weight="700" fill="#141414">CI on every pull request</text>
+  <text x="36" y="418" font-size="12" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" fill="#141414">countercheck verify --base main</text>
+  <text x="36" y="434" font-size="11" fill="#6B6B66">or the GitHub Action (Marketplace)</text>
 
-  <line x1="280" y1="121" x2="336" y2="170" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
-  <line x1="280" y1="270" x2="336" y2="250" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
-  <line x1="280" y1="396" x2="336" y2="330" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="280" y1="144" x2="336" y2="170" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="280" y1="305" x2="336" y2="250" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="280" y1="408" x2="336" y2="330" stroke="#55554F" stroke-width="1.6" marker-end="url(#a)"/>
 
   <!-- Middle: referee -->
   <rect x="338" y="52" width="284" height="390" rx="14" fill="#0F4C4C"/>
