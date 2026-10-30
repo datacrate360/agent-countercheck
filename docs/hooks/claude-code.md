@@ -118,8 +118,9 @@ lets the agent stop. A broken referee must never trap an agent.
 The hook lives in a file the agent can edit, and Claude Code picks up edits mid-session: one line in
 `.claude/settings.json` or `.claude/settings.local.json` (`"disableAllHooks": true`) stops every hook, and a project
 setting overrides yours. So every `verify` (and every hook run) compares the agent's hook settings files
-(`.claude/settings.json`, `.claude/settings.local.json`, `.cortex/settings.json`, `.cortex/settings.local.json`) in
-the working tree, git-ignored ones included, with the base. The run is **FAILED**, whatever the checks say, and the
+(`.claude/settings.json`, `.claude/settings.local.json`, `.cortex/settings.json`, `.cortex/settings.local.json`;
+since 0.19 also the files `hook install` writes for Cursor, Codex, Copilot, Goose and Kiro, and Goose's project
+`.config/goose/settings*.json`) in the working tree, git-ignored ones included, with the base. The run is **FAILED**, whatever the checks say, and the
 receipt lists the change under `hook_settings` when the agent:
 
 - turned on `disableAllHooks`;

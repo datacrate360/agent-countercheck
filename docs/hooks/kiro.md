@@ -51,8 +51,9 @@ Kiro loads hooks when a session starts, so **start a new session**.
 - **Kiro IDE**: the hooks appear in the **Agent Hooks** panel. Check that both are enabled (eye icon).
 
 Writes to `.kiro/hooks/` always ask for approval in Kiro, so the agent can't quietly switch its own hook off from
-inside a session. A person can still disable it in the IDE panel, and Countercheck's tamper check doesn't watch
-`.kiro/hooks/` yet, so keep CI as the check nobody can skip.
+inside a session. A person can still disable it in the IDE panel. Countercheck's tamper check compares
+`.kiro/hooks/countercheck.json` with the base (0.19+): a removed, disabled or weakened hook makes the run FAILED. Keep
+CI as the check nobody can skip.
 
 ## What Kiro sends and gets back
 

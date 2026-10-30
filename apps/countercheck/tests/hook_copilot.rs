@@ -363,9 +363,9 @@ fn install_writes_the_documented_shape_and_uninstall_takes_it_out() {
     assert_eq!(fs::read_to_string(&file).unwrap(), INSTALLED);
     let v: serde_json::Value = serde_json::from_str(INSTALLED).unwrap();
     assert_eq!(v["version"], 1);
-    // The tamper check doesn't watch this file yet: install must not claim it does.
+    // The tamper check watches this file, and install says so.
     assert!(
-        text(&o).contains("does not yet check this file"),
+        text(&o).contains("so Countercheck can tell if an agent removes the hook"),
         "{}",
         text(&o)
     );

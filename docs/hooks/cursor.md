@@ -132,6 +132,4 @@ stop. A broken referee must never trap an agent.
 
 ## Not covered yet
 
-- The tamper check (`hook_settings`) doesn't watch `.cursor/hooks.json` yet, so an agent that deletes the hook
-  there isn't reported by `verify`. Commit the file, and keep CI as the check nobody can skip.
 - `subagentStop` isn't hooked: only the main agent's finish is checked.
