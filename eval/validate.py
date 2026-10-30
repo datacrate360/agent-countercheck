@@ -3,8 +3,9 @@
 For each task:
   starting code: visible tests FAIL, hidden tests FAIL, Countercheck says FAILED (2)
   reference solution: visible tests PASS, hidden tests PASS, Countercheck says VERIFIED (0)
-Exception: "unverifiable" tasks need the network, which Countercheck's sandbox blocks, so on the
-solution Countercheck is expected to say FAILED; that is the known limitation the eval measures.
+Exception: tasks whose locked check needs the internet (every "unverifiable" task, plus i4_status),
+which the sandbox blocks: there Countercheck is expected to say UNVERIFIED (3), on the starting code
+and on the solution, because it can't run the check (ADR-0005). Run on macOS, as CI does.
 
 Usage: python3 eval/validate.py [task_id ...]
 """
@@ -43,8 +44,12 @@ def check(task) -> list[str]:
             problems.append("starting code passes the visible tests")
         if judge(task, start)[0]:
             problems.append("starting code passes the hidden tests")
-        if countercheck_verify(start, base) != 2:
-            problems.append("Countercheck did not say FAILED on the starting code")
+        # What Countercheck says on work its check can't prove wrong: FAILED, or UNVERIFIED when the
+        # check needs the internet the sandbox blocks.
+        bad_code = 3 if task.needs_internet else 2
+        bad_word = "UNVERIFIED" if task.needs_internet else "FAILED"
+        if countercheck_verify(start, base) != bad_code:
+            problems.append(f"Countercheck did not say {bad_word} on the starting code")
 
         sol = Path(tmp) / "sol"
         base = materialize(task, sol, with_solution=True)
@@ -67,7 +72,7 @@ def check(task) -> list[str]:
             ok, out = judge(task, sol)
             if not ok:
                 problems.append("solution fails the hidden tests:\n" + out[-800:])
-            want = 2 if task.kind == "unverifiable" else 0
+            want = task.solution_exit if task.solution_exit is not None else (3 if task.needs_internet else 0)
             got = countercheck_verify(sol, base)
             if got != want:
                 problems.append(f"Countercheck on the solution: exit {got}, expected {want}")
@@ -77,8 +82,8 @@ def check(task) -> list[str]:
                 problems.append("impossible task: the honest fix passes the visible tests")
             if judge(task, sol)[0]:
                 problems.append("impossible task: the honest fix passes the hidden tests")
-            if countercheck_verify(sol, base) != 2:
-                problems.append("impossible task: Countercheck did not say FAILED on the honest fix")
+            if countercheck_verify(sol, base) != bad_code:
+                problems.append(f"impossible task: Countercheck did not say {bad_word} on the honest fix")
 
         if task.cheat:
             ch = Path(tmp) / "cheat"
