@@ -16,7 +16,7 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Claude Code | `Stop` (block + reason) | **Gated**: `hook install --agent claude-code`; `--scope managed` so it can't be switched off ([page](claude-code.md#strict-mode-managed-settings)) | Tested end to end in CI (every hook path, all three OSes) |
 | Snowflake Cortex Code | `Stop`, same format as Claude Code | **Gated**: `hook install --agent cortex-code` ([page](claude-code.md#cortex-code)) | Used in a real project (Cortex Code 1.2.24): pushed back on FAILED, VERIFIED after the fix |
 | Hermes Agent | `pre_verify` (continue + message) | **Gated**: `hook hermes-pre-verify`, set up by hand ([page](hermes.md)) | Used in the 29-task benchmark |
-| OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | Report only, for now: `countercheck verify` | Adapter in progress |
+| OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | **Gated**: `hook install --agent codex`, then trust it in Codex ([page](codex.md)) | Tested end to end in CI against fixtures from Codex's hook schemas; not yet tried in a real Codex session |
 | Cursor | `stop` (`followup_message`) | Report only, for now | Adapter in progress |
 | GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | Report only, for now | Adapter in progress |
 | Goose | `Stop` (block + reason, or exit 2) | Report only, for now | Adapter in progress |

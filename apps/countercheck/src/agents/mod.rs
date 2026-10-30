@@ -11,6 +11,7 @@ pub mod json;
 
 mod claude;
 pub mod kiro;
+pub mod codex;
 
 use json::Node;
 use std::io::IsTerminal;
@@ -54,7 +55,12 @@ pub struct Target {
 
 /// Every agent `hook install` knows. Keep the order: it is the order `hook status` prints.
 pub fn all() -> Vec<Target> {
-    vec![claude::claude_code(), claude::cortex_code(), kiro::target()]
+    vec![
+        claude::claude_code(),
+        claude::cortex_code(),
+        kiro::target(),
+        codex::target(),
+    ]
 }
 
 /// Agents with hooks Countercheck can't write for you (no project file, or not JSON).
