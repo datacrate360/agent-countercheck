@@ -19,7 +19,7 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | Report only, for now: `countercheck verify` | Adapter in progress |
 | Cursor | `stop` (`followup_message`) | Report only, for now | Adapter in progress |
 | GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | Report only, for now | Adapter in progress |
-| Goose | `Stop` (block + reason, or exit 2) | Report only, for now | Adapter in progress |
+| Goose | `Stop` (block + reason, or exit 2), from a plugin's `hooks/hooks.json` | **Gated**: `hook install --agent goose` ([page](goose.md)) | Tested end to end in CI; tried with Goose 1.57.0 against a stand-in model (blocked a false claim, then gave up at the limit) |
 | Kiro (IDE, CLI) | Agent Stop (block + reason) | Report only, for now | Adapter in progress |
 | Devin CLI, JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |

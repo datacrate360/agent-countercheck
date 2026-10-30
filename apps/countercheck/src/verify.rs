@@ -517,7 +517,7 @@ pub fn read_settings(root: &std::path::Path, rel: &str) -> hook_settings::File {
 
 /// Which agent's shell `verify` runs in, when `--agent` isn't given: each agent marks the commands
 /// it runs (Claude Code `CLAUDE_CODE_CHILD_SESSION` / `CLAUDECODE`, Cursor `CURSOR_AGENT`, Codex
-/// `CODEX_SANDBOX*`, Hermes `HERMES_SESSION_ID`). A label like `--agent`, never a proof: the
+/// `CODEX_SANDBOX*`, Goose `GOOSE_TERMINAL` / `AGENT=goose`, Hermes `HERMES_SESSION_ID`). A label like `--agent`, never a proof: the
 /// worker controls its environment, and it changes no check and no verdict. An agent started by
 /// another inherits both markers; the most specific one (the innermost spawner's) wins.
 pub fn agent_from_env() -> Option<&'static str> {
@@ -528,6 +528,8 @@ pub fn agent_from_env() -> Option<&'static str> {
         Some("cursor")
     } else if set("CODEX_SANDBOX") || set("CODEX_SANDBOX_NETWORK_DISABLED") {
         Some("codex")
+    } else if set("GOOSE_TERMINAL") || std::env::var("AGENT").is_ok_and(|v| v == "goose") {
+        Some("goose")
     } else if set("HERMES_SESSION_ID") {
         Some("hermes")
     } else {
