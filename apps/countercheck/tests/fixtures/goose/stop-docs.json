@@ -1,0 +1,5 @@
+{
+  "event": "Stop",
+  "session_id": "abc-123",
+  "last_assistant_message": "Done. I updated the file and ran the tests."
+}

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **New: Kiro hook.** `countercheck hook install --agent kiro` writes `.kiro/hooks/countercheck.json` (`SessionStart` +
+  `Stop`, IDE and CLI V3; `--scope user` for `~/.kiro/hooks/`), and `countercheck hook kiro-stop` sends Kiro back in its
+  own format while the checks fail ([docs/hooks/kiro.md](docs/hooks/kiro.md)).
+- **New: OpenAI Codex hook.** `countercheck hook install --agent codex` adds `SessionStart` and `Stop` hooks to
+  `.codex/hooks.json` (`--scope user`: `~/.codex/hooks.json`); the new `hook codex-stop` sends Codex back while the
+  checks fail and labels receipts `codex`. Codex runs it only after you trust it (`/hooks`): see
+  [docs/hooks/codex.md](docs/hooks/codex.md). `verify` from a Codex shell is now named from `CODEX_THREAD_ID` too.
+- **New: Goose hook.** `countercheck hook install --agent goose` adds Countercheck as a Goose plugin
+  (`.agents/plugins/countercheck/hooks/hooks.json`, or `~/.agents/...` with `--scope user`) with `SessionStart` and a
+  new `hook goose-stop`, which reads Goose's `working_dir` and answers in Goose's format. `hook session-start` also
+  reads `working_dir`. `verify` names Goose from `GOOSE_TERMINAL` / `AGENT=goose`. [docs/hooks/goose.md](docs/hooks/goose.md)
+- **New: Cursor hook.** `countercheck hook install --agent cursor` adds `sessionStart` and `stop` to `.cursor/hooks.json` (or `~/.cursor/hooks.json`); `countercheck hook cursor-stop` sends the agent back with `followup_message` while the checks fail ([docs/hooks/cursor.md](docs/hooks/cursor.md)).
+- **New: GitHub Copilot hook.** `countercheck hook install --agent copilot` writes `.github/hooks/countercheck.json`
+  (`sessionStart` + `agentStop`, `bash` and `powershell`, 600 s timeout) for the Copilot CLI, the cloud agent and VS Code;
+  `hook copilot-stop` reads Copilot's input and transcript and answers in its format. `verify` labels Copilot runs. See
+  [docs/hooks/copilot.md](docs/hooks/copilot.md), including the cloud agent's `copilot-setup-steps.yml`.
 - **Changed (CC-19, [ADR-0005](docs/decisions/0005-network-only-failures.md)): a check that fails only because the
   sandbox blocked the internet makes the run UNVERIFIED, not FAILED.** Countercheck confirms it by running that check
   once more on the base revision; it counts only if the base fails for lack of internet too, so an agent can't use it

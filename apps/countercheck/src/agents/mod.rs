@@ -10,6 +10,11 @@
 pub mod json;
 
 mod claude;
+pub mod codex;
+pub mod copilot;
+pub mod cursor;
+pub mod goose;
+pub mod kiro;
 
 use json::Node;
 use std::io::IsTerminal;
@@ -53,7 +58,15 @@ pub struct Target {
 
 /// Every agent `hook install` knows. Keep the order: it is the order `hook status` prints.
 pub fn all() -> Vec<Target> {
-    vec![claude::claude_code(), claude::cortex_code()]
+    vec![
+        claude::claude_code(),
+        claude::cortex_code(),
+        kiro::target(),
+        codex::target(),
+        goose::target(),
+        cursor::target(),
+        copilot::target(),
+    ]
 }
 
 /// Agents with hooks Countercheck can't write for you (no project file, or not JSON).
@@ -437,9 +450,17 @@ pub fn install(o: &Options) -> Result<(), String> {
             .unwrap_or(&path)
             .display()
             .to_string();
-        println!(
-            "commit it, so Countercheck can tell if an agent removes the hook: git add {rel} && git commit -m \"Countercheck hooks\""
-        );
+        let rel = rel.replace('\\', "/");
+        if countercheck_core::hook_settings::FILES.contains(&rel.as_str()) {
+            println!(
+                "commit it, so Countercheck can tell if an agent removes the hook: git add {rel} && git commit -m \"Countercheck hooks\""
+            );
+        } else {
+            // Say so rather than promise a tamper check this file doesn't get.
+            println!(
+                "commit it: git add {rel} && git commit -m \"Countercheck hooks\" (Countercheck does not yet check this file for an agent removing the hook)"
+            );
+        }
     }
     if o.scope == Scope::Managed {
         println!(
@@ -503,10 +524,17 @@ pub fn uninstall(o: &Options) -> Result<(), String> {
     }
     write_settings(&path, Some(&old), &new).map_err(|e| admin_hint(o, e))?;
     println!("wrote {}", path.display());
-    if root.is_some() {
-        println!(
-            "commit it too: until then Countercheck reports the removed hook (an agent could have done it)"
-        );
+    if let Some(root) = &root {
+        let rel = path.strip_prefix(root).unwrap_or(&path);
+        if countercheck_core::hook_settings::FILES
+            .contains(&rel.to_string_lossy().replace('\\', "/").as_str())
+        {
+            println!(
+                "commit it too: until then Countercheck reports the removed hook (an agent could have done it)"
+            );
+        } else {
+            println!("commit it too");
+        }
     }
     Ok(())
 }
