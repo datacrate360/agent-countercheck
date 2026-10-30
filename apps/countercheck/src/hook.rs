@@ -454,7 +454,10 @@ pub fn session_start() -> Result<(), String> {
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
-    let session = text("session_id");
+    // Copilot names it `sessionId`.
+    let session = Some(text("session_id"))
+        .filter(|s| !s.is_empty())
+        .unwrap_or(text("sessionId"));
     let Some(file) = session_file(&cwd, session) else {
         return Ok(()); // no session id, or not a git repository: nothing to lock
     };

@@ -229,6 +229,9 @@ enum HookCmd {
     GooseStop,
     /// Cursor `stop` hook: send the agent back (`followup_message`) while the checks fail.
     CursorStop,
+    /// GitHub Copilot `agentStop` hook (CLI, cloud agent, VS Code): block the stop while the
+    /// checks fail.
+    CopilotStop,
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
     SessionStart,
@@ -251,6 +254,7 @@ enum HookCmd {
 struct InstallArgs {
     /// The agent: claude-code, cortex-code, codex (see `countercheck hook status`).
     /// The agent: claude-code, cortex-code, cursor (see `countercheck hook status`).
+    /// The agent: claude-code, cortex-code, copilot (see `countercheck hook status`).
     #[arg(long)]
     agent: String,
     /// `project` (this repository, committed with it), `user` (every project, for this user), or
@@ -498,6 +502,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                 HookCmd::CodexStop => agents::codex::stop(),
                 HookCmd::GooseStop => agents::goose::stop(),
                 HookCmd::CursorStop => agents::cursor::stop(),
+                HookCmd::CopilotStop => agents::copilot::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
             };

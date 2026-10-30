@@ -18,7 +18,7 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Hermes Agent | `pre_verify` (continue + message) | **Gated**: `hook hermes-pre-verify`, set up by hand ([page](hermes.md)) | Used in the 29-task benchmark |
 | OpenAI Codex | `Stop` (block + reason); hooks must be trusted once | **Gated**: `hook install --agent codex`, then trust it in Codex ([page](codex.md)) | Tested end to end in CI against fixtures from Codex's hook schemas; not yet tried in a real Codex session |
 | Cursor | `stop` (`followup_message`) | Report only, for now | Adapter in progress |
-| GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | Report only, for now | Adapter in progress |
+| GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | **Gated**: `hook install --agent copilot`; the cloud agent needs `countercheck` installed by its setup steps ([page](copilot.md)) | Tested end to end with payloads from the docs; not yet run in a live Copilot session |
 | Goose | `Stop` (block + reason, or exit 2) | Report only, for now | Adapter in progress |
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
 | Goose | `Stop` (block + reason, or exit 2), from a plugin's `hooks/hooks.json` | **Gated**: `hook install --agent goose` ([page](goose.md)) | Tested end to end in CI; tried with Goose 1.57.0 against a stand-in model (blocked a false claim, then gave up at the limit) |

@@ -1,0 +1,8 @@
+{
+  "sessionId": "SESSION",
+  "timestamp": 1704614400000,
+  "cwd": "CWD",
+  "transcriptPath": "TRANSCRIPT",
+  "stopReason": "end_turn",
+  "stop_hook_active": false
+}

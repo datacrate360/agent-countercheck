@@ -1,0 +1,7 @@
+{
+  "sessionId": "SESSION",
+  "timestamp": 1704614400000,
+  "cwd": "CWD",
+  "source": "new",
+  "initialPrompt": "Fix the calculator so the tests pass"
+}

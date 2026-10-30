@@ -535,6 +535,8 @@ pub fn agent_from_env() -> Option<&'static str> {
         Some("codex")
     } else if set("GOOSE_TERMINAL") || std::env::var("AGENT").is_ok_and(|v| v == "goose") {
         Some("goose")
+    } else if set("COPILOT_CLI") || set("COPILOT_AGENT_PROMPT") {
+        Some("copilot")
     } else if set("HERMES_SESSION_ID") {
         Some("hermes")
     } else {
