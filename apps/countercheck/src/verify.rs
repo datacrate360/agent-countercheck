@@ -443,6 +443,20 @@ pub fn verify(opts: &Options) -> Result<(Receipt, PathBuf), String> {
             &read_settings(&root, path),
         ));
     }
+    for path in hook_settings::PLUGIN_FILES {
+        let was = match settings_from.files().get(*path) {
+            None => hook_settings::File::Absent,
+            Some(f) if f.symlink => {
+                hook_settings::File::Symlink(settings_from.read(path)?.unwrap_or_default())
+            }
+            Some(_) => hook_settings::File::Regular(settings_from.read(path)?.unwrap_or_default()),
+        };
+        hook_settings.extend(hook_settings::compare_plugin(
+            path,
+            &was,
+            &read_settings(&root, path),
+        ));
+    }
     let (verdict, reasons) = hook_settings::apply(verdict, reasons, &hook_settings);
     let (verdict, mut reasons) = countercheck_core::linked::apply(
         verdict,

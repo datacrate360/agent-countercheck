@@ -37,6 +37,7 @@ pub fn claude_code() -> Target {
         also_reads: &[],
         after: "Claude Code loads hooks when a session starts: start a new session (or run /hooks) to use them.",
         docs: "docs/hooks/claude-code.md",
+        plugin: None,
     }
 }
 
@@ -52,5 +53,6 @@ pub fn cortex_code() -> Target {
         also_reads: &[".claude/settings.json"],
         after: "Cortex Code loads hooks when a session starts: start a new session to use them.",
         docs: "docs/hooks/claude-code.md#cortex-code",
+        plugin: None,
     }
 }

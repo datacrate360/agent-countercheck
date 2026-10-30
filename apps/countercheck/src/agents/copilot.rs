@@ -62,6 +62,7 @@ pub fn target() -> Target {
                 reads .github/hooks from the default branch and needs countercheck installed by \
                 copilot-setup-steps.yml (see the docs page).",
         docs: "docs/hooks/copilot.md",
+        plugin: None,
     }
 }
 

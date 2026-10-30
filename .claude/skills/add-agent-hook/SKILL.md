@@ -29,7 +29,13 @@ file lives, its input JSON in, its answer format out. The decision itself is sha
      each path, built with `super::command(bin, "<sub>")`, keys in the order the agent's docs show), each entry's
      `needles` (the Countercheck commands that count as "already there", aliases included), `also_reads` (other files
      the agent reads hooks from, so install warns about a double run), `after` (the one step the user must take:
-     approve, trust, reload), `docs`.
+     approve, trust, reload), `docs`, `plugin: None`.
+   - **Plugin agents** (the hook is a program file, e.g. a TypeScript plugin, not JSON settings): set
+     `plugin: Some(|bin| super::plugin_with_bin(include_str!("<agent>/plugin.ts"), bin))`, leave `entries` empty and
+     `top` empty. Keep the plugin template next to the agent file; write `"__COUNTERCHECK_BIN__"` (with the quotes)
+     where it calls Countercheck. The plugin passes data to `countercheck hook <agent>-stop` on stdin, never in a
+     shell string built from agent text, and fails open. Install writes the whole file (refuses a file there that
+     isn't Countercheck's), uninstall removes it only if unchanged, status reports edited copies.
    - If the stop input or answer differs: `pub fn stop() -> Result<(), String>` that reads the payload
      (`hook::read_payload`), builds a `hook::HookInput` (cwd, session, the agent's final message, agent label, model),
      calls `hook::check`, applies the nudge limit (`hook::take_nudge`), logs with `hook::log_call`, and prints the
@@ -46,8 +52,10 @@ file lives, its input JSON in, its answer format out. The decision itself is sha
 5. Docs: `docs/hooks/<agent>.md` (the install command, what lands in the file, the trust step, what the agent sees,
    the env vars `COUNTERCHECK_MAX_NUDGES` and `COUNTERCHECK_HOOK_LOG`; `--bin` for a countercheck not on PATH), a row
    in the README "Where it fits" table and the `where-it-fits.svg` left column, a row in `docs/hooks/README.md`, the
-   project file in `hook_settings::FILES` (the tamper check; a test that removing it fails the run), a line under
-   `## Unreleased` in CHANGELOG.
+   project file in `hook_settings::FILES` (the tamper check; a test that removing it fails the run), or for a plugin
+   agent in `hook_settings::PLUGIN_FILES` (byte-compared; a test that deleting AND editing the committed plugin fails
+   the run; a unit test refuses a plugin agent missing from that list), the agent's session-start input shape in
+   `hook::agent_from_session_start` if something tells it apart, a line under `## Unreleased` in CHANGELOG.
 
 ## Tests: `apps/countercheck/tests/hook_<agent>.rs` (its own file, so parallel work doesn't collide)
 

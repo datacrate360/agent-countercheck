@@ -48,6 +48,7 @@ pub fn target() -> Target {
                 workspace before it loads its hooks; in the IDE, check that both Countercheck hooks are enabled \
                 (eye icon) in the Agent Hooks panel.",
         docs: "docs/hooks/kiro.md",
+        plugin: None,
     }
 }
 
