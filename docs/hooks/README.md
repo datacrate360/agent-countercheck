@@ -21,7 +21,8 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | Cursor (editor, CLI, cloud agents) | `stop` (`followup_message`) | **Gated**: `hook install --agent cursor` ([page](cursor.md)) | Tested end to end in CI with payloads from Cursor's docs; not yet run against Cursor |
 | GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | **Gated**: `hook install --agent copilot`; the cloud agent needs `countercheck` installed by its setup steps ([page](copilot.md)) | Tested end to end in CI with payloads from the docs; not yet run in a live Copilot session |
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
-| Devin CLI, JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
+| OpenClaw (embedded runner, Gateway) | `before_agent_finalize` plugin hook (revise + reason); not dispatched under the Copilot harness | **Gated**: a plugin set up by hand with `openclaw plugins install`, plus the `allowConversationAccess` grant ([page](openclaw.md)) | Tested end to end in CI (the plugin under Node too); run with OpenClaw 2026.10.9 against a stand-in model (sent back 3 times, then OpenClaw's cap) |
+| Devin CLI, JetBrains Junie CLI, Amp | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
 

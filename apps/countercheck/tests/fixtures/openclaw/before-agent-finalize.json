@@ -1,0 +1,8 @@
+{
+  "cwd": "__CWD__",
+  "sessionId": "8f3c2a1e-5b7d-4e9f-a0c1-2d3e4f5a6b7c",
+  "runId": "run-01JB7Q8K4M2N3P5R6S7T8V9W0X",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "lastAssistantMessage": "__MESSAGE__"
+}

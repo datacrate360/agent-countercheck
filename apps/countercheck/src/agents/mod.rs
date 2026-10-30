@@ -15,6 +15,7 @@ pub mod copilot;
 pub mod cursor;
 pub mod goose;
 pub mod kiro;
+pub mod openclaw;
 
 use json::Node;
 use std::io::IsTerminal;
@@ -104,10 +105,16 @@ pub fn all() -> Vec<Target> {
 }
 
 /// Agents with hooks Countercheck can't write for you (no project file, or not JSON).
-pub const MANUAL: &[(&str, &str)] = &[(
-    "hermes",
-    "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
-)];
+pub const MANUAL: &[(&str, &str)] = &[
+    (
+        "hermes",
+        "hooks live in ~/.hermes/config.yaml: see docs/hooks/hermes.md",
+    ),
+    (
+        "openclaw",
+        "a plugin folder plus a grant in ~/.openclaw/openclaw.json: see docs/hooks/openclaw.md",
+    ),
+];
 
 /// The command a hook runs: `<bin> hook <sub>`, with `bin` in double quotes when it has spaces
 /// (`C:/Program Files/...`), as a JSON string.

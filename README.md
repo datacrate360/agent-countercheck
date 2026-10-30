@@ -118,6 +118,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | Cursor (editor, CLI, cloud agents) | a `stop` hook: `countercheck hook install --agent cursor` ([page](docs/hooks/cursor.md); built from Cursor's docs, not yet run against Cursor) |
 | GitHub Copilot (CLI, cloud agent, VS Code) | an `agentStop` hook: `countercheck hook install --agent copilot` ([docs/hooks/copilot.md](docs/hooks/copilot.md); the cloud agent installs `countercheck` in its setup steps; built from Copilot's docs, not yet run against Copilot) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
+| OpenClaw | a `before_agent_finalize` plugin, installed with `openclaw plugins install` and granted conversation access ([page](docs/hooks/openclaw.md); set up by hand; run with OpenClaw 2026.10.9 against a stand-in model) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |
 | GitHub | the [Action on the Marketplace](https://github.com/marketplace/actions/agent-countercheck), on every pull request ([step 4d](#4d-ci)) |
@@ -609,7 +610,7 @@ v0.19.0 ([CHANGELOG](CHANGELOG.md)). Sandbox on macOS and Linux; on Windows a pa
 after `countercheck windows-setup` (experimental). A GitHub Action on the
 [Marketplace](https://github.com/marketplace/actions/agent-countercheck). Not yet: signed receipts, a per-host network
 allow-list, cost read from agent logs, blocking the internet on Windows without the admin setup, hooks for Devin,
-Junie, Amp and OpenClaw ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
+Junie and Amp ([which agents](docs/hooks/README.md)). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## ⭐ Why star it?
 
