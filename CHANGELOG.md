@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed:** the session record written at session start named Codex, Copilot, Goose and Kiro sessions `claude-code`
+  (or nothing), so a session that never got a receipt showed under the wrong agent on the project page's "Not
+  checked" list. It now reads each agent's own input shape. Display only; receipts were always right.
+- **Docs:** `docs/architecture.md` matches 0.19 (the ADR-0005 exception, every agent's hook file in the tamper check,
+  new agents go in `agents/`); `--agent` and `hook install --agent` help list every agent.
+
 ## v0.19.0 (2026-10-30)
 
 One command hooks Countercheck into seven agents: `countercheck hook install --agent <name>` for Claude Code, Cortex
