@@ -1,0 +1,7 @@
+{
+  "event": "Stop",
+  "session_id": "20261030_7",
+  "matcher_context": null,
+  "last_assistant_message": "Fixed it, all tests pass.",
+  "working_dir": "/path/to/project"
+}

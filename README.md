@@ -114,6 +114,7 @@ Recorded from real runs: [docs/assets/demos/](docs/assets/demos).
 | Claude Code | a `Stop` hook: `countercheck hook install --agent claude-code` ([step 4a](#4a-claude-code-and-cortex-code)) |
 | Cortex Code (Snowflake) | the same hooks: `countercheck hook install --agent cortex-code` ([what differs](docs/hooks/claude-code.md#cortex-code); used in a real project) |
 | OpenAI Codex | a `Stop` hook: `countercheck hook install --agent codex`, then trust it in Codex ([setup and trust](docs/hooks/codex.md)) |
+| Goose | a `Stop` hook in its own plugin: `countercheck hook install --agent goose` ([page](docs/hooks/goose.md); start Goose from the project root) |
 | Hermes Agent | a `pre_verify` hook: `countercheck hook hermes-pre-verify` ([step 4b](#4b-hermes-agent)) |
 | Kiro (IDE, CLI V3) | an Agent Stop hook: `countercheck hook install --agent kiro` ([page](docs/hooks/kiro.md); not yet tried on a real install) |
 | Any other agent, or your scripts | `countercheck verify` when it says done ([step 4c](#4c-any-other-agent-or-a-script)); which agents can be stopped at "done" and which only reported: [docs/hooks](docs/hooks/README.md) |

@@ -225,6 +225,8 @@ enum HookCmd {
     KiroStop,
     /// Codex `Stop` hook: block the stop while the checks fail.
     CodexStop,
+    /// Goose `Stop` hook (from its plugin's `hooks/hooks.json`): block the stop while the checks fail.
+    GooseStop,
     /// Session start (Claude Code `SessionStart`, Hermes `on_session_start`): remember the commit
     /// the session started from, so the checks stay locked even if the agent commits.
     SessionStart,
@@ -491,6 +493,7 @@ fn run(cli: Cli) -> Result<u8, String> {
                 HookCmd::ClaudeStop => hook::claude_stop(),
                 HookCmd::KiroStop => agents::kiro::stop(),
                 HookCmd::CodexStop => agents::codex::stop(),
+                HookCmd::GooseStop => agents::goose::stop(),
                 HookCmd::SessionStart => hook::session_start(),
                 HookCmd::Install(_) | HookCmd::Uninstall(_) | HookCmd::Status { .. } => Ok(()),
             };

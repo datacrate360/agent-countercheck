@@ -438,7 +438,14 @@ pub fn session_start() -> Result<(), String> {
         return Ok(());
     };
     let text = |k: &str| payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
-    let cwd = PathBuf::from(text("cwd"));
+    // Goose names it `working_dir` and leaves it out of some session starts; its hooks then run in
+    // its own working directory.
+    let cwd = [text("cwd"), text("working_dir")]
+        .into_iter()
+        .find(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
     let session = text("session_id");
     let Some(file) = session_file(&cwd, session) else {
         return Ok(()); // no session id, or not a git repository: nothing to lock

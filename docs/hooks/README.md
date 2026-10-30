@@ -21,6 +21,8 @@ what's installed). Agent hooks can be switched off by the agent itself in some s
 | GitHub Copilot (CLI, cloud agent, VS Code) | `agentStop` / `Stop` (block + reason) | Report only, for now | Adapter in progress |
 | Goose | `Stop` (block + reason, or exit 2) | Report only, for now | Adapter in progress |
 | Kiro (IDE, CLI V3; not Web) | Agent Stop (block + reason) | **Gated**: `hook install --agent kiro` ([page](kiro.md)) | Tested end to end in CI with Kiro's documented payloads; not yet tried on a real install |
+| Goose | `Stop` (block + reason, or exit 2), from a plugin's `hooks/hooks.json` | **Gated**: `hook install --agent goose` ([page](goose.md)) | Tested end to end in CI; tried with Goose 1.57.0 against a stand-in model (blocked a false claim, then gave up at the limit) |
+| Kiro (IDE, CLI) | Agent Stop (block + reason) | Report only, for now | Adapter in progress |
 | Devin CLI, JetBrains Junie CLI, Amp, OpenClaw | a blocking finish hook | Report only | Planned |
 | Gemini CLI | `AfterAgent` (documented, but an open bug says it never runs) | Report only | Waiting on the bug |
 | Windsurf / Devin Desktop, Cline, OpenCode, Aider, Zed's agent, Warp | no finish hook that can block | **Report only**: `countercheck verify` after the agent, or CI | Can't be gated until the agent adds a hook |
