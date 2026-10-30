@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **New: Kiro hook.** `countercheck hook install --agent kiro` writes `.kiro/hooks/countercheck.json` (`SessionStart` +
+  `Stop`, IDE and CLI V3; `--scope user` for `~/.kiro/hooks/`), and `countercheck hook kiro-stop` sends Kiro back in its
+  own format while the checks fail ([docs/hooks/kiro.md](docs/hooks/kiro.md)).
 - **New (CC-03): strict mode.** `sudo countercheck hook install --agent claude-code --scope managed` puts the hooks in
   Claude Code's managed settings, as Countercheck's own drop-in file (`managed-settings.d/50-countercheck.json`) with
   `countercheck` named by its full path. Per Claude Code's docs, hooks there can't be switched off from user, project
