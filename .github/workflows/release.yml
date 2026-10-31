@@ -108,7 +108,12 @@ jobs:
           Get-ChildItem out/*.zip | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
             Set-Content out/SHA256SUMS.txt
           $server = Start-Process python -ArgumentList '-m','http.server','18765','--bind','127.0.0.1','--directory','out' -PassThru
-          Start-Sleep -Seconds 2
+          # Wait until the server answers (a fixed sleep raced it on slow runners).
+          $up = $false
+          foreach ($i in 1..30) {
+            try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:18765/' | Out-Null; $up = $true; break } catch { Start-Sleep -Seconds 1 }
+          }
+          if (-not $up) { throw 'the local download server did not start' }
           $env:COUNTERCHECK_VERSION = '${{ needs.version.outputs.version }}'
           $env:COUNTERCHECK_BASE_URL = 'http://127.0.0.1:18765'
           $env:COUNTERCHECK_INSTALL_DIR = "$env:RUNNER_TEMP\bin"
@@ -172,7 +177,10 @@ jobs:
             > agent-countercheck.rb
       - name: Install script works against these files
         run: |
-          (cd out && python3 -m http.server 18765 --bind 127.0.0.1 &) && sleep 1
+          (cd out && python3 -m http.server 18765 --bind 127.0.0.1 &)
+          # Wait until the server answers (a fixed sleep raced it on slow runners).
+          for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:18765/ && break; sleep 1; done
+          curl -fsS -o /dev/null http://127.0.0.1:18765/ || { echo 'the local download server did not start' >&2; exit 1; }
           COUNTERCHECK_VERSION=${{ needs.version.outputs.version }} \
           COUNTERCHECK_BASE_URL=http://127.0.0.1:18765 COUNTERCHECK_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
       - uses: actions/upload-artifact@v4
