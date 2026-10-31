@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **New:** the GitHub Action can post the verdict on the pull request (`comment: true`, off by default; needs
+  `pull-requests: write`). One comment, updated on later runs: the verdict, the claim, each check, the reasons,
+  protected files put back, the receipt id and a link to the run. Text from the PR is escaped (no HTML, no pinging
+  `@` mentions, output in a fence it can't close). On a fork's PR (read-only token) or any API error it only warns:
+  the comment never changes the verdict or the step's result. The token goes only to the step that posts, never to
+  the step that runs the checks.
+
 ## v0.20.1 (2026-10-30)
 
 Security fix: Codex's `.codex/config.toml` could switch the Codex hook off unseen; it is now in the tamper check.

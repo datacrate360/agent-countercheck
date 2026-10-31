@@ -332,7 +332,8 @@ The wording doesn't matter ("done", "fixed", or nothing at all): the verdict com
 
 On GitHub, add the Action ([Marketplace](https://github.com/marketplace/actions/agent-countercheck),
 [guide](docs/guides/github-action.md)). Every pull request is verified with the checks from its base commit; you get
-the verdict as the job result, a job summary, and the receipt as an artifact.
+the verdict as the job result, a job summary, and the receipt as an artifact. Add `comment: true` (and
+`pull-requests: write`) to also get the verdict as one PR comment, updated on every push.
 
 ```yaml
 on: pull_request

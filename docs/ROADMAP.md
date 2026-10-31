@@ -106,7 +106,6 @@ Most enterprises run Windows, where developers usually have no admin rights but 
 - **Receipt index**: a rebuildable local index (e.g. SQLite) over the JSON receipts for "which targets failed this
   week?" questions. JSON receipts stay the source of truth.
 - **Signed receipts** that third parties can verify.
-- Mutation testing for `hook.rs`.
 - Kill process groups with a system call (e.g. `rustix`) instead of the `kill` program, so it doesn't depend on which `kill` a system ships.
 
 ## Not planned

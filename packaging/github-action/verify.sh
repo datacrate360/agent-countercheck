@@ -5,8 +5,12 @@ set -u
 
 out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 note() { echo "::notice title=Countercheck::$1"; }
+# Where the receipt JSON and countercheck's errors go; comment.sh (the next step) reads both.
+json="${RUNNER_TEMP:-/tmp}/countercheck-latest.json"
+errlog="${RUNNER_TEMP:-/tmp}/countercheck-stderr.txt"
+rm -f "$json"; : > "$errlog"
 
-cd "$IN_PATH" || { echo "::error title=Countercheck::path not found: $IN_PATH"; out verdict error; exit 1; }
+cd "$IN_PATH" || { echo "path not found: $IN_PATH" > "$errlog"; echo "::error title=Countercheck::path not found: $IN_PATH"; out verdict error; exit 1; }
 
 # The base revision: the input, else the pull request's base, else the commit before a push.
 base="$IN_BASE"
@@ -26,7 +30,8 @@ if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
     || true
 fi
 if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-  echo "::error title=Countercheck::base revision $base is not in this checkout; use actions/checkout with fetch-depth: 0"
+  echo "base revision $base is not in this checkout; use actions/checkout with fetch-depth: 0" > "$errlog"
+  echo "::error title=Countercheck::$(cat "$errlog")"
   out verdict error
   exit 1
 fi
@@ -43,8 +48,6 @@ args=(verify --base "$base" --sandbox "$IN_SANDBOX" --json --out "$receipts")
 [ -n "$IN_CHECKS_FROM" ] && args+=(--checks-from "$IN_CHECKS_FROM")
 [ -n "$IN_CHECKS_SHA" ] && args+=(--checks-sha256 "$IN_CHECKS_SHA")
 
-json="${RUNNER_TEMP:-/tmp}/countercheck-latest.json"
-errlog="${RUNNER_TEMP:-/tmp}/countercheck-stderr.txt"
 countercheck "${args[@]}" > "$json" 2> "$errlog"
 code=$?
 cat "$errlog" >&2

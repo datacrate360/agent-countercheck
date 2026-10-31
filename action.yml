@@ -54,6 +54,13 @@ inputs:
     description: Upload the receipt (JSON + HTML report) as a workflow artifact.
     required: false
     default: "true"
+  comment:
+    description: >-
+      `true`: on a pull request, post the verdict as a PR comment and update that same comment on later runs.
+      Needs `permissions: pull-requests: write`; on a fork's pull request (read-only token) or any API error it only
+      warns. Never changes the verdict or the step's result.
+    required: false
+    default: "false"
 
 outputs:
   verdict:
@@ -107,6 +114,17 @@ runs:
         PR_TITLE: ${{ github.event.pull_request.title }}
         PUSH_BEFORE: ${{ github.event.before }}
       run: bash "$GITHUB_ACTION_PATH/packaging/github-action/verify.sh"
+
+    # A separate step, so the token never reaches the verify step (which runs the PR's checks).
+    - name: Comment on the pull request
+      if: always() && inputs.comment != 'false'
+      shell: bash
+      env:
+        IN_COMMENT: ${{ inputs.comment }}
+        VERDICT: ${{ steps.verify.outputs.verdict }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        GH_TOKEN: ${{ github.token }}
+      run: bash "$GITHUB_ACTION_PATH/packaging/github-action/comment.sh"
 
     - name: Upload the receipt
       if: always() && inputs.upload-receipt == 'true' && steps.verify.outputs.receipt-dir != ''
