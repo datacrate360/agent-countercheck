@@ -69,6 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # keep the token out of .git/config, where the PR's code could read it
       - uses: datacrate360/agent-countercheck@v0.21.0
         with:
           comment: true
@@ -80,7 +82,9 @@ jobs:
 - Any API error (a missing permission, a rate limit) is a warning too. The comment never changes the verdict or
   whether the step fails (`fail-on` works the same).
 - The comment is posted as `github-actions[bot]` with the job's token. Only the step that posts gets the token;
-  the step that runs the checks never sees it. It finds its earlier comment by a hidden marker and that author, so
+  the step that runs the checks never sees it. That only holds if nothing else hands it over: by default
+  `actions/checkout` saves the token in `.git/config`, where the checks (the PR's code) can read it, so set
+  `persist-credentials: false` as above. It finds its earlier comment by a hidden marker and that author, so
   a comment someone else writes with the marker is left alone.
 - Text from the pull request (its title, check names and output) is shown as data: HTML and links are escaped,
   `@` mentions don't ping anyone, and output sits in a code block it can't close.
