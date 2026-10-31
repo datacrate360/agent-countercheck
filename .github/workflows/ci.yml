@@ -195,6 +195,8 @@ jobs:
           base: ${{ steps.fx.outputs.good-base }}
           claim: Fixed add; all tests pass
           agent: ci
+          # This workflow's token is read-only: on a PR the post fails, which must only warn (the step still passes).
+          comment: true
       - name: Tampered change (expected to fail the step)
         id: tamper
         continue-on-error: true
@@ -203,6 +205,7 @@ jobs:
           path: ${{ runner.temp }}/fx-tamper
           base: ${{ steps.fx.outputs.tamper-base }}
           claim: Fixed add; all tests pass
+          comment: true
       - name: The verdicts are right
         shell: bash
         env:
