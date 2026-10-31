@@ -41,6 +41,7 @@ section. Ideas and use cases are welcome as issues.
 | From the first real Cortex Code user: the hook shows the verdict to the user on every stop it lets through (VERIFIED, and FAILED after the push-back limit); symlinked `link` folders linked again; agent label from the session start; Cortex Code docs from a real setup | v0.17.0 |
 | Linked folders can't carry the agent's files into the checks (editable installs and workspace links that point back into the project; a venv changed during the session); `require_clean`; `countercheck hook stop` | v0.18.0 |
 | `countercheck hook install / uninstall / status` for Claude Code, Cortex Code, Cursor, Codex, GitHub Copilot, Goose and Kiro, each guarded by the tamper check; strict mode (`--scope managed`); a check that only needs the blocked internet is UNVERIFIED, confirmed on the base (ADR-0005); which agents can be stopped at "done" (`docs/hooks/`) | v0.19.0 |
+| GitHub Action: the verdict as a PR comment (`comment: true`); mutation tests for the hook decisions (156/166 caught) | v0.21.0 |
 | Security: `.codex/config.toml` in the tamper check (`[features] hooks = false`, profiles, `[hooks]` tables); OpenClaw push-back limit 2; Devin session label | v0.20.1 |
 | Four more agents: `hook install --agent devin / junie / amp` (Amp as a plugin file the tamper check compares byte for byte), OpenClaw set up by hand (`hook openclaw-stop`); the protected-file reason names the files | v0.20.0 |
 | Check types: **matrix**, **forbid**, **golden**, **budget**, **coverage** (`docs/checks.md`) + made-up data-migration example (`examples/data-migration/`) | v0.2.0 |
@@ -68,8 +69,8 @@ section. Ideas and use cases are welcome as issues.
    `~/.snowflake/connections.toml`); never credentials in Countercheck files. Needed for checks that run against a
    database.
 7. **Network allow-list for checks** that must reach one service (a test database) while the sandbox stays on.
-8. **More hooks**: live runs of the hooks built from docs (Cursor, Codex, Copilot, Kiro, Devin, Junie, Amp). The GitHub Action could also post the verdict as a PR comment (today: job summary
-   and artifact), and be listed on the GitHub Marketplace (needs its own repository).
+8. **More hooks**: live runs of the hooks built from docs (Cursor, Codex, Copilot, Kiro, Devin, Junie, Amp). The GitHub Action could be listed on the GitHub Marketplace (needs its own
+   repository).
 9. **Windows full sandbox, after the experimental release** (ADR-0004, built: `countercheck windows-setup`): try it on
    real Windows 11 machines and drop "experimental"; then the two follow-ups: no stored password for the runner
    account, and `network = true` checks fully sandboxed (a second account without the firewall rule).

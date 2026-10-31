@@ -1,13 +1,19 @@
 # Changelog
 
-## Unreleased
+## v0.21.0 (2026-10-31)
+
+The GitHub Action can post the verdict as a comment on the pull request, where reviewers look.
 
 - **New:** the GitHub Action can post the verdict on the pull request (`comment: true`, off by default; needs
   `pull-requests: write`). One comment, updated on later runs: the verdict, the claim, each check, the reasons,
   protected files put back, the receipt id and a link to the run. Text from the PR is escaped (no HTML, no pinging
   `@` mentions, output in a fence it can't close). On a fork's PR (read-only token) or any API error it only warns:
   the comment never changes the verdict or the step's result. The token goes only to the step that posts, never to
-  the step that runs the checks.
+  the step that runs the checks. The comment's verdict follows countercheck's exit code (as `fail-on` does), not
+  the receipt file, so a check that rewrites that file can't soften what the PR shows.
+- **Tests:** mutation testing on the hook's decisions (`hook.rs`): 156 of 166 mutants caught (was 123), the 3 left
+  change nothing observable. 25 new tests, among them the input and transcript size limits and Hermes with several
+  projects, where a broken hook would have let an agent stop.
 
 ## v0.20.1 (2026-10-30)
 
