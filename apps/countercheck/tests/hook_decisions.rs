@@ -345,8 +345,21 @@ fn hermes_keeps_a_message_at_the_limit_whole() {
     };
     let short = message(1, "Done.");
     assert!(!short.contains("[...truncated]"), "{short}");
-    let n = 2000 - short.chars().count() + 1;
-    let full = message(n, "Done.");
+    // Grow the output until the message is exactly 2000 characters. The rest of the message (check
+    // time, notes) can differ between runs, so measure each run instead of assuming it stays the same.
+    let mut n = 2000 - short.chars().count() + 1;
+    let mut full = message(n, "Done.");
+    for _ in 0..8 {
+        let len = full.chars().count();
+        if full.contains("[...truncated]") {
+            n = n.saturating_sub(100); // overshot: the cut hides the length, so step back
+        } else if len < 2000 {
+            n += 2000 - len;
+        } else {
+            break;
+        }
+        full = message(n, "Done.");
+    }
     assert_eq!(full.chars().count(), 2000, "{full}");
     assert!(!full.contains("[...truncated]"), "{full}");
 }

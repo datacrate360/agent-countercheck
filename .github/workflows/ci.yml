@@ -121,7 +121,12 @@ jobs:
           $hash = (Get-FileHash "$out/countercheck-0.0.0-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower()
           "$hash  countercheck-0.0.0-windows-x86_64.zip" | Set-Content "$out/SHA256SUMS.txt"
           $server = Start-Process python -ArgumentList '-m','http.server','18765','--bind','127.0.0.1','--directory',"$out" -PassThru
-          Start-Sleep -Seconds 2
+          # Wait until the server answers (a fixed sleep raced it on slow runners).
+          $up = $false
+          foreach ($i in 1..30) {
+            try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:18765/' | Out-Null; $up = $true; break } catch { Start-Sleep -Seconds 1 }
+          }
+          if (-not $up) { throw 'the local download server did not start' }
           $env:COUNTERCHECK_VERSION = '0.0.0'
           $env:COUNTERCHECK_BASE_URL = 'http://127.0.0.1:18765'
           $env:COUNTERCHECK_INSTALL_DIR = "$env:RUNNER_TEMP/bin"
