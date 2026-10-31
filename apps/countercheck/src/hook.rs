@@ -820,3 +820,410 @@ pub(crate) fn log_call(
         let _ = writeln!(f, "{line}");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use countercheck_core::hook_settings::HookSettingsChange;
+    use countercheck_core::protect::{Change, ProtectedChange};
+    use countercheck_core::receipt::{CheckResult, ClaimStatus, RepoInfo};
+
+    fn check(name: &str, passed: bool, out: &str) -> CheckResult {
+        CheckResult {
+            name: name.to_string(),
+            run: format!("sh {name}.sh"),
+            exit_code: Some(if passed { 0 } else { 1 }),
+            timed_out: false,
+            duration_ms: 1,
+            passed,
+            output_tail: out.to_string(),
+            output_sha256: String::new(),
+            network: false,
+            needs_network: false,
+            writes: Vec::new(),
+            sandboxed: None,
+            unsandboxed_reason: None,
+        }
+    }
+
+    fn receipt(verdict: Verdict, checks: Vec<CheckResult>) -> Receipt {
+        Receipt {
+            schema: countercheck_core::receipt::SCHEMA.to_string(),
+            id: "r1".to_string(),
+            receipt_sha256: String::new(),
+            created_at: "now".to_string(),
+            countercheck_version: "0".to_string(),
+            repo: RepoInfo {
+                base_rev: "HEAD".to_string(),
+                base_commit: "0".repeat(40),
+                head_commit: "0".repeat(40),
+                dirty: false,
+            },
+            worker: Worker::default(),
+            claim: None,
+            claim_status: ClaimStatus::NoClaim,
+            checks_locked: true,
+            checks_source: ".countercheck/checks.toml @ HEAD".to_string(),
+            checks_external: None,
+            sandbox: "none".to_string(),
+            tree_sha256: String::new(),
+            linked: Vec::new(),
+            protected_changes: Vec::new(),
+            checks,
+            uncovered: None,
+            watched: None,
+            hook_settings: Vec::new(),
+            linked_pointers: Vec::new(),
+            linked_changed: Vec::new(),
+            verdict,
+            reasons: vec!["check \"a\" failed".to_string()],
+        }
+    }
+
+    fn failed() -> Receipt {
+        receipt(
+            Verdict::Failed,
+            vec![check("a", false, "boom"), check("b", true, "fine")],
+        )
+    }
+
+    fn protected(action: &str) -> ProtectedChange {
+        ProtectedChange {
+            path: "tests/t.sh".to_string(),
+            change: Change::Modified,
+            action: action.to_string(),
+        }
+    }
+
+    fn hook_change() -> HookSettingsChange {
+        HookSettingsChange {
+            path: ".claude/settings.json".to_string(),
+            what: "hooks switched off".to_string(),
+        }
+    }
+
+    /// The message of a `Continue`, or panic.
+    fn nudge(d: Decision) -> String {
+        match d {
+            Decision::Continue(m) => m,
+            Decision::Silent => panic!("silent"),
+            Decision::HonestBlocker => panic!("honest blocker"),
+        }
+    }
+
+    #[test]
+    fn only_a_failed_verdict_keeps_the_agent_going() {
+        for v in [Verdict::Verified, Verdict::Unverified] {
+            for blocker in [false, true] {
+                let d = decide(&receipt(v, vec![check("a", true, "")]), blocker);
+                assert!(matches!(d, Decision::Silent), "{v:?} {blocker}");
+            }
+        }
+        assert!(matches!(decide(&failed(), false), Decision::Continue(_)));
+    }
+
+    #[test]
+    fn an_honest_blocker_may_stop_only_without_tampering() {
+        assert!(matches!(decide(&failed(), true), Decision::HonestBlocker));
+        // A changed protected file, or a changed hook setting, each on its own, is tampering.
+        let mut r = failed();
+        r.protected_changes.push(protected("restored_from_base"));
+        assert!(matches!(decide(&r, true), Decision::Continue(_)));
+        let mut r = failed();
+        r.hook_settings.push(hook_change());
+        assert!(matches!(decide(&r, true), Decision::Continue(_)));
+    }
+
+    #[test]
+    fn the_nudge_lists_the_reasons_and_only_the_failed_checks() {
+        let m = nudge(decide(&failed(), false));
+        assert!(
+            m.starts_with(
+                "Countercheck re-ran this project's checks in a clean copy and they FAILED"
+            ),
+            "{m}"
+        );
+        assert!(m.contains("- check \"a\" failed\n"), "{m}");
+        assert!(
+            m.contains("Failed check \"a\" ($ sh a.sh), last output:\nboom\n"),
+            "{m}"
+        );
+        assert!(!m.contains("\"b\""), "a passing check is listed: {m}");
+        assert!(
+            m.ends_with("Fix the problem, run the checks yourself, then finish."),
+            "{m}"
+        );
+        // No tampering: none of the tampering notes.
+        for note in [
+            "original versions",
+            "frozen paths",
+            "outside the project",
+            "Undo your change",
+        ] {
+            assert!(!m.contains(note), "{note}: {m}");
+        }
+    }
+
+    #[test]
+    fn the_nudge_names_each_kind_of_tampering() {
+        let notes = [
+            (
+                "restored_from_base",
+                "original versions of the protected test files",
+            ),
+            (
+                countercheck_core::protect::REMOVED_NEW_FILE,
+                "files you added on frozen paths",
+            ),
+            (
+                countercheck_core::protect::REMOVED_OUTSIDE_LINK,
+                "links you added that lead outside",
+            ),
+        ];
+        for (action, note) in notes {
+            let mut r = failed();
+            r.protected_changes.push(protected(action));
+            let m = nudge(decide(&r, false));
+            for (_, other) in notes {
+                assert_eq!(m.contains(other), other == note, "{action}: {m}");
+            }
+            assert!(!m.contains("Undo your change"), "{m}");
+        }
+        // A new file kept on a protected (not frozen) path needs no note.
+        let mut r = failed();
+        r.protected_changes.push(protected("kept_new_file"));
+        let m = nudge(decide(&r, false));
+        assert!(notes.iter().all(|(_, n)| !m.contains(n)), "{m}");
+    }
+
+    #[test]
+    fn the_nudge_says_when_only_the_hook_settings_failed_the_run() {
+        // All checks passed: the run failed because of the hook change alone.
+        let mut r = receipt(Verdict::Failed, vec![check("a", true, "")]);
+        r.hook_settings.push(hook_change());
+        let m = nudge(decide(&r, false));
+        assert!(
+            m.contains(
+                "they passed, but the run FAILED because you changed your own hook settings"
+            ),
+            "{m}"
+        );
+        assert!(m.contains("Undo your change to the hook settings"), "{m}");
+        // A check failed too: the plain opening.
+        let mut r = failed();
+        r.hook_settings.push(hook_change());
+        let m = nudge(decide(&r, false));
+        assert!(
+            m.starts_with(
+                "Countercheck re-ran this project's checks in a clean copy and they FAILED"
+            ),
+            "{m}"
+        );
+        assert!(m.contains("Undo your change to the hook settings"), "{m}");
+        // All passed, no hook change (failed for a protected change): the plain opening.
+        let mut r = receipt(Verdict::Failed, vec![check("a", true, "")]);
+        r.protected_changes.push(protected("restored_from_base"));
+        let m = nudge(decide(&r, false));
+        assert!(
+            m.starts_with(
+                "Countercheck re-ran this project's checks in a clean copy and they FAILED"
+            ),
+            "{m}"
+        );
+    }
+
+    #[test]
+    fn a_long_nudge_is_cut_at_the_limit_and_one_at_the_limit_is_not() {
+        let len = |tail: &str| {
+            let r = receipt(Verdict::Failed, vec![check("a", false, tail)]);
+            nudge(decide(&r, false))
+        };
+        let room = MAX_MESSAGE_CHARS - len("").chars().count();
+        // Exactly at the limit (multi-byte characters count once): kept whole.
+        let m = len(&"é".repeat(room));
+        assert_eq!(m.chars().count(), MAX_MESSAGE_CHARS);
+        assert!(!m.contains("[...truncated]"));
+        // One more character: cut.
+        let m = len(&"é".repeat(room + 1));
+        assert!(m.ends_with("\n[...truncated]"), "{m}");
+        assert_eq!(
+            m.chars().count(),
+            MAX_MESSAGE_CHARS - 20 + "\n[...truncated]".chars().count()
+        );
+    }
+
+    #[test]
+    fn the_stop_line_for_each_verdict() {
+        let mut r = receipt(
+            Verdict::Verified,
+            vec![check("a", true, ""), check("b", true, "")],
+        );
+        let m = stop_message(&r, &Decision::Silent, false);
+        assert_eq!(
+            m,
+            "✓ Countercheck: VERIFIED, 2 check(s) passed in a clean copy (receipt r1)"
+        );
+        r.repo.dirty = true;
+        let m = stop_message(&r, &Decision::Silent, false);
+        assert_eq!(
+            m,
+            "✓ Countercheck: VERIFIED, 2 check(s) passed in a clean copy, including uncommitted changes (receipt r1)"
+        );
+
+        let r = failed();
+        let m = stop_message(&r, &Decision::HonestBlocker, false);
+        assert!(
+            m.starts_with(
+                "⚠ Countercheck: FAILED (1 of 2 check(s) passed); the agent says it is blocked"
+            ),
+            "{m}"
+        );
+        assert!(m.contains("The work is not done (receipt r1)"), "{m}");
+        let m = stop_message(&r, &Decision::Continue(String::new()), true);
+        assert!(
+            m.contains("FAILED (1 of 2 check(s) passed). Stopped sending the agent back"),
+            "{m}"
+        );
+        assert!(m.contains("did NOT pass"), "{m}");
+        // Failed and let through without a give-up (a hook without a loop guard).
+        let m = stop_message(&r, &Decision::Continue(String::new()), false);
+        assert_eq!(
+            m,
+            "⚠ Countercheck: FAILED (1 of 2 check(s) passed) (receipt r1)"
+        );
+    }
+
+    #[test]
+    fn the_unverified_stop_line_gives_the_reason_that_kept_it_from_verified() {
+        let mut r = receipt(Verdict::Unverified, vec![check("a", true, "")]);
+        r.reasons = vec![
+            "all 1 check(s) passed in a clean copy".to_string(),
+            "the checks are not locked".to_string(),
+        ];
+        assert_eq!(
+            stop_message(&r, &Decision::Silent, false),
+            "Countercheck: UNVERIFIED: the checks are not locked (receipt r1)"
+        );
+        r.reasons.truncate(1);
+        assert_eq!(
+            stop_message(&r, &Decision::Silent, false),
+            "Countercheck: UNVERIFIED: all 1 check(s) passed in a clean copy (receipt r1)"
+        );
+        r.reasons.clear();
+        assert_eq!(
+            stop_message(&r, &Decision::Silent, false),
+            "Countercheck: UNVERIFIED: not proven (receipt r1)"
+        );
+    }
+
+    #[test]
+    fn the_transcript_folder_names_the_agent() {
+        assert_eq!(
+            agent_from_transcript("/h/.snowflake/cortex/conversations/x.json"),
+            "cortex-code"
+        );
+        assert_eq!(
+            agent_from_transcript("C:\\u\\.codex\\sessions\\r.jsonl"),
+            "codex"
+        );
+        assert_eq!(
+            agent_from_transcript("/h/.claude/projects/p/s.jsonl"),
+            "claude-code"
+        );
+    }
+
+    #[test]
+    fn session_ids_become_safe_file_names() {
+        assert_eq!(safe_id("../a b/c-d_e"), "abc-d_e");
+        assert_eq!(safe_id("../ /"), "unknown");
+        assert_eq!(safe_id(""), "unknown");
+        assert_eq!(safe_id(&"x".repeat(200)).len(), 128);
+    }
+
+    #[test]
+    fn assistant_text_reads_both_layouts_and_skips_the_rest() {
+        let v = |s: &str| serde_json::from_str::<serde_json::Value>(s).unwrap();
+        // Claude Code: blocks, only the text ones.
+        let cc = v(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"a"},{"type":"tool_use","text":"no"},{"type":"text","text":"b"}]}}"#,
+        );
+        assert_eq!(assistant_text(&cc).as_deref(), Some("a\nb"));
+        // Cortex Code: a bare message with a string.
+        assert_eq!(
+            assistant_text(&v(r#"{"role":"assistant","content":"hi"}"#)).as_deref(),
+            Some("hi")
+        );
+        // Not the assistant, no text, or blank text.
+        assert_eq!(
+            assistant_text(&v(
+                r#"{"type":"user","message":{"role":"user","content":"x"}}"#
+            )),
+            None
+        );
+        assert_eq!(
+            assistant_text(&v(r#"{"role":"assistant","content":7}"#)),
+            None
+        );
+        assert_eq!(
+            assistant_text(&v(r#"{"role":"assistant","content":"  \n"}"#)),
+            None
+        );
+    }
+
+    #[test]
+    fn a_home_relative_path_starts_in_the_home_folder() {
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+        if let Some(home) = home {
+            assert_eq!(
+                home_path("~/a/b.jsonl"),
+                PathBuf::from(home).join("a/b.jsonl")
+            );
+        }
+        assert_eq!(home_path("/x/~/y"), PathBuf::from("/x/~/y"));
+    }
+
+    #[test]
+    fn read_tail_keeps_the_last_8_mib() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("t");
+        // 3 MiB: read whole.
+        std::fs::write(&file, "a".repeat(3 * 1024 * 1024)).unwrap();
+        let (text, whole) = read_tail(&file).unwrap();
+        assert_eq!((text.len(), whole), (3 * 1024 * 1024, true));
+        // 8 MiB and one byte: the first byte is cut.
+        let mut big = "b".to_string();
+        big.push_str(&"c".repeat(8 * 1024 * 1024));
+        std::fs::write(&file, big).unwrap();
+        let (text, whole) = read_tail(&file).unwrap();
+        assert_eq!((text.len(), whole), (8 * 1024 * 1024, false));
+        assert!(!text.contains('b'));
+    }
+
+    #[test]
+    fn last_model_takes_the_last_assistant_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("t.jsonl");
+        let lines = [
+            // An assistant line marked only by `type`, then one marked only by `role`.
+            r#"{"type":"assistant","message":{"model":"by-type"}}"#,
+            r#"{"type":"assistant","message":{"role":"assistant","model":"<synthetic>"}}"#,
+            r#"{"message":{"role":"user","model":"user-model"}}"#,
+        ];
+        std::fs::write(&file, lines.join("\n")).unwrap();
+        let path = file.to_str().unwrap();
+        assert_eq!(last_model(path).as_deref(), Some("by-type"));
+        std::fs::write(
+            &file,
+            [lines[0], r#"{"role":"assistant","model":"by-role"}"#].join("\n"),
+        )
+        .unwrap();
+        assert_eq!(last_model(path).as_deref(), Some("by-role"));
+        // A user line with a model, after a line that is not the assistant's: none.
+        std::fs::write(
+            &file,
+            r#"{"type":"user","message":{"role":"user","model":"u"}}"#,
+        )
+        .unwrap();
+        assert_eq!(last_model(path), None);
+    }
+}
