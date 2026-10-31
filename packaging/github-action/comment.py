@@ -95,10 +95,19 @@ def _body(receipt_path, verdict, errlog):
                 d = json.load(f)
         except (OSError, ValueError):
             d = {}
+    step = verdict
     if not isinstance(d, dict) or not d.get("verdict"):
         verdict = "error"
     else:
         verdict = str(d["verdict"])
+    # The step's verdict comes from countercheck's exit code, which fail-on also uses; the JSON is a file
+    # in the runner's temp folder. If they disagree, the exit code wins and no detail from the file is shown.
+    if step in ICON and verdict != step:
+        out.append(f"### {ICON[step]} {step.upper()} · Agent Countercheck")
+        out.append("")
+        out.append("The receipt file doesn't match countercheck's result, so no details are shown here; see the "
+                   "job log and the uploaded receipt.")
+        return "\n".join(out) + "\n"
     word = verdict.upper() if verdict in ICON else "ERROR"
     out.append(f"### {ICON.get(verdict, '❔')} {word} · Agent Countercheck")
     out.append("")

@@ -168,6 +168,8 @@ body() { "$py" "$ROOT/packaging/github-action/comment.py" body "$@" | sed -n 2p;
 check "VERIFIED body" '[ "$(body "$(ls "$W"/good.tmp/countercheck-receipts/*.json)" verified "")" = "### ✅ VERIFIED · Agent Countercheck" ]'
 check "FAILED body" 'body "$(ls "$W"/tamper.tmp/countercheck-receipts/*.json)" failed "" | grep -q "^### ❌ FAILED"'
 check "UNVERIFIED body" 'body "$(ls "$W"/unpinned.tmp/countercheck-receipts/*.json)" unverified "" | grep -q "^### ⚠️ UNVERIFIED"'
+# The headline follows countercheck's exit code (the step's verdict), not a receipt file that says otherwise.
+check "a receipt that disagrees with the exit code can't soften the comment" 'b=$("$py" "$ROOT/packaging/github-action/comment.py" body "$(ls "$W"/good.tmp/countercheck-receipts/*.json)" failed ""); echo "$b" | grep -q "^### ❌ FAILED" && echo "$b" | grep -q "doesn.t match" && ! echo "$b" | grep -q VERIFIED'
 check "ERROR body with the reason" '"$py" "$ROOT/packaging/github-action/comment.py" body "" error "$W/nochecks.tmp/countercheck-stderr.txt" | grep -q "no .countercheck/checks.toml found"'
 # A huge hostile receipt stays within 60 lines and 60 KB, with the failure listed.
 "$py" - "$W/big.json" <<'PY'
